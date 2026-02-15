@@ -1,71 +1,69 @@
 import 'package:flutter/material.dart';
 
+import 'settings/app_theme_choice.dart';
+
+import '../ui/style/app_accent.dart';
+
 class AppTheme {
-  // Palette approximated from the provided reference image.
-  // Intentionally dark navy background + cyan/purple neon accents.
-  // Tweaked to be slightly lighter and more "glassy".
-  static const _bg = Color(0xFF070C1E);
-  static const _surface = Color(0xFF0C1332);
-  static const _surface2 = Color(0xFF111E44);
+  static const _bg = Color(0xFFE9E4D8);
+  static const _surface = Color(0xFFF8F5EE);
+  static const _surface2 = Color(0xFFEFE7DA);
+  static const _text = Color.fromRGBO(46, 36, 26, 0.92);
 
-  static const _cyan = Color(0xFF37E6FF);
-  static const _purple = Color(0xFF9B5CFF);
-  static const _magenta = Color(0xFFFF4FD8);
+  static ThemeData materialFor(AppThemeChoice choice) {
+    final primary = _primaryFor(choice);
+    final secondary = _secondaryFor(choice);
+    final isSignature = choice == AppThemeChoice.luxlunch;
+    final brightness = isSignature ? Brightness.light : Brightness.dark;
 
-  static const _outline = Color(0xFF2A3B6A);
-  static const _text = Color(0xFFEAF2FF);
+    final surface = isSignature ? _surface : const Color(0xFF0E1116);
+    final surface2 = isSignature ? _surface2 : const Color(0xFF141922);
+    final text = isSignature ? _text : const Color.fromRGBO(255, 255, 255, 0.92);
+    final outline = isSignature
+      ? const Color.fromRGBO(140, 120, 95, 0.28)
+      : Colors.white.withValues(alpha: 0.16);
 
-  static ThemeData dark() {
-    final scheme = const ColorScheme(
-      brightness: Brightness.dark,
-      primary: _cyan,
-      onPrimary: Color(0xFF001018),
-      secondary: _purple,
-      onSecondary: Colors.black,
-      tertiary: _magenta,
-      onTertiary: Colors.black,
-      error: Color(0xFFFF5C6C),
+    final scheme = ColorScheme(
+      brightness: brightness,
+      primary: primary,
+      onPrimary: isSignature ? const Color.fromRGBO(64, 40, 20, 0.95) : const Color.fromRGBO(10, 10, 12, 0.92),
+      secondary: secondary,
+      onSecondary: isSignature ? const Color.fromRGBO(64, 40, 20, 0.95) : const Color.fromRGBO(10, 10, 12, 0.92),
+      error: const Color(0xFFFF5C6C),
       onError: Colors.black,
-      surface: _surface,
-      onSurface: _text,
-      surfaceContainerHighest: _surface2,
-      outline: _outline,
+      surface: surface,
+      onSurface: text,
+      surfaceContainerHighest: surface2,
+      outline: outline,
     );
 
     return ThemeData(
       useMaterial3: true,
-      brightness: Brightness.dark,
+      brightness: brightness,
       colorScheme: scheme,
-      scaffoldBackgroundColor: _bg,
+      scaffoldBackgroundColor: isSignature ? _bg : const Color(0xFF07080B),
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
       ),
-      tabBarTheme: TabBarThemeData(
-        labelColor: scheme.onSurface,
-        unselectedLabelColor: scheme.onSurface.withValues(alpha: 0.65),
-        indicatorColor: scheme.primary,
-        dividerColor: scheme.outline.withValues(alpha: 0.5),
-      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        // Slightly brighter, glassy input background.
-        fillColor: Colors.white.withValues(alpha: 0.06),
+        fillColor: isSignature ? const Color.fromRGBO(255, 255, 255, 0.75) : Colors.white.withValues(alpha: 0.08),
         hintStyle: TextStyle(color: scheme.onSurface.withValues(alpha: 0.6)),
         labelStyle: TextStyle(color: scheme.onSurface.withValues(alpha: 0.8)),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.7)),
+          borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.9)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.55)),
+          borderSide: BorderSide(color: scheme.outline.withValues(alpha: 0.6)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.9), width: 1.6),
+          borderSide: BorderSide(color: scheme.primary.withValues(alpha: 0.95), width: 1.6),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -76,18 +74,10 @@ class AppTheme {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
         ),
       ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: scheme.onSurface,
-          side: BorderSide(color: scheme.outline.withValues(alpha: 0.8)),
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
-      ),
       textTheme: const TextTheme(
-        headlineLarge: TextStyle(fontSize: 34, fontWeight: FontWeight.w700, height: 1.1),
-        headlineMedium: TextStyle(fontSize: 26, fontWeight: FontWeight.w700),
-        titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        headlineLarge: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, height: 1.05, letterSpacing: -0.3),
+        headlineMedium: TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+        titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
         bodyLarge: TextStyle(fontSize: 16, height: 1.3),
       ).apply(
         bodyColor: scheme.onSurface,
@@ -96,18 +86,55 @@ class AppTheme {
     );
   }
 
+  static Color _primaryFor(AppThemeChoice choice) {
+    switch (choice) {
+      case AppThemeChoice.luxlunch:
+        return AppAccent.orangeA;
+      case AppThemeChoice.ocean:
+        return const Color(0xFF78B4FF);
+      case AppThemeChoice.sunset:
+        return const Color(0xFFFF78DC);
+      case AppThemeChoice.forest:
+        return const Color(0xFF78FFBE);
+      case AppThemeChoice.contrast:
+        return const Color(0xFFFFFFFF);
+      case AppThemeChoice.light:
+        return const Color(0xFFEAEFF7);
+      case AppThemeChoice.dark:
+        return AppAccent.orangeA;
+    }
+  }
+
+  static Color _secondaryFor(AppThemeChoice choice) {
+    switch (choice) {
+      case AppThemeChoice.luxlunch:
+        return AppAccent.orangeB;
+      case AppThemeChoice.ocean:
+        return const Color(0xFF3CAAFF);
+      case AppThemeChoice.sunset:
+        return const Color(0xFFFF5A00);
+      case AppThemeChoice.forest:
+        return const Color(0xFF2DFF9A);
+      case AppThemeChoice.contrast:
+        return const Color(0xFFFFFFFF);
+      case AppThemeChoice.light:
+        return const Color(0xFF111111);
+      case AppThemeChoice.dark:
+        return AppAccent.orangeB;
+    }
+  }
+
   static BoxDecoration backgroundGradient() {
     return const BoxDecoration(
       gradient: RadialGradient(
-        center: Alignment(0.6, -0.8),
-        radius: 1.2,
+        center: Alignment(0.35, -0.75),
+        radius: 1.15,
         colors: [
-          // Stronger top glow + softer mid, for a less "black" feel.
-          Color(0x5537E6FF),
-          Color(0x339B5CFF),
-          Color(0xFF070C1E),
+          Color(0x1AFFC06B),
+          Color(0x1600B6FF),
+          _bg,
         ],
-        stops: [0.0, 0.45, 1.0],
+        stops: [0.0, 0.55, 1.0],
       ),
     );
   }
@@ -115,17 +142,16 @@ class AppTheme {
   static BoxDecoration glassCardDecoration(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return BoxDecoration(
-      // Bright-but-transparent glass, so the background glow shows through.
       gradient: LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          Colors.white.withValues(alpha: 0.08),
-          Colors.white.withValues(alpha: 0.04),
+          Colors.white.withValues(alpha: 0.10),
+          Colors.white.withValues(alpha: 0.05),
         ],
       ),
       borderRadius: BorderRadius.circular(18),
-      border: Border.all(color: scheme.outline.withValues(alpha: 0.8)),
+      border: Border.all(color: scheme.outline.withValues(alpha: 0.9)),
     );
   }
 }

@@ -1,0 +1,25 @@
+{
+  "@@locale": "en",
+  "appTitle": "Food Order",
+
+  "storesTitle": "Stores",
+  "pickStore": "Pick a store",
+  "storeId": "Store ID",
+  "storeName": "Store name",
+  "openVoiceOrder": "Open voice order",
+
+  "settingsTitle": "Settings",
+  "appearanceTitle": "Appearance",
+  "themeTitle": "Theme",
+  "languageTitle": "Language",
+
+  "authTitle": "Sign in",
+  "login": "Login",
+  "signup": "Sign up",
+  "email": "Email",
+  "password": "Password",
+  "continueAsGuest": "Continue as Guest",
+
+  "voiceTitle": "Voice order",
+  "listening": "Listening…"
+}

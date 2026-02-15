@@ -1,60 +1,131 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/app_theme.dart';
+import '../../gen_l10n/app_localizations.dart';
+import '../../ui/style/app_background.dart';
+import '../../ui/style/app_stage.dart';
+import '../settings/settings_screen.dart';
+import 'voice_controller.dart';
 
-class VoiceOrderScreen extends StatelessWidget {
+class VoiceOrderScreen extends ConsumerWidget {
   final String storeName;
+  final String storeId;
 
-  const VoiceOrderScreen({super.key, required this.storeName});
+  const VoiceOrderScreen({super.key, required this.storeName, required this.storeId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = AppLocalizations.of(context);
     final scheme = Theme.of(context).colorScheme;
+    final voice = ref.watch(voiceControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
         title: Text(storeName),
+        actions: [
+          IconButton(
+            tooltip: l10n?.settingsTitle ?? 'Settings',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () {
+              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+            },
+          ),
+        ],
       ),
       body: Container(
-        decoration: AppTheme.backgroundGradient(),
+        decoration: AppBackground.decoration(),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: scheme.outline.withValues(alpha: 0.6)),
-                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.35),
-                      ),
-                      child: Icon(Icons.person_outline, color: scheme.onSurface.withValues(alpha: 0.85)),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Good Evening,',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.65)),
-                        ),
-                        Text(
-                          'Guest',
-                          style: Theme.of(context).textTheme.titleLarge,
-                        ),
-                      ],
-                    ),
-                  ],
+                Text(
+                  l10n?.voiceTitle ?? 'Voice order',
+                  style: Theme.of(context).textTheme.headlineMedium,
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 8),
+                AppStage(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              storeName,
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(999),
+                              color: scheme.primary.withValues(alpha: 0.15),
+                              border: Border.all(color: scheme.primary.withValues(alpha: 0.5)),
+                            ),
+                            child: Text(
+                              voice.connected ? 'Listening' : 'Ready',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(color: scheme.primary),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'store_id: $storeId',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyLarge
+                            ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.65)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Speak your order and I will build your cart.',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          if (!voice.connected)
+                            FilledButton(
+                              onPressed: voice.connecting
+                                  ? null
+                                  : () async {
+                                      await ref.read(voiceControllerProvider.notifier).start(storeId: storeId);
+                                    },
+                              child: voice.connecting ? const Text('Connecting…') : const Text('Connect'),
+                            )
+                          else
+                            OutlinedButton(
+                              onPressed: () async {
+                                await ref.read(voiceControllerProvider.notifier).stop();
+                              },
+                              child: const Text('Disconnect'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                if (voice.error != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    voice.error!,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                ],
+                const SizedBox(height: 18),
                 Text(
                   'What are you\ncraving?',
                   style: Theme.of(context).textTheme.headlineLarge,
@@ -82,6 +153,28 @@ class VoiceOrderScreen extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
+                if (voice.logs.isNotEmpty) ...[
+                  Container(
+                    height: 160,
+                    decoration: AppTheme.glassCardDecoration(context),
+                    padding: const EdgeInsets.all(10),
+                    child: ListView.builder(
+                      reverse: true,
+                      itemCount: voice.logs.length,
+                      itemBuilder: (context, i) {
+                        final line = voice.logs[voice.logs.length - 1 - i];
+                        return Text(
+                          line,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyLarge
+                              ?.copyWith(fontSize: 12, color: scheme.onSurface.withValues(alpha: 0.75)),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Center(
                   child: Column(
                     children: [
@@ -94,7 +187,7 @@ class VoiceOrderScreen extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       Text(
-                        'Listening…',
+                        l10n?.listening ?? 'Listening…',
                         style: Theme.of(context)
                             .textTheme
                             .bodyLarge

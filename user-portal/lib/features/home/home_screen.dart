@@ -1,21 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../app/providers.dart';
 import '../auth/auth_controller.dart';
-
-final meProvider = FutureProvider((ref) async {
-  final repo = ref.watch(authRepositoryProvider);
-  return repo.me();
-});
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final me = ref.watch(meProvider);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Home')),
       body: Padding(
@@ -23,11 +15,7 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            me.when(
-              data: (u) => Text('Signed in as ${u.email}'),
-              loading: () => const Text('Loading profile...'),
-              error: (e, _) => Text('Failed to load profile: $e'),
-            ),
+            const Text('Signed in.'),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: () async {

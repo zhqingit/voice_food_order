@@ -31,15 +31,28 @@ dependencies:
   flutter:
     sdk: flutter
 
+  flutter_localizations:
+    sdk: flutter
+
+  intl: ^0.20.2
+
   flutter_riverpod: ^2.6.1
   dio: ^5.8.0
   flutter_secure_storage: ^9.2.4
   jwt_decoder: ^2.0.1
   connectivity_plus: ^6.1.0
+  shared_preferences: ^2.5.3
+  web_socket_channel: ^3.0.3
+  record: ^6.0.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+
+  liquid_glass_flutter:
+    git:
+      url: git@github.com:zhqingit/liquid-glass-flutter.git
+      ref: v0.1.0
 
 dev_dependencies:
   flutter_test:
@@ -59,6 +72,8 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

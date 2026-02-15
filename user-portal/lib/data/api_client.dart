@@ -115,8 +115,8 @@ class ApiClient {
 }
 
 bool _isAuthEndpoint(String path) {
-  // Backend prefix is /auth
-  return path.contains('/auth/');
+  // Backend user auth routes are under /user/auth
+  return path.contains('/user/auth/');
 }
 
 class _RefreshCoordinator {
@@ -139,7 +139,7 @@ class _RefreshCoordinator {
 
   Future<TokenBundle> _doRefresh(TokenBundle current) async {
     final res = await dio.post<Map<String, dynamic>>(
-      '/auth/refresh',
+      '/user/auth/refresh',
       data: {
         'refresh_token': current.refreshToken,
         'session_id': current.sessionId,

@@ -40,6 +40,18 @@ npm run dev
 
 Then open the printed URL (by default Vite uses localhost).
 
+## Voice service (planned)
+
+The voice pipeline will run inside the backend and expose websocket + telephony endpoints.
+
+Planned backend settings (in backend/.env):
+- VOICE_PROVIDER_STT, VOICE_PROVIDER_TTS, VOICE_PROVIDER_LLM, VOICE_LLM_MODEL
+- VOICE_WS_MAX_SECONDS, VOICE_WS_MAX_PAYLOAD_KB, VOICE_AUDIO_SAMPLE_RATE_HZ
+- TELEPHONY_PROVIDER, TELEPHONY_DAILY_API_KEY, TELEPHONY_DAILY_ROOM_URL
+- TELEPHONY_TWILIO_ACCOUNT_SID, TELEPHONY_TWILIO_AUTH_TOKEN, TELEPHONY_TWILIO_APP_SID
+
+Note: endpoints and routes will be added in Phase 2. For now, the backend can start normally.
+
 ## Host-based API partitioning (important)
 
 The backend enforces **host-based routing** (to keep portals isolated):

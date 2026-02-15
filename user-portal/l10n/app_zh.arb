@@ -1,0 +1,25 @@
+{
+  "@@locale": "zh",
+  "appTitle": "点餐",
+
+  "storesTitle": "店铺",
+  "pickStore": "选择店铺",
+  "storeId": "店铺ID",
+  "storeName": "店铺名称",
+  "openVoiceOrder": "进入语音点餐",
+
+  "settingsTitle": "设置",
+  "appearanceTitle": "外观",
+  "themeTitle": "主题",
+  "languageTitle": "语言",
+
+  "authTitle": "登录",
+  "login": "登录",
+  "signup": "注册",
+  "email": "邮箱",
+  "password": "密码",
+  "continueAsGuest": "以访客继续",
+
+  "voiceTitle": "语音点餐",
+  "listening": "正在聆听…"
+}

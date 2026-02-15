@@ -10,7 +10,7 @@ class AuthRepository {
 
   Future<TokenBundle> signup({required String email, required String password}) async {
     final res = await _dio.post<Map<String, dynamic>>(
-      '/auth/signup',
+      '/user/auth/signup',
       data: {'email': email, 'password': password},
     );
     return _bundleFromTokenResponse(TokenResponse.fromJson(res.data!));
@@ -18,7 +18,7 @@ class AuthRepository {
 
   Future<TokenBundle> login({required String email, required String password}) async {
     final res = await _dio.post<Map<String, dynamic>>(
-      '/auth/login',
+      '/user/auth/login',
       data: {'email': email, 'password': password},
     );
     return _bundleFromTokenResponse(TokenResponse.fromJson(res.data!));
@@ -26,7 +26,7 @@ class AuthRepository {
 
   Future<TokenBundle> refresh({required TokenBundle current}) async {
     final res = await _dio.post<Map<String, dynamic>>(
-      '/auth/refresh',
+      '/user/auth/refresh',
       data: {'refresh_token': current.refreshToken, 'session_id': current.sessionId},
     );
     return _bundleFromTokenResponse(TokenResponse.fromJson(res.data!));
@@ -34,21 +34,16 @@ class AuthRepository {
 
   Future<void> logoutCurrent({required String sessionId}) async {
     await _dio.post(
-      '/auth/logout',
+      '/user/auth/logout',
       data: {'scope': 'current', 'session_id': sessionId},
     );
   }
 
   Future<void> logoutAll() async {
     await _dio.post(
-      '/auth/logout',
+      '/user/auth/logout',
       data: {'scope': 'all'},
     );
-  }
-
-  Future<UserOut> me() async {
-    final res = await _dio.get<Map<String, dynamic>>('/me');
-    return UserOut.fromJson(res.data!);
   }
 }
 

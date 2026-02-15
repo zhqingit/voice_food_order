@@ -28,5 +28,24 @@ class Settings(BaseSettings):
 
     cors_origins: str = "*"
 
+    # Voice pipeline (provider + runtime limits)
+    voice_provider_stt: str = "google"
+    voice_provider_tts: str = "google"
+    voice_provider_llm: str = "google"
+    voice_llm_model: str = "gemini-3.0-flash-preview"
+
+    voice_ws_max_seconds: int = 900
+    voice_ws_max_payload_kb: int = 256
+    voice_audio_sample_rate_hz: int = 16000
+
+    # Telephony / WebRTC providers
+    telephony_provider: str = "daily"
+    telephony_daily_api_key: str | None = None
+    telephony_daily_room_url: str | None = None
+
+    telephony_twilio_account_sid: str | None = None
+    telephony_twilio_auth_token: str | None = None
+    telephony_twilio_app_sid: str | None = None
+
 
 settings = Settings()

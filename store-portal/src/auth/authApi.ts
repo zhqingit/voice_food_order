@@ -5,6 +5,16 @@ export type StoreMe = {
   id: string
   name: string
   phone: string | null
+  address_line1: string | null
+  address_line2: string | null
+  city: string | null
+  state: string | null
+  postal_code: string | null
+  country: string | null
+  timezone: string | null
+  allow_pickup: boolean | null
+  allow_delivery: boolean | null
+  min_order_amount: string | number | null
   email: string
   created_at: string
 }

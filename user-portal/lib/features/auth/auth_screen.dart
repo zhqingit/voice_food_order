@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/app_theme.dart';
+import '../../gen_l10n/app_localizations.dart';
+import '../../ui/style/app_background.dart';
+import '../../ui/style/app_stage.dart';
+import '../settings/settings_screen.dart';
 import 'auth_controller.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -11,7 +14,10 @@ class AuthScreen extends ConsumerStatefulWidget {
   ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends ConsumerState<AuthScreen> {
+class _AuthScreenState extends ConsumerState<AuthScreen> with TickerProviderStateMixin {
+  late final TabController _tabController;
+  int _tabIndex = 0;
+
   final _loginEmail = TextEditingController();
   final _loginPassword = TextEditingController();
 
@@ -19,7 +25,21 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _signupPassword = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging && _tabIndex != _tabController.index) {
+        setState(() {
+          _tabIndex = _tabController.index;
+        });
+      }
+    });
+  }
+
+  @override
   void dispose() {
+    _tabController.dispose();
     _loginEmail.dispose();
     _loginPassword.dispose();
     _signupEmail.dispose();
@@ -29,123 +49,135 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final state = ref.watch(authControllerProvider);
     final isLoading = state is AuthLoading;
     final message = state is Unauthenticated ? state.message : null;
     final isGuest = state is Guest;
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        body: Container(
-          decoration: AppTheme.backgroundGradient(),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Text(
-                    'Food Order',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Sign in to continue, or try guest mode.',
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    decoration: AppTheme.glassCardDecoration(context),
-                    child: Column(
-                      children: [
-                        const TabBar(
-                          tabs: [
-                            Tab(text: 'Login'),
-                            Tab(text: 'Sign up'),
-                          ],
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: AnimatedSize(
-                            duration: const Duration(milliseconds: 200),
-                            curve: Curves.easeOut,
-                            child: Column(
-                              children: [
-                                if (isGuest) ...[
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'Guest mode enabled (navigation comes next).',
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.primary,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  height: 280,
-                                  child: TabBarView(
-                                    children: [
-                                      _AuthForm(
-                                        title: 'Login',
-                                        emailController: _loginEmail,
-                                        passwordController: _loginPassword,
-                                        isLoading: isLoading,
-                                        message: message,
-                                        onSubmit: () async {
-                                          await ref
-                                              .read(authControllerProvider.notifier)
-                                              .login(_loginEmail.text.trim(), _loginPassword.text);
-                                        },
-                                      ),
-                                      _AuthForm(
-                                        title: 'Sign up',
-                                        emailController: _signupEmail,
-                                        passwordController: _signupPassword,
-                                        isLoading: isLoading,
-                                        message: message,
-                                        onSubmit: () async {
-                                          await ref
-                                              .read(authControllerProvider.notifier)
-                                              .signup(_signupEmail.text.trim(), _signupPassword.text);
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+    return Scaffold(
+      body: Container(
+        decoration: AppBackground.decoration(),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        l10n?.appTitle ?? 'Food Order',
+                        style: Theme.of(context).textTheme.headlineMedium,
+                      ),
                     ),
+                    IconButton(
+                      tooltip: l10n?.settingsTitle ?? 'Settings',
+                      onPressed: () {
+                        Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen()));
+                      },
+                      icon: const Icon(Icons.settings_outlined),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n?.authTitle ?? 'Sign in',
+                  style: Theme.of(context)
+                      .textTheme
+                      .titleLarge
+                      ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.9)),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Sign in to continue, or try guest mode.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)),
+                ),
+                const SizedBox(height: 16),
+                AppStage(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TabBar(
+                        controller: _tabController,
+                        tabs: [
+                          Tab(text: l10n?.login ?? 'Login'),
+                          Tab(text: l10n?.signup ?? 'Sign up'),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (isGuest) ...[
+                        Text(
+                          'Guest mode enabled (navigation comes next).',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: _tabIndex == 0
+                            ? _AuthForm(
+                                key: const ValueKey('login'),
+                                title: l10n?.login ?? 'Login',
+                                emailLabel: l10n?.email ?? 'Email',
+                                passwordLabel: l10n?.password ?? 'Password',
+                                emailController: _loginEmail,
+                                passwordController: _loginPassword,
+                                isLoading: isLoading,
+                                message: message,
+                                onSubmit: () async {
+                                  await ref
+                                      .read(authControllerProvider.notifier)
+                                      .login(_loginEmail.text.trim(), _loginPassword.text);
+                                },
+                              )
+                            : _AuthForm(
+                                key: const ValueKey('signup'),
+                                title: l10n?.signup ?? 'Sign up',
+                                emailLabel: l10n?.email ?? 'Email',
+                                passwordLabel: l10n?.password ?? 'Password',
+                                emailController: _signupEmail,
+                                passwordController: _signupPassword,
+                                isLoading: isLoading,
+                                message: message,
+                                onSubmit: () async {
+                                  await ref
+                                      .read(authControllerProvider.notifier)
+                                      .signup(_signupEmail.text.trim(), _signupPassword.text);
+                                },
+                              ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  OutlinedButton.icon(
-                    onPressed: isLoading
-                        ? null
-                        : () {
-                            ref.read(authControllerProvider.notifier).continueAsGuest();
-                          },
-                    icon: const Icon(Icons.person_outline),
-                    label: const Text('Continue as Guest'),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Tip: use a user-portal API host when testing auth.',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyLarge
-                        ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: isLoading
+                      ? null
+                      : () {
+                          ref.read(authControllerProvider.notifier).continueAsGuest();
+                        },
+                  icon: const Icon(Icons.person_outline),
+                  label: Text(l10n?.continueAsGuest ?? 'Continue as Guest'),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Tip: use a user-portal API host when testing auth.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5)),
+                ),
+              ],
             ),
           ),
         ),
@@ -156,6 +188,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
 class _AuthForm extends StatelessWidget {
   final String title;
+  final String emailLabel;
+  final String passwordLabel;
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final bool isLoading;
@@ -163,7 +197,10 @@ class _AuthForm extends StatelessWidget {
   final Future<void> Function() onSubmit;
 
   const _AuthForm({
+    super.key,
     required this.title,
+    required this.emailLabel,
+    required this.passwordLabel,
     required this.emailController,
     required this.passwordController,
     required this.isLoading,
@@ -177,6 +214,7 @@ class _AuthForm extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
         children: [
           if (message != null) ...[
             Text(message!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -185,13 +223,13 @@ class _AuthForm extends StatelessWidget {
           TextField(
             controller: emailController,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(labelText: 'Email'),
+            decoration: InputDecoration(labelText: emailLabel),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: passwordController,
             obscureText: true,
-            decoration: const InputDecoration(labelText: 'Password'),
+            decoration: InputDecoration(labelText: passwordLabel),
           ),
           const SizedBox(height: 24),
           FilledButton(
@@ -207,6 +245,7 @@ class _AuthForm extends StatelessWidget {
                   )
                 : Text(title),
           ),
+          const SizedBox(height: 12),
         ],
       ),
     );

@@ -1,0 +1,120 @@
+.luxlunch-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 0 10px;
+}
+
+.luxlunch-stage {
+  position: relative;
+  border-radius: 26px;
+  padding: 18px;
+  overflow: hidden;
+}
+
+.luxlunch-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: 26px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 420px at 20% 25%, rgba(255, 255, 255, 0.22), transparent 60%),
+    radial-gradient(700px 520px at 80% 30%, rgba(255, 200, 120, 0.25), transparent 62%),
+    radial-gradient(900px 680px at 70% 85%, rgba(120, 255, 200, 0.14), transparent 60%),
+    linear-gradient(110deg, rgba(30, 35, 40, 0.7), rgba(12, 14, 18, 0.75));
+}
+
+.luxlunch-content {
+  position: relative;
+  z-index: 1;
+}
+
+.luxlunch-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 14px;
+}
+
+.luxlunch-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.luxlunch-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255, 170, 0, 1), rgba(255, 90, 0, 1));
+  box-shadow: 0 10px 26px rgba(255, 140, 0, 0.25);
+}
+
+.luxlunch-links {
+  display: flex;
+  gap: 18px;
+  opacity: 0.86;
+  font-size: 13px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.luxlunch-links a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.luxlunch-links a:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.luxlunch-links a.luxlunch-active {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.luxlunch-cta {
+  font-size: 13px;
+  opacity: 0.9;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.luxlunch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 0 12px 12px;
+}
+
+.luxlunch-controls label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  user-select: none;
+}
+
+.luxlunch-main {
+  padding: 10px 12px 14px;
+}
+
+.luxlunch-auth-center {
+  min-height: calc(100vh - 80px);
+  display: grid;
+  place-items: center;
+  padding: 14px 12px 22px;
+}
+
+.luxlunch-primary {
+  background: linear-gradient(135deg, rgba(255, 170, 0, 0.95), rgba(255, 90, 0, 0.92));
+  border: 1px solid rgba(255, 210, 140, 0.35);
+  box-shadow: 0 18px 40px rgba(255, 120, 0, 0.22);
+  color: rgba(10, 10, 12, 0.92);
+  font-weight: 800;
+}
