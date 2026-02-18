@@ -28,6 +28,7 @@ class ApiClient {
     dio.interceptors.add(
       InterceptorsWrapper(
         onRequest: (options, handler) async {
+          options.headers['Host'] = AppConfig.apiHostHeader;
           final skipAuth = options.extra['skipAuth'] == true;
           if (!skipAuth) {
             final bundle = await tokenStore.read();

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../../data/voice_audio_player.dart';
 import '../../data/voice_audio_recorder.dart';
 import '../../data/voice_session_repository.dart';
 import '../../data/voice_ws_client.dart';
@@ -58,6 +59,12 @@ final voiceWsClientProvider = Provider<VoiceWsClient>((ref) {
   return client;
 });
 
+final voiceAudioPlayerProvider = Provider<VoiceAudioPlayer>((ref) {
+  final player = VoiceAudioPlayer();
+  ref.onDispose(() => player.dispose());
+  return player;
+});
+
 final voiceAudioRecorderProvider = Provider<VoiceAudioRecorder>((ref) {
   final r = VoiceAudioRecorder();
   ref.onDispose(() => r.dispose());
@@ -68,6 +75,7 @@ final voiceControllerProvider = NotifierProvider<VoiceController, VoiceUiState>(
 
 class VoiceController extends Notifier<VoiceUiState> {
   StreamSubscription? _wsSub;
+  StreamSubscription? _audioSub;
 
   @override
   VoiceUiState build() {
@@ -97,6 +105,11 @@ class VoiceController extends Notifier<VoiceUiState> {
 
       _wsSub = ws.events.listen((evt) {
         _append(evt.toString());
+      });
+
+      final audioPlayer = ref.read(voiceAudioPlayerProvider);
+      _audioSub = ws.audioStream.listen((bytes) {
+        audioPlayer.enqueue(bytes);
       });
 
       final recorder = ref.read(voiceAudioRecorderProvider);
@@ -135,6 +148,14 @@ class VoiceController extends Notifier<VoiceUiState> {
 
     await _wsSub?.cancel();
     _wsSub = null;
+    await _audioSub?.cancel();
+    _audioSub = null;
+
+    try {
+      await ref.read(voiceAudioPlayerProvider).stop();
+    } catch (_) {
+      // ignore
+    }
 
     try {
       await ref.read(voiceAudioRecorderProvider).stop();

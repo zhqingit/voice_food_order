@@ -13,6 +13,9 @@ class VoiceWsClient {
   final _events = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get events => _events.stream;
 
+  final _audio = StreamController<Uint8List>.broadcast();
+  Stream<Uint8List> get audioStream => _audio.stream;
+
   bool get isConnected => _channel != null;
 
   Future<void> connect({required String storeId, String? orderId, required String accessToken}) async {
@@ -38,8 +41,10 @@ class VoiceWsClient {
           return;
         }
 
-        // Binary/audio payloads: just surface a small marker for now.
-        _events.add({'type': 'binary', 'bytes': (data as dynamic).length ?? 0});
+        // Forward binary audio frames to the dedicated audio stream.
+        if (data is List<int>) {
+          _audio.add(Uint8List.fromList(data));
+        }
       },
       onError: (e) {
         _events.add({'type': 'error', 'error': e.toString()});
@@ -77,5 +82,6 @@ class VoiceWsClient {
   Future<void> dispose() async {
     await disconnect();
     await _events.close();
+    await _audio.close();
   }
 }
