@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routers.user.auth import router as user_auth_router
 from app.api.routers.user.me import router as user_router
 from app.api.routers.user.orders import router as user_orders_router
+from app.api.routers.user.stores import router as user_stores_router
 from app.api.routers.store.auth import router as store_auth_router
 from app.api.routers.store.me import router as store_router
 from app.api.routers.store.menu import router as store_menu_router
@@ -33,6 +34,7 @@ app.add_middleware(
 app.include_router(user_auth_router)
 app.include_router(user_router)
 app.include_router(user_orders_router)
+app.include_router(user_stores_router)
 app.include_router(store_auth_router)
 app.include_router(store_router)
 app.include_router(store_menu_router)

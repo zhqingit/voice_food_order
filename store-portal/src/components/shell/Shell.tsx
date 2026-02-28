@@ -1,9 +1,10 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { GlassButton, GlassSurface, type GlassThemeName } from '@zhqingit/liquid-glass-react'
 import { logout } from '../../auth/authApi'
 import { setAccessToken } from '../../auth/tokenStore'
 import { STORE_PORTAL_THEMES, useTheme } from '../../app/ThemeProvider'
+import { getMe } from '../../api/storeApi'
 
 const navItems: Array<{ to: string; label: string }> = [
   { to: '/menu', label: 'Menu' },
@@ -14,6 +15,22 @@ const navItems: Array<{ to: string; label: string }> = [
 export function Shell({ children }: { children: React.ReactNode }): React.JSX.Element {
   const location = useLocation()
   const { theme, setTheme } = useTheme()
+  const [storeId, setStoreId] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    void getMe()
+      .then((me) => setStoreId(me.id))
+      .catch(() => {/* ignore */})
+  }, [])
+
+  function handleCopyId(): void {
+    if (!storeId) return
+    void navigator.clipboard.writeText(storeId).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   async function handleLogout(): Promise<void> {
     try {
@@ -52,7 +69,26 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
                 })}
               </nav>
 
-              <div className="luxlunch-cta">
+              <div className="luxlunch-cta" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                {storeId ? (
+                  <button
+                    onClick={handleCopyId}
+                    title="Click to copy store ID"
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '1px solid rgba(255,255,255,0.18)',
+                      borderRadius: 8,
+                      color: 'inherit',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      opacity: 0.85,
+                      padding: '5px 10px',
+                      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+                    }}
+                  >
+                    {copied ? '✓ Copied!' : `ID: ${storeId.slice(0, 8)}…`}
+                  </button>
+                ) : null}
                 <GlassButton
                   preset="subtle"
                   className="luxlunch-primary"

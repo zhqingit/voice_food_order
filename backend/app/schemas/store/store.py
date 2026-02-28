@@ -7,6 +7,22 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 
+class StorePublicOut(BaseModel):
+    """Public store info — safe to expose to unauthenticated users (no email/credentials)."""
+
+    id: uuid.UUID
+    name: str
+    phone: str | None = None
+    address_line1: str | None = None
+    city: str | None = None
+    state: str | None = None
+    country: str | None = None
+    timezone: str | None = None
+    allow_pickup: bool
+    allow_delivery: bool
+    min_order_amount: Decimal | None = None
+
+
 class StoreOut(BaseModel):
     id: uuid.UUID
     name: str

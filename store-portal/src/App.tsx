@@ -5,6 +5,7 @@ import { GlassButton, GlassCard, type GlassThemeName } from '@zhqingit/liquid-gl
 
 import { getAccessToken } from './auth/tokenStore'
 import { getMe, login, logout, refresh, signup } from './auth/authApi'
+import { createMenu, createMenuItem, listMenuItems, listMenus } from './api/menuApi'
 import { Shell } from './components/shell/Shell'
 import { MenuRoute } from './routes/MenuRoute'
 import { OrdersRoute } from './routes/OrdersRoute'
@@ -75,6 +76,27 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     setMessage(null)
   }, [mode])
 
+  async function seedDemoData(): Promise<void> {
+    const menus = await listMenus()
+    let menu = menus[0]
+    if (!menu) {
+      menu = await createMenu({ name: 'Lunch Menu', active: true })
+    }
+    const items = await listMenuItems(menu.id)
+    if (items.length === 0) {
+      const demoItems = [
+        { name: 'Classic Burger',   price: 12.99, description: 'Juicy beef patty, lettuce, tomato' },
+        { name: 'Pepperoni Pizza',  price: 18.99, description: 'Hand-tossed with house-made marinara' },
+        { name: 'Caesar Salad',     price: 10.99, description: 'Romaine, parmesan, croutons' },
+        { name: 'Crispy Fries',     price:  4.99, description: 'Golden fries with sea salt' },
+        { name: 'Sparkling Water',  price:  2.99, description: 'Chilled sparkling mineral water' },
+      ]
+      await Promise.all(
+        demoItems.map((item) => createMenuItem(menu.id, { ...item, availability: true })),
+      )
+    }
+  }
+
   async function handleDemoAccount(): Promise<void> {
     if (!import.meta.env.DEV) return
     setError(null)
@@ -104,6 +126,12 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
         await getMe()
       } catch {
         // ignore
+      }
+
+      try {
+        await seedDemoData()
+      } catch {
+        // Best-effort: don't block login if seeding fails
       }
 
       setMessage('Signed in with demo account.')
