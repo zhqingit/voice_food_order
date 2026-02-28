@@ -4,7 +4,7 @@ try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
     from pipecat.transports.base_transport import BaseTransport
     from pipecat.transports.services.daily import DailyTransport, DailyTransportParams
-except ImportError:  # pragma: no cover - optional dependency during Phase 2.4
+except Exception:  # pragma: no cover - pipecat raises Exception (not ImportError) when daily is missing
     SileroVADAnalyzer = None
     VADParams = None
     DailyTransport = None

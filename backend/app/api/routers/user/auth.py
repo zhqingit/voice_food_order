@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import timedelta
 
@@ -70,6 +71,19 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> TokenRespon
         raise AppError(status_code=409, code="email_taken", detail="Email already registered")
 
     user = User(email=payload.email, password_hash=hash_password(payload.password))
+    db.add(user)
+    db.flush()
+
+    tokens = _issue_tokens(db, user.id)
+    db.commit()
+    return tokens
+
+
+@router.post("/guest", response_model=TokenResponse)
+def guest_login(db: Session = Depends(get_db)) -> TokenResponse:
+    email = f"guest-{uuid.uuid4()}@guest.local"
+    password = secrets.token_urlsafe(32)
+    user = User(email=email, password_hash=hash_password(password))
     db.add(user)
     db.flush()
 

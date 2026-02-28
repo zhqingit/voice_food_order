@@ -1,4 +1,4 @@
-from app.voice.config import VoiceRuntimeConfig, load_voice_runtime_config
+from app.voice.config import GoogleVoiceConfig, VoiceRuntimeConfig, load_google_voice_config, load_voice_runtime_config
 from app.voice.pipeline import ConversationLogger, LLMRateLimiter, create_voice_pipeline_task
 from app.voice.prompts import build_system_prompt
 from app.voice.events import VoiceEvent, VoiceEventType, log_voice_event, new_voice_event
@@ -8,7 +8,9 @@ from app.voice.tools import GEMINI_VOICE_TOOLS_SCHEMA, create_voice_tool_handler
 from app.voice.transports import create_daily_transport, create_websocket_transport
 
 __all__ = [
+    "GoogleVoiceConfig",
     "VoiceRuntimeConfig",
+    "load_google_voice_config",
     "load_voice_runtime_config",
     "ConversationLogger",
     "LLMRateLimiter",

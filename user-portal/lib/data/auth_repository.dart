@@ -24,6 +24,13 @@ class AuthRepository {
     return _bundleFromTokenResponse(TokenResponse.fromJson(res.data!));
   }
 
+  Future<TokenBundle> guestLogin() async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/user/auth/guest',
+    );
+    return _bundleFromTokenResponse(TokenResponse.fromJson(res.data!));
+  }
+
   Future<TokenBundle> refresh({required TokenBundle current}) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/user/auth/refresh',

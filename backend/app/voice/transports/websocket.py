@@ -4,7 +4,7 @@ from fastapi import WebSocket
 
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
-    from pipecat.transports.network.fastapi_websocket import (
+    from pipecat.transports.websocket.fastapi import (
         FastAPIWebsocketParams,
         FastAPIWebsocketTransport,
     )

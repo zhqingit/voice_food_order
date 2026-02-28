@@ -1,0 +1,29 @@
+
+RUN backend:
+  Easiest way — Docker (Postgres + API together):
+
+  cd backend
+  docker compose up --build
+
+  This starts both PostgreSQL and the FastAPI server, and auto-runs migrations. Health check at http://localhost:8000/health.
+
+  Without Docker:
+
+  cd backend
+  source .venv/bin/activate
+  uvicorn app.main:app --reload
+
+  (You'll need a running PostgreSQL instance and a configured backend/.env with DATABASE_URL pointing to it.)
+
+  Key env vars to set in backend/.env:
+  - DATABASE_URL — Postgres connection string
+  - JWT_SECRET, REFRESH_TOKEN_PEPPER — Auth secrets
+  - CORS_ORIGINS — Allowed origins
+  - Voice-related keys (GOOGLE_API_KEY, etc.) if you want the voice pipeline
+
+  Run migrations manually (if needed):
+
+  cd backend
+  alembic upgrade head
+
+

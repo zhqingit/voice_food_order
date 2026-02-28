@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column("store_id", sa.UUID(), nullable=False),
         sa.Column("user_id", sa.UUID(), nullable=True),
         sa.Column("channel", sa.String(length=32), nullable=False),
-        sa.Column("status", sa.String(length=32), nullable=False, server_default=sa.text("active")),
+        sa.Column("status", sa.String(length=32), nullable=False, server_default="active"),
         sa.Column("started_at", sa.DateTime(timezone=False), nullable=False),
         sa.Column("ended_at", sa.DateTime(timezone=False), nullable=True),
         sa.ForeignKeyConstraint(["store_id"], ["stores.id"], ondelete="CASCADE"),

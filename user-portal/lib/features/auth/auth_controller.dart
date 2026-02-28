@@ -97,8 +97,17 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
-  void continueAsGuest() {
-    state = const Guest();
+  Future<void> continueAsGuest() async {
+    state = const AuthLoading();
+    final repo = ref.read(authRepositoryProvider);
+    final tokenStore = ref.read(tokenStoreProvider);
+    try {
+      final bundle = await repo.guestLogin();
+      await tokenStore.write(bundle);
+      state = const Authenticated();
+    } catch (e) {
+      state = Unauthenticated(message: _messageFromError(e));
+    }
   }
 
   Future<void> logoutCurrent() async {

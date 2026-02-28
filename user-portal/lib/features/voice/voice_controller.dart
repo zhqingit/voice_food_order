@@ -105,6 +105,9 @@ class VoiceController extends Notifier<VoiceUiState> {
 
       _wsSub = ws.events.listen((evt) {
         _append(evt.toString());
+        if (evt case {'type': 'closed'} when state.connected) {
+          stop();
+        }
       });
 
       final audioPlayer = ref.read(voiceAudioPlayerProvider);

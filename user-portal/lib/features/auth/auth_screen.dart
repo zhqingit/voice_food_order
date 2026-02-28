@@ -162,8 +162,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with TickerProviderStat
                 OutlinedButton.icon(
                   onPressed: isLoading
                       ? null
-                      : () {
-                          ref.read(authControllerProvider.notifier).continueAsGuest();
+                      : () async {
+                          await ref.read(authControllerProvider.notifier).continueAsGuest();
                         },
                   icon: const Icon(Icons.person_outline),
                   label: Text(l10n?.continueAsGuest ?? 'Continue as Guest'),

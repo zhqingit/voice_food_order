@@ -38,175 +38,200 @@ class VoiceOrderScreen extends ConsumerWidget {
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l10n?.voiceTitle ?? 'Voice order',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 8),
-                AppStage(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              storeName,
-                              style: Theme.of(context).textTheme.titleLarge,
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(999),
-                              color: scheme.primary.withValues(alpha: 0.15),
-                              border: Border.all(color: scheme.primary.withValues(alpha: 0.5)),
-                            ),
-                            child: Text(
-                              voice.connected ? 'Listening' : 'Ready',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(color: scheme.primary),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'store_id: $storeId',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyLarge
-                            ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.65)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              'Speak your order and I will build your cart.',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          if (!voice.connected)
-                            FilledButton(
-                              onPressed: voice.connecting
-                                  ? null
-                                  : () async {
-                                      await ref.read(voiceControllerProvider.notifier).start(storeId: storeId);
-                                    },
-                              child: voice.connecting ? const Text('Connecting…') : const Text('Connect'),
-                            )
-                          else
-                            OutlinedButton(
-                              onPressed: () async {
-                                await ref.read(voiceControllerProvider.notifier).stop();
-                              },
-                              child: const Text('Disconnect'),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (voice.error != null) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    voice.error!,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                ],
-                const SizedBox(height: 18),
-                Text(
-                  'What are you\ncraving?',
-                  style: Theme.of(context).textTheme.headlineLarge,
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'Suggested',
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyLarge
-                      ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.7), fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 170,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: const [
-                      _SuggestionCard(title: 'Cyber Sushi Roll', price: '\$18.50'),
-                      SizedBox(width: 12),
-                      _SuggestionCard(title: 'Futuristic Pizza', price: '\$18.50'),
-                      SizedBox(width: 12),
-                      _SuggestionCard(title: 'Neon Burger', price: '\$12.90'),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                if (voice.logs.isNotEmpty) ...[
-                  Container(
-                    height: 160,
-                    decoration: AppTheme.glassCardDecoration(context),
-                    padding: const EdgeInsets.all(10),
-                    child: ListView.builder(
-                      reverse: true,
-                      itemCount: voice.logs.length,
-                      itemBuilder: (context, i) {
-                        final line = voice.logs[voice.logs.length - 1 - i];
-                        return Text(
-                          line,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.copyWith(fontSize: 12, color: scheme.onSurface.withValues(alpha: 0.75)),
-                        );
-                      },
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final h = constraints.maxHeight;
+                final suggestionH = (h * 0.2).clamp(120.0, 170.0);
+                final logsH = (h * 0.15).clamp(100.0, 160.0);
+                final orbSize = h < 600 ? 80.0 : 110.0;
+                final waveW = (h * 0.35).clamp(180.0, 260.0);
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- Header (intrinsic height) ---
+                    Text(
+                      l10n?.voiceTitle ?? 'Voice order',
+                      style: Theme.of(context).textTheme.headlineMedium,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Center(
-                  child: Column(
-                    children: [
-                      _Waveform(color: scheme.primary.withValues(alpha: 0.8)),
-                      const SizedBox(height: 14),
-                      _MicOrb(
-                        glow: scheme.primary,
-                        glow2: scheme.secondary,
-                        iconColor: scheme.onPrimary,
+                    const SizedBox(height: 8),
+                    AppStage(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  storeName,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  color: scheme.primary.withValues(alpha: 0.15),
+                                  border: Border.all(color: scheme.primary.withValues(alpha: 0.5)),
+                                ),
+                                child: Text(
+                                  voice.connected ? 'Listening' : 'Ready',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyLarge
+                                      ?.copyWith(color: scheme.primary),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'store_id: $storeId',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.65)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Speak your order and I will build your cart.',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyLarge
+                                      ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              if (!voice.connected)
+                                FilledButton(
+                                  onPressed: voice.connecting
+                                      ? null
+                                      : () async {
+                                          await ref.read(voiceControllerProvider.notifier).start(storeId: storeId);
+                                        },
+                                  child: voice.connecting ? const Text('Connecting…') : const Text('Connect'),
+                                )
+                              else
+                                OutlinedButton(
+                                  onPressed: () async {
+                                    await ref.read(voiceControllerProvider.notifier).stop();
+                                  },
+                                  child: const Text('Disconnect'),
+                                ),
+                            ],
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 14),
-                      Text(
-                        l10n?.listening ?? 'Listening…',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyLarge
-                            ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
-                      ),
+                    ),
+                    if (voice.error != null) ...[
                       const SizedBox(height: 10),
                       Text(
-                        '“Order a large pepperoni pizza…”',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyLarge
-                            ?.copyWith(color: scheme.primary.withValues(alpha: 0.9), fontWeight: FontWeight.w600),
-                        textAlign: TextAlign.center,
+                        voice.error!,
+                        style: TextStyle(color: Theme.of(context).colorScheme.error),
                       ),
-                      const SizedBox(height: 10),
                     ],
-                  ),
-                ),
-              ],
+
+                    // --- Middle (scrollable) ---
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 18),
+                            Text(
+                              'What are you\ncraving?',
+                              style: Theme.of(context).textTheme.headlineLarge,
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              'Suggested',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyLarge
+                                  ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.7), fontWeight: FontWeight.w600),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              height: suggestionH,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: const [
+                                  _SuggestionCard(title: 'Cyber Sushi Roll', price: '\$18.50'),
+                                  SizedBox(width: 12),
+                                  _SuggestionCard(title: 'Futuristic Pizza', price: '\$18.50'),
+                                  SizedBox(width: 12),
+                                  _SuggestionCard(title: 'Neon Burger', price: '\$12.90'),
+                                ],
+                              ),
+                            ),
+                            if (voice.logs.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                height: logsH,
+                                decoration: AppTheme.glassCardDecoration(context),
+                                padding: const EdgeInsets.all(10),
+                                child: ListView.builder(
+                                  reverse: true,
+                                  itemCount: voice.logs.length,
+                                  itemBuilder: (context, i) {
+                                    final line = voice.logs[voice.logs.length - 1 - i];
+                                    return Text(
+                                      line,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyLarge
+                                          ?.copyWith(fontSize: 12, color: scheme.onSurface.withValues(alpha: 0.75)),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // --- Bottom (pinned) ---
+                    Center(
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 8),
+                          _Waveform(color: scheme.primary.withValues(alpha: 0.8), width: waveW),
+                          const SizedBox(height: 14),
+                          _MicOrb(
+                            glow: scheme.primary,
+                            glow2: scheme.secondary,
+                            iconColor: scheme.onPrimary,
+                            size: orbSize,
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            l10n?.listening ?? 'Listening…',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(color: scheme.onSurface.withValues(alpha: 0.75)),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            '”Order a large pepperoni pizza…”',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(color: scheme.primary.withValues(alpha: 0.9), fontWeight: FontWeight.w600),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -266,16 +291,19 @@ class _MicOrb extends StatelessWidget {
   final Color glow;
   final Color glow2;
   final Color iconColor;
+  final double size;
 
-  const _MicOrb({required this.glow, required this.glow2, required this.iconColor});
+  const _MicOrb({required this.glow, required this.glow2, required this.iconColor, this.size = 110});
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final innerSize = size * 62 / 110;
+    final iconSize = size * 30 / 110;
 
     return Container(
-      width: 110,
-      height: 110,
+      width: size,
+      height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: RadialGradient(
@@ -297,8 +325,8 @@ class _MicOrb extends StatelessWidget {
       ),
       child: Center(
         child: Container(
-          width: 62,
-          height: 62,
+          width: innerSize,
+          height: innerSize,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: scheme.primary,
@@ -310,7 +338,7 @@ class _MicOrb extends StatelessWidget {
               ),
             ],
           ),
-          child: Icon(Icons.mic, color: iconColor, size: 30),
+          child: Icon(Icons.mic, color: iconColor, size: iconSize),
         ),
       ),
     );
@@ -319,13 +347,14 @@ class _MicOrb extends StatelessWidget {
 
 class _Waveform extends StatelessWidget {
   final Color color;
+  final double width;
 
-  const _Waveform({required this.color});
+  const _Waveform({required this.color, this.width = 260});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 260,
+      width: width,
       height: 46,
       child: CustomPaint(
         painter: _WaveformPainter(color: color),

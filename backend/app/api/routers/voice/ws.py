@@ -30,13 +30,22 @@ except ImportError:  # pragma: no cover - optional dependency during Phase 2.3
 router = APIRouter(prefix="/voice", tags=["voice-ws"])
 
 
+class _HostURL:
+    """Expose Host-header hostname so get_host_policy works for WebSockets."""
+
+    def __init__(self, hostname: str):
+        self.hostname = hostname
+
+
 class _WebSocketRequest:
     def __init__(self, websocket: WebSocket):
-        self.url = websocket.url
+        raw_host = (websocket.headers.get("host") or "").lower()
+        # Strip port if present (e.g. "user-api.local:8000" → "user-api.local")
+        self.url = _HostURL(raw_host.split(":")[0])
 
 
 def _require_user_host(websocket: WebSocket) -> None:
-    host = (websocket.url.hostname or "").lower()
+    host = _WebSocketRequest(websocket).url.hostname
     policy = get_host_policy(_WebSocketRequest(websocket))
     if policy.principal != PrincipalType.user or policy.audience != Audience.mobile:
         raise AppError(status_code=403, code="wrong_portal", detail="Wrong portal")
