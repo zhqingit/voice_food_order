@@ -35,10 +35,12 @@ router = APIRouter(
 
 
 def _revoke_session(db: Session, session: RefreshSession) -> None:
+    """Revoke a refresh session and all associated tokens."""
     now = utcnow_naive()
     if session.revoked_at is None:
         session.revoked_at = now
 
+    # Revoke all tokens associated with this session
     tokens = db.execute(select(RefreshToken).where(RefreshToken.session_id == session.id)).scalars().all()
     for token in tokens:
         if token.revoked_at is None:
@@ -46,9 +48,11 @@ def _revoke_session(db: Session, session: RefreshSession) -> None:
 
 
 def _issue_tokens(db: Session, principal_id: uuid.UUID) -> TokenResponse:
+    """Issue new access and refresh tokens for a user."""
     refresh_token = generate_refresh_token()
     refresh_hash = hash_refresh_token(refresh_token)
 
+    # Create a new refresh session for this user
     session = RefreshSession(
         principal_type=str(PrincipalType.user),
         principal_id=principal_id,
@@ -66,6 +70,7 @@ def _issue_tokens(db: Session, principal_id: uuid.UUID) -> TokenResponse:
 
 @router.post("/signup", response_model=TokenResponse)
 def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    """Register a new user with email and password. Returns access and refresh tokens."""
     existing = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
     if existing is not None:
         raise AppError(status_code=409, code="email_taken", detail="Email already registered")
@@ -81,6 +86,7 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)) -> TokenRespon
 
 @router.post("/guest", response_model=TokenResponse)
 def guest_login(db: Session = Depends(get_db)) -> TokenResponse:
+    """Login as a guest user. Returns access and refresh tokens."""
     email = f"guest-{uuid.uuid4()}@guest.local"
     password = secrets.token_urlsafe(32)
     user = User(email=email, password_hash=hash_password(password))
@@ -94,6 +100,7 @@ def guest_login(db: Session = Depends(get_db)) -> TokenResponse:
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    """Login a user with email and password. Returns access and refresh tokens."""
     user = db.execute(select(User).where(User.email == payload.email)).scalar_one_or_none()
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
         raise AppError(status_code=401, code="invalid_credentials", detail="Invalid credentials")
@@ -105,6 +112,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenResponse:
+    """Refresh access and refresh tokens using a valid refresh token."""
     session: RefreshSession | None = db.get(RefreshSession, payload.session_id)
     if (
         session is None
@@ -116,8 +124,11 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenResp
     if session.expires_at <= utcnow_naive():
         raise AppError(status_code=401, code="refresh_expired", detail="Refresh expired")
 
+    # Validate the incoming refresh token against the active token for this session
     incoming_hash = hash_refresh_token(payload.refresh_token)
-
+    # There should be exactly one active (not revoked, not replaced) refresh token for this session. 
+    # If there are none, or if the hash doesn't match, the refresh is invalid. 
+    # If the hash matches but the token has been seen before (indicating reuse), revoke the entire session.
     active_token = db.execute(
         select(RefreshToken)
         .where(RefreshToken.session_id == session.id)
@@ -128,6 +139,9 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenResp
     if active_token is None:
         raise AppError(status_code=401, code="invalid_refresh", detail="Invalid refresh")
 
+    # If the incoming token hash doesn't match the active token's hash, 
+    # check if it has been seen before (indicating reuse). 
+    # If so, revoke the entire session. Otherwise, it's just an invalid token.
     if active_token.token_hash != incoming_hash:
         seen_before = db.execute(
             select(RefreshToken)
@@ -141,9 +155,11 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenResp
 
         raise AppError(status_code=401, code="invalid_refresh", detail="Invalid refresh")
 
+    # At this point, we have a valid refresh token that has not been used before. We can proceed to rotate it.
     new_refresh_token = generate_refresh_token()
     new_hash = hash_refresh_token(new_refresh_token)
 
+    # Create a new refresh token row for the new token and mark the current active token as revoked and replaced
     new_token_row = RefreshToken(session_id=session.id, token_hash=new_hash)
     db.add(new_token_row)
     db.flush()
@@ -163,6 +179,9 @@ def logout(
     current_user: User = Depends(get_current_user_mobile),
     db: Session = Depends(get_db),
 ) -> dict:
+    """Logout from the current session or all sessions. 
+    If scope=current, requires session_id and logs out only that session. 
+    If scope=all, logs out all sessions for the user."""
     if payload.scope == "current":
         if payload.session_id is None:
             raise AppError(status_code=400, code="session_id_required", detail="session_id required for scope=current")

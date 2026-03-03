@@ -20,7 +20,7 @@ class VoiceRuntimeConfig:
 @dataclass(frozen=True)
 class GoogleVoiceConfig:
     api_key: str
-    credentials_path: str
+    credentials_path: str = ""
 
 
 def load_voice_runtime_config() -> VoiceRuntimeConfig:

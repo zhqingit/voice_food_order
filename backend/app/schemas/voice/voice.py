@@ -15,10 +15,16 @@ class VoiceSessionOut(BaseModel):
     id: uuid.UUID
     store_id: uuid.UUID
     user_id: uuid.UUID | None
+    order_id: uuid.UUID | None
     channel: str
     status: str
+    rating: int | None
     started_at: datetime
     ended_at: datetime | None
+
+
+class VoiceSessionRating(BaseModel):
+    rating: int = Field(ge=1, le=10)
 
 
 class VoiceEventIn(BaseModel):

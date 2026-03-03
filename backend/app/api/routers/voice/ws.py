@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger("voice.ws")
 
 from app.api.host_policy import get_host_policy
 from app.core.errors import AppError
@@ -20,6 +23,7 @@ from app.voice import (
     load_google_voice_config,
     load_voice_runtime_config,
 )
+from app.voice.menu import load_menu_for_store
 from app.voice.transports.websocket import create_websocket_transport
 
 try:
@@ -84,12 +88,16 @@ async def voice_ws(
     websocket: WebSocket,
     store_id: uuid.UUID = Query(...),
     order_id: uuid.UUID | None = Query(default=None),
+    session_id: uuid.UUID | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> None:
+    """WebSocket endpoint for real-time voice interactions. 
+    Expects query parameters for store_id and optional order_id to establish context."""
     if PipelineRunner is None:
         await websocket.close(code=1011)
         return
 
+    # Validate host and authenticate user using the same logic as HTTP endpoints, but adapted for WebSocket headers.
     try:
         _require_user_host(websocket)
         current_user = _get_current_user_from_ws(websocket, db)
@@ -97,12 +105,19 @@ async def voice_ws(
         await websocket.close(code=1008)
         return
 
+    # Accept the WebSocket connection after successful authentication. 
+    # From this point on, we can send/receive messages.
     await websocket.accept()
 
+    # Load voice runtime config, system prompt, 
+    # and initialize tool handlers with the current context (store_id, user_id, order_id).
+    menu = load_menu_for_store(db, store_id)  # Implement this function to load menu data as needed for the system prompt.
     runtime = load_voice_runtime_config()
     google_config = load_google_voice_config()
-    system_prompt = build_system_prompt()
+    system_prompt = build_system_prompt(menu_lines=menu)
 
+    # The tool context provides necessary information for the tool handlers to operate, 
+    # such as database access and user/store/order context.
     tool_context = VoiceToolContext(
         db=db,
         store_id=store_id,
@@ -112,7 +127,13 @@ async def voice_ws(
     )
     tool_handlers = create_voice_tool_handlers(tool_context)
 
+    # Create a WebSocket transport that the voice pipeline can use to send/receive messages, 
+    # and run the pipeline in a background task.
     transport = create_websocket_transport(websocket)
+    # TODO: We may want to implement some form of cancellation or timeout handling, 
+    # especially for long-running pipelines, to avoid orphaned tasks if the client disconnects.
+    print("system_prompt: %s", system_prompt, flush=True)
+    print("------", flush=True)
     task = create_voice_pipeline_task(
         transport=transport,
         runtime=runtime,
@@ -126,7 +147,22 @@ async def voice_ws(
     try:
         await runner.run(task)
     except WebSocketDisconnect:
-        return
+        logger.info("WebSocket disconnected: store=%s user=%s", store_id, current_user.id)
     except Exception:
-        await websocket.close(code=1011)
-        return
+        logger.exception("Pipeline error: store=%s user=%s", store_id, current_user.id)
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+    finally:
+        # Persist the order_id created during the pipeline back to the voice session.
+        if session_id is not None and tool_context.order_id is not None:
+            try:
+                from app.models.voice_session import VoiceSession
+
+                vs = db.get(VoiceSession, session_id)
+                if vs is not None:
+                    vs.order_id = tool_context.order_id
+                    db.commit()
+            except Exception:
+                logger.exception("Failed to persist order_id to session %s", session_id)

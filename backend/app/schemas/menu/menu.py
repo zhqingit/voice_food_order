@@ -30,8 +30,11 @@ class MenuItemOut(BaseModel):
     id: uuid.UUID
     menu_id: uuid.UUID
     name: str
+    alias_name: str | None = None
     price: Decimal
     description: str | None = None
+    ingredient: str | None = None
+    note: str | None = None
     tags: list[str] | None = None
     availability: bool
     modifiers: dict[str, object] | None = None
@@ -39,8 +42,11 @@ class MenuItemOut(BaseModel):
 
 class MenuItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    alias_name: str | None = Field(default=None, max_length=255)
     price: Decimal
     description: str | None = Field(default=None, max_length=512)
+    ingredient: str | None = Field(default=None, max_length=512)
+    note: str | None = Field(default=None, max_length=512)
     tags: list[str] | None = None
     availability: bool = True
     modifiers: dict[str, object] | None = None
@@ -48,8 +54,11 @@ class MenuItemCreate(BaseModel):
 
 class MenuItemUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    alias_name: str | None = Field(default=None, max_length=255)
     price: Decimal | None = None
     description: str | None = Field(default=None, max_length=512)
+    ingredient: str | None = Field(default=None, max_length=512)
+    note: str | None = Field(default=None, max_length=512)
     tags: list[str] | None = None
     availability: bool | None = None
     modifiers: dict[str, object] | None = None

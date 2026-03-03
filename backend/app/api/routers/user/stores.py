@@ -35,6 +35,7 @@ def _store_public_out(store: Store) -> StorePublicOut:
 
 @router.get("", response_model=list[StorePublicOut])
 def list_stores(db: Session = Depends(get_db)) -> list[StorePublicOut]:
+    """List all active stores, sorted by creation date descending."""
     stores = (
         db.execute(select(Store).where(Store.is_active == True).order_by(Store.created_at.desc()))  # noqa: E712
         .scalars()

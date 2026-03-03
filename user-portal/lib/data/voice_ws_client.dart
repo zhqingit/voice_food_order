@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as dev;
 import 'dart:typed_data';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -16,18 +17,28 @@ class VoiceWsClient {
   final _audio = StreamController<Uint8List>.broadcast();
   Stream<Uint8List> get audioStream => _audio.stream;
 
+  int _binaryMsgCount = 0;
+  int _textMsgCount = 0;
+  int _totalBinaryBytes = 0;
+
   bool get isConnected => _channel != null;
 
-  Future<void> connect({required String storeId, String? orderId, required String accessToken}) async {
+  Future<void> connect({required String storeId, String? orderId, String? sessionId, required String accessToken}) async {
     if (_channel != null) return;
 
-    final channel = connectVoiceWs(storeId: storeId, orderId: orderId, accessToken: accessToken);
+    final channel = connectVoiceWs(storeId: storeId, orderId: orderId, sessionId: sessionId, accessToken: accessToken);
     _channel = channel;
+
+    _binaryMsgCount = 0;
+    _textMsgCount = 0;
+    _totalBinaryBytes = 0;
 
     _sub = channel.stream.listen(
       (data) {
         // pipecat transport may emit audio frames (binary) + json events.
         if (data is String) {
+          _textMsgCount++;
+          dev.log('WS text #$_textMsgCount: ${data.substring(0, data.length.clamp(0, 80))}', name: 'VoiceWS');
           try {
             final decoded = jsonDecode(data);
             if (decoded is Map<String, dynamic>) {
@@ -43,7 +54,14 @@ class VoiceWsClient {
 
         // Forward binary audio frames to the dedicated audio stream.
         if (data is List<int>) {
+          _binaryMsgCount++;
+          _totalBinaryBytes += data.length;
+          if (_binaryMsgCount <= 3 || _binaryMsgCount % 50 == 0) {
+            dev.log('WS binary #$_binaryMsgCount: ${data.length}B (total: ${_totalBinaryBytes}B, listeners: ${_audio.hasListener})', name: 'VoiceWS');
+          }
           _audio.add(Uint8List.fromList(data));
+        } else {
+          dev.log('WS unknown data type: ${data.runtimeType}', name: 'VoiceWS');
         }
       },
       onError: (e) {

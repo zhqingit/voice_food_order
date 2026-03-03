@@ -6,14 +6,28 @@ import 'package:record/record.dart';
 class VoiceAudioRecorder {
   final AudioRecorder _recorder = AudioRecorder();
   StreamSubscription<Uint8List>? _sub;
+  bool _paused = false;
 
   bool get isRecording => _sub != null;
+  bool get isPaused => _paused;
+
+  /// Pause sending audio chunks (drops them silently).
+  /// The platform recorder keeps running to avoid permission re-requests.
+  void pause() => _paused = true;
+
+  /// Resume sending audio chunks after a pause.
+  void resume() => _paused = false;
 
   /// Starts streaming PCM16 mono @ 16kHz.
   ///
   /// Returns false if permission is not granted.
-  Future<bool> start({required void Function(Uint8List chunk) onChunk}) async {
+  /// [onError] is called if the recorder stops unexpectedly.
+  Future<bool> start({
+    required void Function(Uint8List chunk) onChunk,
+    void Function(Object error)? onError,
+  }) async {
     if (_sub != null) return true;
+    _paused = false;
 
     final ok = await _recorder.hasPermission();
     if (!ok) return false;
@@ -27,9 +41,11 @@ class VoiceAudioRecorder {
     );
 
     _sub = stream.listen(
-      onChunk,
-      onError: (_) {
-        // Let caller handle; recorder may stop unexpectedly.
+      (chunk) {
+        if (!_paused) onChunk(chunk);
+      },
+      onError: (e) {
+        onError?.call(e);
       },
       cancelOnError: true,
     );
@@ -38,6 +54,7 @@ class VoiceAudioRecorder {
   }
 
   Future<void> stop() async {
+    _paused = false;
     final sub = _sub;
     _sub = null;
     await sub?.cancel();

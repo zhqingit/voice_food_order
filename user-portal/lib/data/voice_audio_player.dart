@@ -1,53 +1,99 @@
 import 'dart:async';
-import 'dart:collection';
 import 'dart:typed_data';
 
-import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter_pcm_sound/flutter_pcm_sound.dart';
 
-/// Plays WAV audio chunks received from the backend TTS pipeline.
+/// Plays raw PCM16 audio chunks received from the backend voice pipeline.
 ///
-/// Chunks are queued and played sequentially to avoid overlapping audio.
+/// Uses [FlutterPcmSound] for gap-free streaming: a single native AudioTrack
+/// receives continuous PCM data — no WAV wrapping, no MediaPlayer restarts.
 class VoiceAudioPlayer {
-  final AudioPlayer _player = AudioPlayer();
-  final Queue<Uint8List> _queue = Queue<Uint8List>();
+  static const int sampleRate = 24000;
+  static const int numChannels = 1;
+
+  /// How long the buffer must stay empty before we declare playback stopped.
+  /// This prevents premature mic-unmute between WebSocket chunks.
+  static const Duration _drainDebounce = Duration(milliseconds: 500);
+
   bool _playing = false;
+  bool _setup = false;
   bool _disposed = false;
+  Timer? _drainTimer;
 
-  VoiceAudioPlayer() {
-    _player.onPlayerComplete.listen((_) {
-      _playing = false;
-      _playNext();
-    });
+  /// Called when playback state changes (true = bot speaking, false = silent).
+  /// Used by the controller to mute/unmute the mic.
+  void Function(bool playing)? onPlayingChanged;
+
+  /// Must be called once before [enqueue]. Sets up the native audio track.
+  Future<void> setup() async {
+    if (_setup) return;
+    _setup = true;
+    FlutterPcmSound.setFeedThreshold(4000);
+    FlutterPcmSound.setFeedCallback(_onFeed);
+    await FlutterPcmSound.setLogLevel(LogLevel.none);
+    await FlutterPcmSound.setup(
+      sampleRate: sampleRate,
+      channelCount: numChannels,
+      iosAudioCategory: IosAudioCategory.playAndRecord,
+    );
   }
 
-  /// Enqueue a WAV audio chunk for playback.
-  void enqueue(Uint8List wavBytes) {
-    if (_disposed) return;
-    _queue.add(wavBytes);
-    _playNext();
+  /// Feed a raw PCM16 chunk (no WAV header) directly to the native audio track.
+  void enqueue(Uint8List pcmBytes) {
+    if (_disposed || !_setup || pcmBytes.isEmpty) return;
+
+    // New audio arrived — cancel any pending "stopped" signal.
+    _drainTimer?.cancel();
+    _drainTimer = null;
+
+    final samples = Int16List.view(
+      pcmBytes.buffer,
+      pcmBytes.offsetInBytes,
+      pcmBytes.lengthInBytes ~/ 2,
+    );
+    FlutterPcmSound.feed(PcmArrayInt16.fromList(samples));
+
+    if (!_playing) {
+      _playing = true;
+      onPlayingChanged?.call(true);
+    }
   }
 
-  void _playNext() {
-    if (_disposed || _playing || _queue.isEmpty) return;
-    _playing = true;
-    final bytes = _queue.removeFirst();
-    _player.play(BytesSource(bytes)).catchError((_) {
-      _playing = false;
-      _playNext();
-    });
+  /// Callback from native side when buffered frames drop below threshold.
+  void _onFeed(int remainingFrames) {
+    if (remainingFrames == 0 && _playing) {
+      // Buffer drained — but more chunks may arrive shortly.
+      // Start a debounce timer; only declare "stopped" if no new audio
+      // arrives within _drainDebounce.
+      _drainTimer ??= Timer(_drainDebounce, () {
+        _drainTimer = null;
+        if (_playing) {
+          _playing = false;
+          onPlayingChanged?.call(false);
+        }
+      });
+    }
   }
 
-  /// Stop current playback and clear the queue.
+  bool get isPlaying => _playing;
+
   Future<void> stop() async {
-    _queue.clear();
+    if (!_setup) return;
+    _drainTimer?.cancel();
+    _drainTimer = null;
     _playing = false;
-    await _player.stop();
+    await FlutterPcmSound.release();
+    _setup = false;
+    onPlayingChanged?.call(false);
   }
 
   Future<void> dispose() async {
     _disposed = true;
-    _queue.clear();
+    _drainTimer?.cancel();
+    _drainTimer = null;
+    if (!_setup) return;
     _playing = false;
-    await _player.dispose();
+    await FlutterPcmSound.release();
+    _setup = false;
   }
 }

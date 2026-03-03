@@ -21,18 +21,28 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   bool _loading = true;
   String? _error;
 
-  // Manual entry
-  final _manualController = TextEditingController();
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  List<StorePublicOut> get _filteredStores {
+    if (_stores == null) return [];
+    if (_searchQuery.isEmpty) return _stores!;
+    final q = _searchQuery.toLowerCase();
+    return _stores!.where((s) => s.name.toLowerCase().contains(q)).toList();
+  }
 
   @override
   void initState() {
     super.initState();
+    _searchController.addListener(
+      () => setState(() => _searchQuery = _searchController.text),
+    );
     _loadStores();
   }
 
   @override
   void dispose() {
-    _manualController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -105,6 +115,28 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                                     .withValues(alpha: 0.6),
                               ),
                         ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _searchController,
+                          decoration: InputDecoration(
+                            hintText: 'Search stores...',
+                            prefixIcon: const Icon(Icons.search),
+                            suffixIcon: _searchQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear),
+                                    onPressed: () => _searchController.clear(),
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest
+                                .withValues(alpha: 0.5),
+                          ),
+                        ),
                         const SizedBox(height: 16),
                       ],
                     ),
@@ -163,14 +195,33 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 
                 // Stores list
                 else ...[
-                  if (_stores != null && _stores!.isNotEmpty)
+                  if (_filteredStores.isNotEmpty)
                     SliverPadding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       sliver: SliverList.separated(
-                        itemCount: _stores!.length,
+                        itemCount: _filteredStores.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) =>
-                            _StoreCard(store: _stores![index], onTap: _openVoiceOrder),
+                            _StoreCard(store: _filteredStores[index], onTap: _openVoiceOrder),
+                      ),
+                    )
+                  else if (_searchQuery.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      sliver: SliverToBoxAdapter(
+                        child: AppStage(
+                          child: Column(
+                            children: [
+                              Icon(Icons.search_off, size: 48,
+                                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.4)),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No stores match your search',
+                                style: Theme.of(context).textTheme.bodyLarge,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     )
                   else
@@ -185,18 +236,6 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         ),
                       ),
                     ),
-
-                  // Manual store ID entry (advanced / fallback)
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    sliver: SliverToBoxAdapter(
-                      child: _ManualEntryTile(
-                        controller: _manualController,
-                        l10n: l10n,
-                        onOpen: _openVoiceOrder,
-                      ),
-                    ),
-                  ),
                 ],
               ],
             ),
@@ -218,49 +257,53 @@ class _StoreCard extends StatelessWidget {
     final location = store.locationLabel;
     final theme = Theme.of(context);
 
-    return AppStage(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  store.name,
-                  style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+    return InkWell(
+      onTap: () => onTap(store.name, store.id),
+      borderRadius: BorderRadius.circular(16),
+      child: AppStage(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    store.name,
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _StatusBadge(label: 'Open', color: theme.colorScheme.primary),
+              ],
+            ),
+            if (location != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                location,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
                 ),
               ),
-              const SizedBox(width: 8),
-              _StatusBadge(label: 'Open', color: theme.colorScheme.primary),
             ],
-          ),
-          if (location != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              location,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                if (store.allowPickup)
+                  _Badge(label: 'Pickup', icon: Icons.storefront_outlined),
+                if (store.allowPickup && store.allowDelivery)
+                  const SizedBox(width: 8),
+                if (store.allowDelivery)
+                  _Badge(label: 'Delivery', icon: Icons.delivery_dining_outlined),
+              ],
+            ),
+            const SizedBox(height: 14),
+            FilledButton.icon(
+              onPressed: () => onTap(store.name, store.id),
+              icon: const Icon(Icons.mic_rounded, size: 18),
+              label: const Text('Start Voice Order'),
             ),
           ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              if (store.allowPickup)
-                _Badge(label: 'Pickup', icon: Icons.storefront_outlined),
-              if (store.allowPickup && store.allowDelivery)
-                const SizedBox(width: 8),
-              if (store.allowDelivery)
-                _Badge(label: 'Delivery', icon: Icons.delivery_dining_outlined),
-            ],
-          ),
-          const SizedBox(height: 14),
-          FilledButton.icon(
-            onPressed: () => onTap(store.name, store.id),
-            icon: const Icon(Icons.mic_rounded, size: 18),
-            label: const Text('Start Voice Order'),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -322,60 +365,3 @@ class _Badge extends StatelessWidget {
   }
 }
 
-class _ManualEntryTile extends StatelessWidget {
-  final TextEditingController controller;
-  final AppLocalizations? l10n;
-  final void Function(String name, String id) onOpen;
-
-  const _ManualEntryTile({
-    required this.controller,
-    required this.l10n,
-    required this.onOpen,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Theme(
-      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        leading: const Icon(Icons.keyboard_alt_outlined, size: 20),
-        title: Text(
-          'Enter store ID manually',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-        ),
-        children: [
-          AppStage(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: controller,
-                  decoration: InputDecoration(
-                    labelText: l10n?.storeId ?? 'Store ID',
-                    hintText: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                FilledButton(
-                  onPressed: () {
-                    final storeId = controller.text.trim();
-                    if (storeId.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a store ID.')),
-                      );
-                      return;
-                    }
-                    onOpen('Store', storeId);
-                  },
-                  child: Text(l10n?.openVoiceOrder ?? 'Open voice order'),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

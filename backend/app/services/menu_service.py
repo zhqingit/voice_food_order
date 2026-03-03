@@ -72,8 +72,11 @@ def create_menu_item(db: Session, *, menu_id: uuid.UUID, payload: MenuItemCreate
     item = MenuItem(
         menu_id=menu_id,
         name=payload.name,
+        alias_name=payload.alias_name,
         price=payload.price,
         description=payload.description,
+        ingredient=payload.ingredient,
+        note=payload.note,
         tags=payload.tags,
         availability=payload.availability,
         modifiers=payload.modifiers,
@@ -85,10 +88,16 @@ def create_menu_item(db: Session, *, menu_id: uuid.UUID, payload: MenuItemCreate
 def update_menu_item(db: Session, *, item: MenuItem, payload: MenuItemUpdate) -> MenuItem:
     if payload.name is not None:
         item.name = payload.name
+    if payload.alias_name is not None:
+        item.alias_name = payload.alias_name
     if payload.price is not None:
         item.price = payload.price
     if payload.description is not None:
         item.description = payload.description
+    if payload.ingredient is not None:
+        item.ingredient = payload.ingredient
+    if payload.note is not None:
+        item.note = payload.note
     if payload.tags is not None:
         item.tags = payload.tags
     if payload.availability is not None:

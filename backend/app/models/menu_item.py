@@ -17,8 +17,11 @@ class MenuItem(Base):
     menu_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("menus.id", ondelete="CASCADE"), index=True)
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    alias_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     description: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    ingredient: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    note: Mapped[str | None] = mapped_column(String(512), nullable=True)
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     availability: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     modifiers: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)

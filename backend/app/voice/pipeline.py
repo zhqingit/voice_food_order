@@ -1,68 +1,25 @@
 from __future__ import annotations
 
-import asyncio
-import time
 from typing import Any, Awaitable, Callable
 
 from app.voice.config import GoogleVoiceConfig, VoiceRuntimeConfig
 
 try:
     from pipecat.adapters.schemas.tools_schema import AdapterType, ToolsSchema
-    from pipecat.frames.frames import LLMMessagesAppendFrame, LLMRunFrame
+    from pipecat.frames.frames import LLMContextFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.llm_context import LLMContext
-    from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
-    from pipecat.processors.filters.stt_mute_filter import STTMuteConfig, STTMuteFilter, STTMuteStrategy
-    from pipecat.services.google.llm import GoogleLLMService
-    from pipecat.services.google.stt import GoogleSTTService
-    from pipecat.services.google.tts import GoogleTTSService
-except ImportError:  # pragma: no cover - optional dependency during Phase 2.1
+    from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
+except ImportError:  # pragma: no cover - optional dependency
     AdapterType = None
     ToolsSchema = None
-    LLMMessagesAppendFrame = None
-    LLMRunFrame = None
+    LLMContextFrame = None
     Pipeline = None
     PipelineParams = None
     PipelineTask = None
     LLMContext = None
-    LLMContextAggregatorPair = None
-    STTMuteConfig = None
-    STTMuteFilter = None
-    STTMuteStrategy = None
-    GoogleLLMService = None
-    GoogleSTTService = None
-    GoogleTTSService = None
-
-
-class ConversationLogger:
-    def __init__(self, *, label: str = "") -> None:
-        self._label = label.strip()
-
-    async def process(self, frame: Any, direction: Any, push: Callable[[Any, Any], Awaitable[None]]) -> None:
-        text = getattr(frame, "text", "")
-        if isinstance(text, str) and text.strip():
-            prefix = f"{self._label}: " if self._label else ""
-            print(f"{prefix}{text.strip()}")
-        await push(frame, direction)
-
-
-class LLMRateLimiter:
-    def __init__(self, *, max_requests_per_minute: float) -> None:
-        if max_requests_per_minute <= 0:
-            raise ValueError("max_requests_per_minute must be > 0")
-        self._interval_secs = 60.0 / float(max_requests_per_minute)
-        self._next_allowed_time = 0.0
-
-    async def process(self, frame: Any, direction: Any, push: Callable[[Any, Any], Awaitable[None]]) -> None:
-        is_llm_run = frame.__class__.__name__ == "LLMRunFrame"
-        if is_llm_run and str(direction).lower().endswith("downstream"):
-            now = time.monotonic()
-            sleep_for = self._next_allowed_time - now
-            if sleep_for > 0:
-                await asyncio.sleep(sleep_for)
-            self._next_allowed_time = max(self._next_allowed_time, time.monotonic()) + self._interval_secs
-        await push(frame, direction)
+    GeminiLiveLLMService = None
 
 
 def create_voice_pipeline_task(
@@ -73,59 +30,51 @@ def create_voice_pipeline_task(
     system_prompt: str,
     tool_schema: Any,
     tool_handlers: dict[str, Callable[[Any], Awaitable[Any]]] | None = None,
-    max_rpm: float = 5.0,
     enable_metrics: bool = True,
 ) -> Any:
     """
     Build a pipecat PipelineTask for a single voice session.
 
-    Providers are selected via `runtime`; only Google providers are wired in Phase 2.1.
+    Uses Gemini Live API for native audio-in/out (no separate STT/TTS services).
+    Gemini Live handles VAD, turn-taking, and audio processing internally —
+    no local aggregators or VAD are needed.
+    Only a GEMINI_API_KEY is required.
     """
 
-    if runtime.stt_provider != "google" or runtime.tts_provider != "google" or runtime.llm_provider != "google":
-        raise NotImplementedError("Only Google STT/TTS/LLM providers are wired in Phase 2.1")
-
     if not google_config.api_key:
-        raise RuntimeError("Missing GOOGLE_API_KEY/GEMINI_API_KEY for LLM")
-    if not google_config.credentials_path:
-        raise RuntimeError("Missing GOOGLE_APPLICATION_CREDENTIALS for STT/TTS")
+        raise RuntimeError("Missing GOOGLE_API_KEY/GEMINI_API_KEY for Gemini Live")
 
     if Pipeline is None:
         raise RuntimeError("pipecat is required for voice pipeline")
 
-    stt = GoogleSTTService(credentials_path=google_config.credentials_path)
-    tts = GoogleTTSService(credentials_path=google_config.credentials_path)
-    llm = GoogleLLMService(api_key=google_config.api_key, model=runtime.llm_model)
+    # TODO: Re-enable tools once Gemini Live API 1008 bug with tool calls is fixed.
+    # See: https://discuss.ai.google.dev/t/gemini-live-api-random-websocket-closures-after-sendtoolresponse/109319
+    # tools = ToolsSchema(standard_tools=[], custom_tools={AdapterType.GEMINI: tool_schema})
 
-    if tool_handlers:
-        for name, handler in tool_handlers.items():
-            llm.register_function(name, handler)
+    llm = GeminiLiveLLMService(
+        api_key=google_config.api_key,
+        model=runtime.llm_model,
+        system_instruction=system_prompt,
+        #tools=tools,  # Disabled: causes 1008 crashes
+        voice_id="Puck",
+    )
 
-    tools = ToolsSchema(standard_tools=[], custom_tools={AdapterType.GEMINI: tool_schema})
-    context = LLMContext(messages=[{"role": "system", "content": system_prompt}], tools=tools)
-    context_aggregators = LLMContextAggregatorPair(context)
+    # if tool_handlers:
+    #     for name, handler in tool_handlers.items():
+    #         llm.register_function(name, handler)
 
-    stt_mute = STTMuteFilter(config=STTMuteConfig(strategies={STTMuteStrategy.ALWAYS}))
-    #rate_limiter = LLMRateLimiter(max_requests_per_minute=max_rpm)
-
-    processors = [
+    # Gemini Live processes audio natively — pipe audio directly to LLM.
+    # No LLMContextAggregatorPair or local VAD needed.
+    pipeline = Pipeline([
         transport.input(),
-        stt,
-        stt_mute,
-        context_aggregators.user(),
-        #rate_limiter,
         llm,
-        tts,
-        context_aggregators.assistant(),
         transport.output(),
-    ]
-
-    pipeline = Pipeline(processors)
+    ])
 
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
-            allow_interruptions=False,
+            allow_interruptions=True,
             enable_metrics=enable_metrics,
             enable_usage_metrics=enable_metrics,
         ),
@@ -133,12 +82,13 @@ def create_voice_pipeline_task(
 
     @task.event_handler("on_pipeline_started")
     async def on_pipeline_started(task: PipelineTask, frame: Any):
-        await task.queue_frames([
-            LLMMessagesAppendFrame(messages=[{
-                "role": "user",
-                "content": "Greet me and ask what I want to order.",
-            }]),
-            LLMRunFrame(),
-        ])
+        # Send initial context to trigger a greeting.
+        # LLMContextFrame → _handle_context() → _create_initial_response()
+        # which correctly handles the case where the Gemini session isn't
+        # ready yet (sets _run_llm_when_session_ready = True).
+        context = LLMContext(
+            messages=[{"role": "user", "content": "Greet me and ask what I want to order."}],
+        )
+        await task.queue_frames([LLMContextFrame(context=context)])
 
     return task

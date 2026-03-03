@@ -11,6 +11,7 @@ class OrderItemOut(BaseModel):
     id: uuid.UUID
     order_id: uuid.UUID
     menu_item_id: uuid.UUID
+    name: str | None = None
     quantity: int
     price_snapshot: Decimal
 

@@ -21,6 +21,7 @@ def get_current_user_mobile(
     creds: HTTPAuthorizationCredentials | None = Depends(_security),
     db: Session = Depends(get_db),
 ) -> User:
+    """Get the currently authenticated user for mobile clients. Raises 401 if not authenticated, 403 if wrong portal."""
     if creds is None or creds.scheme.lower() != "bearer":
         raise AppError(status_code=401, code="not_authenticated", detail="Not authenticated")
 

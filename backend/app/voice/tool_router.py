@@ -25,9 +25,11 @@ class VoiceToolContext:
 
 
 class VoiceToolRouter:
+    """Router for handling voice tool calls related to food ordering, using the provided context to perform actions on the order."""
     def __init__(self, context: VoiceToolContext) -> None:
         self._context = context
 
+    # Helper method to find a menu item by name, ignoring case, within the current store's menu.
     def _find_menu_item_by_name(self, name: str) -> MenuItem | None:
         query = (
             select(MenuItem)
@@ -38,15 +40,18 @@ class VoiceToolRouter:
         return self._context.db.execute(query).scalar_one_or_none()
 
     def _get_order(self) -> Order | None:
+        """Retrieve the current order based on the context's order_id."""
         if self._context.order_id is None:
             return None
         return self._context.db.get(Order, self._context.order_id)
 
     def _ensure_order(self) -> Order:
+        """Ensure there is a current order, creating a new draft order if necessary."""
         order = self._get_order()
         if order is not None:
             return order
 
+        # If no order exists, create a new draft order for the current user and store.
         payload = OrderCreate(
             store_id=self._context.store_id,
             user_id=self._context.user_id,
@@ -60,6 +65,8 @@ class VoiceToolRouter:
         return order
 
     def _build_summary(self, order: Order) -> dict[str, Any]:
+        """Build a summary of the current order, including item details and totals."""
+
         items = self._context.db.execute(select(OrderItem).where(OrderItem.order_id == order.id)).scalars().all()
         summary_items = []
         for item in items:
@@ -84,6 +91,7 @@ class VoiceToolRouter:
         }
 
     def add_item(self, *, menu_item_id: uuid.UUID | None, item_name: str | None, quantity: int) -> dict[str, Any]:
+        """Add an item to the current order."""
         if quantity <= 0:
             return {"ok": False, "message": "Quantity must be at least 1."}
 
@@ -116,6 +124,7 @@ class VoiceToolRouter:
         menu_item_id: uuid.UUID | None,
         item_name: str | None,
     ) -> dict[str, Any]:
+        """Remove an item from the current order. Supports identifying the item to remove by order_item_id, menu_item_id, or item_name for flexibility."""
         order = self._get_order()
         if order is None:
             return {"ok": False, "message": "No active order."}
@@ -150,13 +159,17 @@ class VoiceToolRouter:
         }
 
     def get_summary(self) -> dict[str, Any]:
+        """Get current order summary and totals."""
         order = self._get_order()
         if order is None:
             return {"ok": True, "message": "Order is empty.", "order": None}
         return {"ok": True, "message": "Order summary.", "order": self._build_summary(order)}
 
     def checkout(self) -> dict[str, Any]:
+        """Finalize the order. This example simply changes the order status to 'submitted' and recalculates totals, 
+        but in a real implementation this might involve additional steps such as confirming order details, handling payment, etc."""
         order = self._get_order()
+
         if order is None:
             return {"ok": False, "message": "Order is empty."}
         if order.status != "draft":
