@@ -11,12 +11,20 @@ import '../../data/voice_audio_recorder.dart';
 import '../../data/voice_session_repository.dart';
 import '../../data/voice_ws_client.dart';
 
+class TranscriptEntry {
+  final String speaker; // 'user' or 'assistant'
+  final String text;
+
+  const TranscriptEntry({required this.speaker, required this.text});
+}
+
 class VoiceUiState {
   final bool connecting;
   final bool connected;
   final String? sessionId;
   final String? error;
   final List<String> logs;
+  final List<TranscriptEntry> transcripts;
 
   // Post-session state
   final bool sessionEnded;
@@ -31,6 +39,7 @@ class VoiceUiState {
     required this.sessionId,
     required this.error,
     required this.logs,
+    required this.transcripts,
     required this.sessionEnded,
     required this.orderSummary,
     required this.orderItems,
@@ -44,6 +53,7 @@ class VoiceUiState {
         sessionId: null,
         error: null,
         logs: <String>[],
+        transcripts: <TranscriptEntry>[],
         sessionEnded: false,
         orderSummary: null,
         orderItems: null,
@@ -57,6 +67,7 @@ class VoiceUiState {
     String? sessionId,
     String? error,
     List<String>? logs,
+    List<TranscriptEntry>? transcripts,
     bool? sessionEnded,
     OrderOut? orderSummary,
     List<OrderItemOut>? orderItems,
@@ -69,6 +80,7 @@ class VoiceUiState {
       sessionId: sessionId ?? this.sessionId,
       error: error,
       logs: logs ?? this.logs,
+      transcripts: transcripts ?? this.transcripts,
       sessionEnded: sessionEnded ?? this.sessionEnded,
       orderSummary: orderSummary ?? this.orderSummary,
       orderItems: orderItems ?? this.orderItems,
@@ -140,14 +152,9 @@ class VoiceController extends Notifier<VoiceUiState> {
       // 3. Start mic recorder BEFORE WebSocket so it holds audio focus first.
       final recorder = ref.read(voiceAudioRecorderProvider);
       final ws = ref.read(voiceWsClientProvider);
-      int micChunkCount = 0;
 
       final granted = await recorder.start(
         onChunk: (Uint8List chunk) {
-          micChunkCount++;
-          if (micChunkCount <= 3 || micChunkCount % 100 == 0) {
-            _append('mic: chunk#$micChunkCount, ${chunk.length}B');
-          }
           ws.sendBytes(chunk);
         },
         onError: (e) {
@@ -161,16 +168,13 @@ class VoiceController extends Notifier<VoiceUiState> {
         state = state.copyWith(connecting: false, error: 'Microphone permission not granted.');
         return;
       }
-      _append('mic streaming started');
 
       // 4. Wire mic muting: pause mic while bot is speaking to prevent echo.
       audioPlayer.onPlayingChanged = (playing) {
         if (playing) {
           recorder.pause();
-          _append('mic: paused (bot speaking)');
         } else {
           recorder.resume();
-          _append('mic: resumed');
         }
       };
 
@@ -178,21 +182,19 @@ class VoiceController extends Notifier<VoiceUiState> {
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
 
       _wsSub = ws.events.listen((evt) {
-        _append(evt.toString());
-        if (evt case {'type': 'closed'} when state.connected) {
+        // Parse transcript events from the backend.
+        final type = evt['type'] as String?;
+        if (type == 'transcript_user') {
+          _addTranscript('user', evt['text'] as String? ?? '');
+        } else if (type == 'transcript_assistant') {
+          _addTranscript('assistant', evt['text'] as String? ?? '');
+        } else if (type == 'closed' && state.connected) {
           stop();
         }
       });
 
       // 6. Subscribe to audio stream and feed to player.
-      int audioChunkCount = 0;
-      int totalAudioBytes = 0;
       _audioSub = ws.audioStream.listen((bytes) {
-        audioChunkCount++;
-        totalAudioBytes += bytes.length;
-        if (audioChunkCount % 50 == 1) {
-          _append('audio: chunk#$audioChunkCount, total ${totalAudioBytes}B');
-        }
         audioPlayer.enqueue(bytes);
       });
 
@@ -281,6 +283,21 @@ class VoiceController extends Notifier<VoiceUiState> {
 
   void resetSession() {
     state = VoiceUiState.initial();
+  }
+
+  void _addTranscript(String speaker, String text) {
+    if (text.isEmpty) return;
+    final list = [...state.transcripts];
+    // Merge consecutive entries from the same speaker.
+    if (list.isNotEmpty && list.last.speaker == speaker) {
+      list[list.length - 1] = TranscriptEntry(
+        speaker: speaker,
+        text: '${list.last.text} $text',
+      );
+    } else {
+      list.add(TranscriptEntry(speaker: speaker, text: text));
+    }
+    state = state.copyWith(transcripts: list);
   }
 
   void _append(String line) {

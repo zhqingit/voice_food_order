@@ -37,5 +37,17 @@ services:
       - ./alembic.ini:/app/alembic.ini
     command: ["bash", "-lc", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
 
+  store-portal:
+    build:
+      context: ../store-portal
+    environment:
+      VITE_API_TARGET: http://api:8000
+    ports:
+      - "5174:5174"
+    depends_on:
+      - api
+    volumes:
+      - ../store-portal/src:/app/src
+
 volumes:
   pgdata:

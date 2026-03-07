@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/app_theme.dart';
 import '../../gen_l10n/app_localizations.dart';
 import '../../ui/style/app_background.dart';
 import '../../ui/style/app_stage.dart';
@@ -65,7 +64,6 @@ class _ActiveSessionView extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final h = constraints.maxHeight;
-        final logsH = (h * 0.15).clamp(100.0, 160.0);
         final orbSize = h < 600 ? 80.0 : 110.0;
         final waveW = (h * 0.35).clamp(180.0, 260.0);
 
@@ -149,42 +147,17 @@ class _ActiveSessionView extends ConsumerWidget {
               ),
             ],
 
-            // --- Middle (scrollable) ---
+            // --- Middle: transcript or placeholder ---
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 18),
-                    Text(
-                      'What are you\ncraving?',
-                      style: Theme.of(context).textTheme.headlineLarge,
-                    ),
-                    if (voice.logs.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        height: logsH,
-                        decoration: AppTheme.glassCardDecoration(context),
-                        padding: const EdgeInsets.all(10),
-                        child: ListView.builder(
-                          reverse: true,
-                          itemCount: voice.logs.length,
-                          itemBuilder: (context, i) {
-                            final line = voice.logs[voice.logs.length - 1 - i];
-                            return Text(
-                              line,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(fontSize: 12, color: scheme.onSurface.withValues(alpha: 0.75)),
-                            );
-                          },
-                        ),
+              child: voice.transcripts.isNotEmpty
+                  ? _TranscriptList(transcripts: voice.transcripts)
+                  : Padding(
+                      padding: const EdgeInsets.only(top: 18),
+                      child: Text(
+                        'What are you\ncraving?',
+                        style: Theme.of(context).textTheme.headlineLarge,
                       ),
-                    ],
-                  ],
-                ),
-              ),
+                    ),
             ),
 
             // --- Bottom (pinned) ---
@@ -222,6 +195,53 @@ class _ActiveSessionView extends ConsumerWidget {
               ),
             ),
           ],
+        );
+      },
+    );
+  }
+}
+
+class _TranscriptList extends StatelessWidget {
+  final List<TranscriptEntry> transcripts;
+
+  const _TranscriptList({required this.transcripts});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListView.builder(
+      reverse: true,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      itemCount: transcripts.length,
+      itemBuilder: (context, i) {
+        final entry = transcripts[transcripts.length - 1 - i];
+        final isUser = entry.speaker == 'user';
+        return Align(
+          alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
+            margin: const EdgeInsets.symmetric(vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isUser
+                  ? scheme.primary.withValues(alpha: 0.15)
+                  : scheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(isUser ? 16 : 4),
+                bottomRight: Radius.circular(isUser ? 4 : 16),
+              ),
+            ),
+            child: Text(
+              entry.text,
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: isUser ? scheme.primary : scheme.onSurface,
+                  ),
+            ),
+          ),
         );
       },
     );

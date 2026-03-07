@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { GlassButton, GlassCard } from '@zhqingit/liquid-glass-react'
 import { getMe, updateMe, type StoreMe } from '../api/storeApi'
 
 export function ProfileRoute(): React.JSX.Element {
@@ -83,98 +82,99 @@ export function ProfileRoute(): React.JSX.Element {
   }
 
   return (
-    <GlassCard preset="frosted" style={{ padding: 16, maxWidth: 900, margin: '0 auto' }}>
-      <h2 style={{ marginTop: 0 }}>Profile & Settings</h2>
+    <>
+      <div className="page-header">
+        <h1>Profile & Settings</h1>
+        <p>Manage your store information and preferences.</p>
+      </div>
 
-      {loading ? <div style={{ opacity: 0.75 }}>Loading…</div> : null}
+      {message && <div className="alert alert-success" style={{ marginBottom: 16 }}>{message}</div>}
+      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
-      {me ? (
-        <form onSubmit={handleSave} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-          <label style={labelStyle}>
-            Store name
-            <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={labelStyle}>
-            Phone
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
-          </label>
+      <div className="card" style={{ maxWidth: 900 }}>
+        <div className="card-header">
+          <h2>Store Information</h2>
+        </div>
 
-          <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
-            Email (read-only)
-            <input value={me.email} readOnly style={{ ...inputStyle, opacity: 0.8 }} />
-          </label>
-
-          <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
-            Address line 1
-            <input value={address1} onChange={(e) => setAddress1(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
-            Address line 2
-            <input value={address2} onChange={(e) => setAddress2(e.target.value)} style={inputStyle} />
-          </label>
-
-          <label style={labelStyle}>
-            City
-            <input value={city} onChange={(e) => setCity(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={labelStyle}>
-            State
-            <input value={state} onChange={(e) => setState(e.target.value)} style={inputStyle} />
-          </label>
-
-          <label style={labelStyle}>
-            Postal code
-            <input value={postal} onChange={(e) => setPostal(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={labelStyle}>
-            Country
-            <input value={country} onChange={(e) => setCountry(e.target.value)} style={inputStyle} />
-          </label>
-
-          <label style={labelStyle}>
-            Timezone
-            <input value={timezone} onChange={(e) => setTimezone(e.target.value)} style={inputStyle} />
-          </label>
-          <label style={labelStyle}>
-            Min order amount
-            <input value={minOrder} onChange={(e) => setMinOrder(e.target.value)} style={inputStyle} inputMode="decimal" />
-          </label>
-
-          <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={allowPickup} onChange={(e) => setAllowPickup(e.target.checked)} />
-            Allow pickup
-          </label>
-          <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input type="checkbox" checked={allowDelivery} onChange={(e) => setAllowDelivery(e.target.checked)} />
-            Allow delivery
-          </label>
-
-          <div style={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-            <GlassButton type="submit" style={{ padding: '10px 14px', fontWeight: 800 }}>
-              Save
-            </GlassButton>
+        {loading && (
+          <div className="card-body">
+            <div className="empty-state" style={{ padding: '16px 0' }}>Loading...</div>
           </div>
-        </form>
-      ) : null}
+        )}
 
-      {message ? <div style={{ marginTop: 12, color: 'green' }}>{message}</div> : null}
-      {error ? <div style={{ marginTop: 12, color: 'crimson' }}>{error}</div> : null}
-    </GlassCard>
+        {me && (
+          <form className="card-body" onSubmit={(e) => void handleSave(e)}>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Store Name</label>
+                <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone</label>
+                <input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </div>
+
+              <div className="form-group grid-full">
+                <label className="form-label">Email (read-only)</label>
+                <input className="form-input" value={me.email} readOnly style={{ opacity: 0.7 }} />
+              </div>
+
+              <div className="form-group grid-full">
+                <label className="form-label">Address Line 1</label>
+                <input className="form-input" value={address1} onChange={(e) => setAddress1(e.target.value)} />
+              </div>
+              <div className="form-group grid-full">
+                <label className="form-label">Address Line 2</label>
+                <input className="form-input" value={address2} onChange={(e) => setAddress2(e.target.value)} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">City</label>
+                <input className="form-input" value={city} onChange={(e) => setCity(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">State</label>
+                <input className="form-input" value={state} onChange={(e) => setState(e.target.value)} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Postal Code</label>
+                <input className="form-input" value={postal} onChange={(e) => setPostal(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Country</label>
+                <input className="form-input" value={country} onChange={(e) => setCountry(e.target.value)} />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Timezone</label>
+                <input className="form-input" value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Min Order Amount</label>
+                <input className="form-input" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} inputMode="decimal" placeholder="0.00" />
+              </div>
+
+              <div className="form-group">
+                <label className="form-check">
+                  <input type="checkbox" checked={allowPickup} onChange={(e) => setAllowPickup(e.target.checked)} />
+                  Allow Pickup
+                </label>
+              </div>
+              <div className="form-group">
+                <label className="form-check">
+                  <input type="checkbox" checked={allowDelivery} onChange={(e) => setAllowDelivery(e.target.checked)} />
+                  Allow Delivery
+                </label>
+              </div>
+
+              <div className="flex-end grid-full">
+                <button type="submit" className="btn btn-primary">Save Changes</button>
+              </div>
+            </div>
+          </form>
+        )}
+      </div>
+    </>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 12,
-  border: '1px solid rgba(255,255,255,0.22)',
-  background: 'rgba(255,255,255,0.08)',
-  color: 'inherit',
-}
-
-const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  fontSize: 13,
-  opacity: 0.95,
 }

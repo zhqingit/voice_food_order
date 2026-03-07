@@ -1,16 +1,14 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import axios from 'axios'
-import { GlassButton, GlassCard, type GlassThemeName } from '@zhqingit/liquid-glass-react'
 
 import { getAccessToken } from './auth/tokenStore'
 import { getMe, login, logout, refresh, signup } from './auth/authApi'
-import { createMenu, createMenuItem, listMenuItems, listMenus } from './api/menuApi'
+import { addItemToMenu, createMenu, createStoreItem, listMenuItems, listMenus, listStoreItems } from './api/menuApi'
 import { Shell } from './components/shell/Shell'
 import { MenuRoute } from './routes/MenuRoute'
 import { OrdersRoute } from './routes/OrdersRoute'
 import { ProfileRoute } from './routes/ProfileRoute'
-import { STORE_PORTAL_THEMES, useTheme } from './app/ThemeProvider'
 
 export function App(): React.JSX.Element {
   const [bootstrapped, setBootstrapped] = useState(false)
@@ -33,8 +31,8 @@ export function App(): React.JSX.Element {
 
   if (!bootstrapped) {
     return (
-      <div style={{ padding: 32, textAlign: 'center', opacity: 0.8 }}>
-        Booting store-portal…
+      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: '#6b7280' }}>
+        Loading...
       </div>
     )
   }
@@ -52,11 +50,7 @@ export function App(): React.JSX.Element {
       </Shell>
     </BrowserRouter>
   ) : (
-    <AuthPage
-      onAuthed={() => {
-        setToken(getAccessToken())
-      }}
-    />
+    <AuthPage onAuthed={() => setToken(getAccessToken())} />
   )
 }
 
@@ -69,7 +63,6 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const { theme, setTheme } = useTheme()
 
   useEffect(() => {
     setError(null)
@@ -82,18 +75,22 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     if (!menu) {
       menu = await createMenu({ name: 'Lunch Menu', active: true })
     }
-    const items = await listMenuItems(menu.id)
-    if (items.length === 0) {
+    let poolItems = await listStoreItems()
+    if (poolItems.length === 0) {
       const demoItems = [
-        { name: 'Classic Burger',   price: 12.99, description: 'Juicy beef patty, lettuce, tomato' },
-        { name: 'Pepperoni Pizza',  price: 18.99, description: 'Hand-tossed with house-made marinara' },
-        { name: 'Caesar Salad',     price: 10.99, description: 'Romaine, parmesan, croutons' },
-        { name: 'Crispy Fries',     price:  4.99, description: 'Golden fries with sea salt' },
-        { name: 'Sparkling Water',  price:  2.99, description: 'Chilled sparkling mineral water' },
+        { name: 'Classic Burger', price: 12.99, description: 'Juicy beef patty, lettuce, tomato' },
+        { name: 'Pepperoni Pizza', price: 18.99, description: 'Hand-tossed with house-made marinara' },
+        { name: 'Caesar Salad', price: 10.99, description: 'Romaine, parmesan, croutons' },
+        { name: 'Crispy Fries', price: 4.99, description: 'Golden fries with sea salt' },
+        { name: 'Sparkling Water', price: 2.99, description: 'Chilled sparkling mineral water' },
       ]
-      await Promise.all(
-        demoItems.map((item) => createMenuItem(menu.id, { ...item, availability: true })),
+      poolItems = await Promise.all(
+        demoItems.map((item) => createStoreItem({ ...item, availability: true })),
       )
+    }
+    const menuItems = await listMenuItems(menu.id)
+    if (menuItems.length === 0) {
+      await Promise.all(poolItems.map((item) => addItemToMenu(menu.id, item.id)))
     }
   }
 
@@ -112,36 +109,19 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
         await login(demoEmail, demoPassword)
       } catch {
         try {
-          await signup({
-            email: demoEmail,
-            password: demoPassword,
-            name: demoName,
-          })
+          await signup({ email: demoEmail, password: demoPassword, name: demoName })
         } catch {
           await login(demoEmail, demoPassword)
         }
       }
-
-      try {
-        await getMe()
-      } catch {
-        // ignore
-      }
-
-      try {
-        await seedDemoData()
-      } catch {
-        // Best-effort: don't block login if seeding fails
-      }
-
+      try { await getMe() } catch {}
+      try { await seedDemoData() } catch {}
       setMessage('Signed in with demo account.')
       onAuthed()
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
-        const detail = typeof data?.detail === 'string' ? data.detail : null
-        const code = typeof data?.code === 'string' ? data.code : null
-        setError(detail ?? code ?? 'Demo sign-in failed')
+        setError(data?.detail ?? data?.code ?? 'Demo sign-in failed')
       } else {
         setError('Demo sign-in failed')
       }
@@ -165,19 +145,12 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     setMessage(null)
     try {
       await login(email, password)
-      try {
-        await getMe()
-      } catch {
-        // ignore
-      }
-      setMessage('Login succeeded.')
+      try { await getMe() } catch {}
       onAuthed()
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
-        const detail = typeof data?.detail === 'string' ? data.detail : null
-        const code = typeof data?.code === 'string' ? data.code : null
-        setError(detail ?? code ?? 'Login failed')
+        setError(data?.detail ?? data?.code ?? 'Login failed')
       } else {
         setError('Login failed')
       }
@@ -189,20 +162,12 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     setError(null)
     setMessage(null)
     try {
-      await signup({
-        email,
-        password,
-        name,
-        phone: phone.trim() ? phone.trim() : undefined,
-      })
-      setMessage('Signup succeeded.')
+      await signup({ email, password, name, phone: phone.trim() || undefined })
       onAuthed()
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
-        const detail = typeof data?.detail === 'string' ? data.detail : null
-        const code = typeof data?.code === 'string' ? data.code : null
-        setError(detail ?? code ?? 'Signup failed')
+        setError(data?.detail ?? data?.code ?? 'Signup failed')
       } else {
         setError('Signup failed')
       }
@@ -211,7 +176,6 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
 
   async function handleClearSession(): Promise<void> {
     setError(null)
-    setMessage(null)
     try {
       await logout()
       setMessage('Session cleared.')
@@ -221,155 +185,71 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 20 }}>
-      <div className="luxlunch-wrap">
-        <GlassCard preset="crystal" className="luxlunch-stage" style={{ padding: 0, width: '100%' }}>
-          <div className="luxlunch-bg" />
-
-          <div className="luxlunch-content">
-            <div className="luxlunch-nav">
-              <div className="luxlunch-brand">
-                <span className="luxlunch-dot" aria-hidden />
-                <span>Store Portal</span>
-              </div>
-              <div className="luxlunch-links" aria-label="Auth mode">
-                <a
-                  href="#"
-                  className={mode === 'login' ? 'luxlunch-active' : undefined}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setMode('login')
-                  }}
-                >
-                  Login
-                </a>
-                <a
-                  href="#"
-                  className={mode === 'signup' ? 'luxlunch-active' : undefined}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setMode('signup')
-                  }}
-                >
-                  Sign up
-                </a>
-              </div>
-              <div className="luxlunch-cta">
-                <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ opacity: 0.75, fontSize: 12 }}>Theme</span>
-                  <select
-                    value={theme}
-                    onChange={(e) => setTheme(e.target.value as GlassThemeName)}
-                  >
-                    {STORE_PORTAL_THEMES.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <GlassButton
-                  preset="subtle"
-                  style={{ padding: '6px 10px' }}
-                  onClick={() => void handleClearSession()}
-                >
-                  Clear session
-                </GlassButton>
-              </div>
-            </div>
-
-            <div className="luxlunch-auth-center">
-              <GlassCard preset="frosted" style={{ width: 460, maxWidth: '100%', padding: 18 }}>
-
-                {import.meta.env.DEV ? (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                    <GlassButton
-                      type="button"
-                      preset="subtle"
-                      className="luxlunch-primary"
-                      style={{ padding: '8px 12px' }}
-                      onClick={() => void handleDemoAccount()}
-                      disabled={busy}
-                    >
-                      {busy ? 'Signing in…' : 'Use demo account'}
-                    </GlassButton>
-                    <div style={{ fontSize: 12, opacity: 0.75, alignSelf: 'center' }}>
-                      DEV-only: auto-creates/logs in demo@store.local
-                    </div>
-                  </div>
-                ) : null}
-
-        {mode === 'login' ? (
-          <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-            <label style={labelStyle}>
-              Email
-              <input value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
-            </label>
-            <label style={labelStyle}>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={inputStyle}
-              />
-            </label>
-            <GlassButton type="submit" className="luxlunch-primary" style={{ padding: '10px 14px' }}>
-              Login
-            </GlassButton>
-          </form>
-        ) : (
-          <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-            <label style={labelStyle}>
-              Store name
-              <input value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-            </label>
-            <label style={labelStyle}>
-              Phone (optional)
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
-            </label>
-            <label style={labelStyle}>
-              Email
-              <input value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
-            </label>
-            <label style={labelStyle}>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                style={inputStyle}
-              />
-            </label>
-            <GlassButton type="submit" className="luxlunch-primary" style={{ padding: '10px 14px' }}>
-              Create account
-            </GlassButton>
-          </form>
-        )}
-
-                {message ? <p style={{ color: 'lightgreen', marginTop: 12 }}>{message}</p> : null}
-                {error ? <p style={{ color: 'crimson', marginTop: 12 }}>{error}</p> : null}
-              </GlassCard>
-            </div>
+    <div className="auth-page">
+      <div className="auth-card card">
+        <div style={{ padding: '24px 20px 16px', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+            <span className="sidebar-brand-dot" />
+            <span style={{ fontSize: 18, fontWeight: 700 }}>Store Portal</span>
           </div>
-        </GlassCard>
+          <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
+            Manage your restaurant
+          </p>
+        </div>
+
+        <div className="auth-tabs">
+          <button className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')}>
+            Login
+          </button>
+          <button className={`auth-tab ${mode === 'signup' ? 'active' : ''}`} onClick={() => setMode('signup')}>
+            Sign Up
+          </button>
+        </div>
+
+        <form className="auth-form" onSubmit={mode === 'login' ? handleLogin : handleSignup}>
+          {mode === 'signup' && (
+            <>
+              <div className="form-group">
+                <label className="form-label">Store Name</label>
+                <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone (optional)</label>
+                <input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+              </div>
+            </>
+          )}
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input className="form-input" value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '10px 16px' }}>
+            {mode === 'login' ? 'Login' : 'Create Account'}
+          </button>
+
+          {import.meta.env.DEV && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleDemoAccount()} disabled={busy}>
+                {busy ? 'Signing in...' : 'Demo Account'}
+              </button>
+              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>DEV only</span>
+            </div>
+          )}
+        </form>
+
+        {message && <div className="alert alert-success" style={{ margin: '0 20px 16px' }}>{message}</div>}
+        {error && <div className="alert alert-error" style={{ margin: '0 20px 16px' }}>{error}</div>}
+
+        <div style={{ padding: '0 20px 16px', textAlign: 'center' }}>
+          <button className="btn btn-ghost btn-sm" onClick={() => void handleClearSession()}>
+            Clear session
+          </button>
+        </div>
       </div>
     </div>
   )
-}
-
-const inputStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 12,
-  border: '1px solid rgba(255,255,255,0.16)',
-  background: 'rgba(255,255,255,0.08)',
-  color: 'rgba(255, 255, 255, 0.92)',
-}
-
-const labelStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: 6,
-  fontSize: 13,
-  opacity: 0.95,
 }

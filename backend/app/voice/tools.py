@@ -25,6 +25,11 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                             "type": "integer",
                             "description": "Quantity to add",
                         },
+                        "size": {
+                            "type": "string",
+                            "enum": ["small", "medium", "large"],
+                            "description": "Size of the item (small, medium, or large). Only use when the item has size-based pricing.",
+                        },
                     },
                     "required": ["quantity"],
                 },
@@ -94,6 +99,7 @@ def create_voice_tool_handlers(context: VoiceToolContext) -> dict[str, Callable[
             menu_item_id=_parse_uuid(args.get("menu_item_id")),
             item_name=(args.get("item_name") or None),
             quantity=int(args.get("quantity", 1) or 1),
+            size=(args.get("size") or None),
         )
         callback = _result_callback(params)
         if callback:

@@ -7,12 +7,17 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.menu import Menu
 from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.voice_session import VoiceSession
 from app.services import order_service
 from app.schemas.order.order import OrderCreate
+
+
+"""Module for routing voice tool calls related to food ordering. Contains the VoiceToolContext dataclass for holding relevant context (DB session, store/user IDs, etc.) 
+and the VoiceToolRouter class which implements the logic for handling tool calls like add_item, remove_item, get_summary, and checkout based on the current order state and menu data. 
+The router uses the provided context to perform actions on the order and return results in a consistent format."""
 
 
 @dataclass
@@ -22,6 +27,7 @@ class VoiceToolContext:
     user_id: uuid.UUID | None
     channel: str = "voice"
     order_id: uuid.UUID | None = None
+    session_id: uuid.UUID | None = None
 
 
 class VoiceToolRouter:
@@ -33,8 +39,7 @@ class VoiceToolRouter:
     def _find_menu_item_by_name(self, name: str) -> MenuItem | None:
         query = (
             select(MenuItem)
-            .join(Menu, Menu.id == MenuItem.menu_id)
-            .where(Menu.store_id == self._context.store_id)
+            .where(MenuItem.store_id == self._context.store_id)
             .where(MenuItem.name.ilike(name))
         )
         return self._context.db.execute(query).scalar_one_or_none()
@@ -60,8 +65,16 @@ class VoiceToolRouter:
             items=[],
         )
         order = order_service.create_draft_order(self._context.db, payload=payload)
-        self._context.db.flush()
         self._context.order_id = order.id
+
+        # Eagerly link the order to the voice session so the client can
+        # fetch it even if the pipeline ends before the finally block runs.
+        if self._context.session_id is not None:
+            vs = self._context.db.get(VoiceSession, self._context.session_id)
+            if vs is not None:
+                vs.order_id = order.id
+
+        self._context.db.commit()
         return order
 
     def _build_summary(self, order: Order) -> dict[str, Any]:
@@ -74,23 +87,23 @@ class VoiceToolRouter:
             name = menu_item.name if menu_item else "Unknown item"
             summary_items.append(
                 {
-                    "order_item_id": item.id,
-                    "menu_item_id": item.menu_item_id,
+                    "order_item_id": str(item.id),
+                    "menu_item_id": str(item.menu_item_id),
                     "name": name,
                     "quantity": item.quantity,
-                    "line_total": item.price_snapshot * item.quantity,
+                    "line_total": float(item.price_snapshot * item.quantity),
                 }
             )
         return {
-            "order_id": order.id,
+            "order_id": str(order.id),
             "status": order.status,
-            "subtotal": order.subtotal,
-            "tax": order.tax,
-            "total": order.total,
+            "subtotal": float(order.subtotal),
+            "tax": float(order.tax),
+            "total": float(order.total),
             "items": summary_items,
         }
 
-    def add_item(self, *, menu_item_id: uuid.UUID | None, item_name: str | None, quantity: int) -> dict[str, Any]:
+    def add_item(self, *, menu_item_id: uuid.UUID | None, item_name: str | None, quantity: int, size: str | None = None) -> dict[str, Any]:
         """Add an item to the current order."""
         if quantity <= 0:
             return {"ok": False, "message": "Quantity must be at least 1."}
@@ -107,13 +120,15 @@ class VoiceToolRouter:
         if menu_item is None:
             return {"ok": False, "message": "Menu item not found."}
 
-        order_service.create_order_item(self._context.db, order=order, menu_item=menu_item, quantity=quantity)
+        price = menu_item.price_for_size(size)
+        order_service.create_order_item(self._context.db, order=order, menu_item=menu_item, quantity=quantity, price_override=price)
         order_service.recalc_totals(self._context.db, order=order)
-        self._context.db.flush()
+        self._context.db.commit()
 
+        size_label = f" ({size})" if size else ""
         return {
             "ok": True,
-            "message": f"Added {quantity} {menu_item.name}.",
+            "message": f"Added {quantity} {menu_item.name}{size_label} at ${float(price):.2f} each.",
             "order": self._build_summary(order),
         }
 
@@ -149,8 +164,9 @@ class VoiceToolRouter:
             return {"ok": False, "message": "Item not found in the order."}
 
         self._context.db.delete(item)
-        order_service.recalc_totals(self._context.db, order=order)
         self._context.db.flush()
+        order_service.recalc_totals(self._context.db, order=order)
+        self._context.db.commit()
 
         return {
             "ok": True,
@@ -177,6 +193,6 @@ class VoiceToolRouter:
 
         order.status = "submitted"
         order_service.recalc_totals(self._context.db, order=order)
-        self._context.db.flush()
+        self._context.db.commit()
 
         return {"ok": True, "message": "Order submitted.", "order": self._build_summary(order)}

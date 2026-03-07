@@ -1,27 +1,28 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { GlassButton, GlassSurface, type GlassThemeName } from '@zhqingit/liquid-glass-react'
 import { logout } from '../../auth/authApi'
 import { setAccessToken } from '../../auth/tokenStore'
-import { STORE_PORTAL_THEMES, useTheme } from '../../app/ThemeProvider'
 import { getMe } from '../../api/storeApi'
 
-const navItems: Array<{ to: string; label: string }> = [
-  { to: '/menu', label: 'Menu' },
-  { to: '/orders', label: 'Orders' },
-  { to: '/profile', label: 'Profile' },
+const navItems = [
+  { to: '/menu', label: 'Menu', icon: menuIcon },
+  { to: '/orders', label: 'Orders', icon: ordersIcon },
+  { to: '/profile', label: 'Profile', icon: profileIcon },
 ]
 
 export function Shell({ children }: { children: React.ReactNode }): React.JSX.Element {
   const location = useLocation()
-  const { theme, setTheme } = useTheme()
   const [storeId, setStoreId] = useState<string | null>(null)
+  const [storeName, setStoreName] = useState<string>('Store Portal')
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     void getMe()
-      .then((me) => setStoreId(me.id))
-      .catch(() => {/* ignore */})
+      .then((me) => {
+        setStoreId(me.id)
+        if (me.name) setStoreName(me.name)
+      })
+      .catch(() => {})
   }, [])
 
   function handleCopyId(): void {
@@ -33,90 +34,73 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   }
 
   async function handleLogout(): Promise<void> {
-    try {
-      await logout()
-    } finally {
+    try { await logout() } finally {
       setAccessToken(null)
       window.location.assign('/')
     }
   }
 
   return (
-    <div style={{ minHeight: '100vh', padding: 20 }}>
-      <div className="luxlunch-wrap">
-        <GlassSurface preset="crystal" className="luxlunch-stage" style={{ padding: 0 }}>
-          <div className="luxlunch-bg" />
+    <div className="app-layout">
+      <aside className="sidebar">
+        <div className="sidebar-brand">
+          <h1>
+            <span className="sidebar-brand-dot" />
+            {storeName}
+          </h1>
+        </div>
 
-          <div className="luxlunch-content">
-            <div className="luxlunch-nav">
-              <div className="luxlunch-brand">
-                <span className="luxlunch-dot" aria-hidden />
-                <span>Store Portal</span>
-              </div>
+        <nav className="sidebar-nav">
+          {navItems.map((item) => {
+            const active = location.pathname.startsWith(item.to)
+            return (
+              <Link key={item.to} to={item.to} className={active ? 'active' : undefined}>
+                {item.icon()}
+                {item.label}
+              </Link>
+            )
+          })}
+        </nav>
 
-              <nav className="luxlunch-links" aria-label="Primary">
-                {navItems.map((item) => {
-                  const active = location.pathname.startsWith(item.to)
-                  return (
-                    <Link
-                      key={item.to}
-                      to={item.to}
-                      className={active ? 'luxlunch-active' : undefined}
-                    >
-                      {item.label}
-                    </Link>
-                  )
-                })}
-              </nav>
+        <div className="sidebar-footer">
+          {storeId && (
+            <button className="sidebar-store-id" onClick={handleCopyId} title="Click to copy store ID">
+              {copied ? 'Copied!' : `ID: ${storeId.slice(0, 8)}...`}
+            </button>
+          )}
+          <button className="btn btn-secondary btn-sm" style={{ width: '100%' }} onClick={() => void handleLogout()}>
+            Logout
+          </button>
+        </div>
+      </aside>
 
-              <div className="luxlunch-cta" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                {storeId ? (
-                  <button
-                    onClick={handleCopyId}
-                    title="Click to copy store ID"
-                    style={{
-                      background: 'rgba(255,255,255,0.08)',
-                      border: '1px solid rgba(255,255,255,0.18)',
-                      borderRadius: 8,
-                      color: 'inherit',
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      opacity: 0.85,
-                      padding: '5px 10px',
-                      fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-                    }}
-                  >
-                    {copied ? '✓ Copied!' : `ID: ${storeId.slice(0, 8)}…`}
-                  </button>
-                ) : null}
-                <GlassButton
-                  preset="subtle"
-                  className="luxlunch-primary"
-                  onClick={handleLogout}
-                  style={{ padding: '8px 12px' }}
-                >
-                  Logout
-                </GlassButton>
-              </div>
-            </div>
-
-            <div className="luxlunch-controls" aria-label="Controls">
-              <label>
-                <span style={{ opacity: 0.75, fontSize: 12 }}>Theme</span>
-                <select value={theme} onChange={(e) => setTheme(e.target.value as GlassThemeName)}>
-                  {STORE_PORTAL_THEMES.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-
-            <div className="luxlunch-main">{children}</div>
-          </div>
-        </GlassSurface>
-      </div>
+      <main className="main-content">{children}</main>
     </div>
+  )
+}
+
+function menuIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M3 12h18M3 18h18" />
+    </svg>
+  )
+}
+
+function ordersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M9 12l2 2 4-4" />
+    </svg>
+  )
+}
+
+function profileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M5.5 21a7.5 7.5 0 0 1 13 0" />
+    </svg>
   )
 }

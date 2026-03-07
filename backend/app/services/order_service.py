@@ -6,7 +6,6 @@ from decimal import Decimal
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.menu import Menu
 from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -16,8 +15,7 @@ from app.schemas.order.order import OrderCreate
 def get_menu_item_for_store(db: Session, *, store_id: uuid.UUID, item_id: uuid.UUID) -> MenuItem | None:
     return db.execute(
         select(MenuItem)
-        .join(Menu, Menu.id == MenuItem.menu_id)
-        .where(Menu.store_id == store_id)
+        .where(MenuItem.store_id == store_id)
         .where(MenuItem.id == item_id)
     ).scalar_one_or_none()
 
@@ -47,12 +45,12 @@ def create_draft_order(db: Session, *, payload: OrderCreate) -> Order:
     return order
 
 
-def create_order_item(db: Session, *, order: Order, menu_item: MenuItem, quantity: int) -> OrderItem:
+def create_order_item(db: Session, *, order: Order, menu_item: MenuItem, quantity: int, price_override: Decimal | None = None) -> OrderItem:
     item = OrderItem(
         order_id=order.id,
         menu_item_id=menu_item.id,
         quantity=quantity,
-        price_snapshot=menu_item.price,
+        price_snapshot=price_override if price_override is not None else menu_item.price,
     )
     db.add(item)
     return item

@@ -7,8 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.models.menu import Menu
 from app.models.menu_item import MenuItem
+from app.models.menu_menu_item import MenuMenuItem
 from app.schemas.menu.menu import MenuCreate, MenuItemCreate, MenuItemUpdate, MenuUpdate
 
+
+# ── Menus ──────────────────────────────────────────────────────
 
 def list_menus(db: Session, *, store_id: uuid.UUID) -> list[Menu]:
     return db.execute(select(Menu).where(Menu.store_id == store_id).order_by(Menu.updated_at.desc())).scalars().all()
@@ -56,24 +59,38 @@ def update_menu(db: Session, *, menu: Menu, payload: MenuUpdate) -> Menu:
     return menu
 
 
+def set_default_menu(db: Session, *, store_id: uuid.UUID, menu: Menu) -> Menu:
+    for m in db.execute(select(Menu).where(Menu.store_id == store_id, Menu.active.is_(True))).scalars().all():
+        if m.id != menu.id:
+            m.active = False
+    menu.active = True
+    return menu
+
+
 def delete_menu(db: Session, *, menu: Menu) -> None:
     db.delete(menu)
 
 
-def list_menu_items(db: Session, *, menu_id: uuid.UUID) -> list[MenuItem]:
-    return db.execute(select(MenuItem).where(MenuItem.menu_id == menu_id).order_by(MenuItem.name.asc())).scalars().all()
+# ── Store Items (pool) ─────────────────────────────────────────
+
+def list_store_items(db: Session, *, store_id: uuid.UUID) -> list[MenuItem]:
+    return db.execute(select(MenuItem).where(MenuItem.store_id == store_id).order_by(MenuItem.name.asc())).scalars().all()
 
 
-def get_menu_item(db: Session, *, menu_id: uuid.UUID, item_id: uuid.UUID) -> MenuItem | None:
-    return db.execute(select(MenuItem).where(MenuItem.menu_id == menu_id, MenuItem.id == item_id)).scalar_one_or_none()
+def get_store_item(db: Session, *, store_id: uuid.UUID, item_id: uuid.UUID) -> MenuItem | None:
+    return db.execute(select(MenuItem).where(MenuItem.store_id == store_id, MenuItem.id == item_id)).scalar_one_or_none()
 
 
-def create_menu_item(db: Session, *, menu_id: uuid.UUID, payload: MenuItemCreate) -> MenuItem:
+def create_store_item(db: Session, *, store_id: uuid.UUID, payload: MenuItemCreate) -> MenuItem:
     item = MenuItem(
-        menu_id=menu_id,
+        store_id=store_id,
         name=payload.name,
         alias_name=payload.alias_name,
+        category=payload.category,
         price=payload.price,
+        price_small=payload.price_small,
+        price_medium=payload.price_medium,
+        price_large=payload.price_large,
         description=payload.description,
         ingredient=payload.ingredient,
         note=payload.note,
@@ -85,13 +102,21 @@ def create_menu_item(db: Session, *, menu_id: uuid.UUID, payload: MenuItemCreate
     return item
 
 
-def update_menu_item(db: Session, *, item: MenuItem, payload: MenuItemUpdate) -> MenuItem:
+def update_store_item(db: Session, *, item: MenuItem, payload: MenuItemUpdate) -> MenuItem:
     if payload.name is not None:
         item.name = payload.name
     if payload.alias_name is not None:
         item.alias_name = payload.alias_name
+    if payload.category is not None:
+        item.category = payload.category
     if payload.price is not None:
         item.price = payload.price
+    if payload.price_small is not None:
+        item.price_small = payload.price_small
+    if payload.price_medium is not None:
+        item.price_medium = payload.price_medium
+    if payload.price_large is not None:
+        item.price_large = payload.price_large
     if payload.description is not None:
         item.description = payload.description
     if payload.ingredient is not None:
@@ -107,5 +132,37 @@ def update_menu_item(db: Session, *, item: MenuItem, payload: MenuItemUpdate) ->
     return item
 
 
-def delete_menu_item(db: Session, *, item: MenuItem) -> None:
+def delete_store_item(db: Session, *, item: MenuItem) -> None:
     db.delete(item)
+
+
+# ── Menu ↔ Item links (junction) ──────────────────────────────
+
+def list_menu_items(db: Session, *, menu_id: uuid.UUID) -> list[MenuItem]:
+    return db.execute(
+        select(MenuItem)
+        .join(MenuMenuItem, MenuMenuItem.menu_item_id == MenuItem.id)
+        .where(MenuMenuItem.menu_id == menu_id)
+        .order_by(MenuItem.name.asc())
+    ).scalars().all()
+
+
+def add_item_to_menu(db: Session, *, menu_id: uuid.UUID, item_id: uuid.UUID) -> MenuMenuItem:
+    link = MenuMenuItem(menu_id=menu_id, menu_item_id=item_id)
+    db.add(link)
+    return link
+
+
+def remove_item_from_menu(db: Session, *, menu_id: uuid.UUID, item_id: uuid.UUID) -> bool:
+    link = db.execute(
+        select(MenuMenuItem).where(MenuMenuItem.menu_id == menu_id, MenuMenuItem.menu_item_id == item_id)
+    ).scalar_one_or_none()
+    if link is None:
+        return False
+    db.delete(link)
+    return True
+
+
+def get_menu_item_ids(db: Session, *, menu_id: uuid.UUID) -> set[uuid.UUID]:
+    rows = db.execute(select(MenuMenuItem.menu_item_id).where(MenuMenuItem.menu_id == menu_id)).scalars().all()
+    return set(rows)

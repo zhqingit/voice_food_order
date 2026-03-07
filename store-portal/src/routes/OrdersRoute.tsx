@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { GlassButton, GlassCard, GlassSurface } from '@zhqingit/liquid-glass-react'
 import {
   type OrderItemOut,
   type OrderOut,
@@ -73,119 +72,111 @@ export function OrdersRoute(): React.JSX.Element {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 16 }}>
-      <GlassCard preset="frosted" style={{ padding: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <h2 style={{ marginTop: 0 }}>Orders</h2>
-          <GlassButton preset="subtle" style={{ padding: '6px 10px' }} onClick={() => void reloadOrders()}>
-            Refresh
-          </GlassButton>
-        </div>
+    <>
+      <div className="page-header">
+        <h1>Orders</h1>
+        <p>View and manage incoming orders.</p>
+      </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {orders.map((o) => {
-            const active = o.id === selectedOrderId
-            return (
-              <GlassSurface
+      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      <div className="panel-layout">
+        {/* Left: Orders list */}
+        <div className="card">
+          <div className="card-header">
+            <h2>Orders</h2>
+            <button className="btn btn-secondary btn-sm" onClick={() => void reloadOrders()}>
+              Refresh
+            </button>
+          </div>
+          <div>
+            {orders.map((o) => (
+              <div
                 key={o.id}
-                preset={active ? 'vibrant' : 'subtle'}
-                interactive
+                className={`list-item ${o.id === selectedOrderId ? 'selected' : ''}`}
                 onClick={() => setSelectedOrderId(o.id)}
-                style={{ padding: 12, cursor: 'pointer' }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 800 }}>{o.status}</div>
-                    <div style={{ opacity: 0.75, fontSize: 12 }}>
-                      {new Date(o.created_at).toLocaleString()} · {o.channel}
-                    </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    <span className={`badge badge-${o.status}`}>{o.status}</span>
+                    <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>${String(o.total)}</span>
                   </div>
-                  <div style={{ fontWeight: 800 }}>${String(o.total)}</div>
+                  <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 4 }}>
+                    {new Date(o.created_at).toLocaleString()} · {o.channel}
+                  </div>
                 </div>
-              </GlassSurface>
-            )
-          })}
-          {!orders.length && !loading ? <div style={{ opacity: 0.7 }}>No orders yet.</div> : null}
+              </div>
+            ))}
+            {!orders.length && !loading && <div className="empty-state">No orders yet.</div>}
+          </div>
         </div>
-      </GlassCard>
 
-      <GlassCard preset="frosted" style={{ padding: 14 }}>
-        <h2 style={{ marginTop: 0 }}>Order details</h2>
-        {selectedOrder ? (
-          <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <div style={metaLabel}>Order ID</div>
-                <div style={mono}>{selectedOrder.id}</div>
-              </div>
-              <div>
-                <div style={metaLabel}>User ID</div>
-                <div style={mono}>{selectedOrder.user_id ?? '—'}</div>
-              </div>
-              <div>
-                <div style={metaLabel}>Created</div>
-                <div>{new Date(selectedOrder.created_at).toLocaleString()}</div>
-              </div>
-              <div>
-                <div style={metaLabel}>Totals</div>
-                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                  <span>Subtotal: ${String(selectedOrder.subtotal)}</span>
-                  <span>Tax: ${String(selectedOrder.tax)}</span>
-                  <span style={{ fontWeight: 800 }}>Total: ${String(selectedOrder.total)}</span>
+        {/* Right: Order details */}
+        <div className="card">
+          <div className="card-header">
+            <h2>Order Details</h2>
+          </div>
+          {selectedOrder ? (
+            <div className="card-body">
+              <div className="grid-2">
+                <div className="form-group">
+                  <span className="meta-label">Order ID</span>
+                  <span className="mono">{selectedOrder.id}</span>
+                </div>
+                <div className="form-group">
+                  <span className="meta-label">User ID</span>
+                  <span className="mono">{selectedOrder.user_id ?? '—'}</span>
+                </div>
+                <div className="form-group">
+                  <span className="meta-label">Created</span>
+                  <span>{new Date(selectedOrder.created_at).toLocaleString()}</span>
+                </div>
+                <div className="form-group">
+                  <span className="meta-label">Totals</span>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                    <span>Subtotal: ${String(selectedOrder.subtotal)}</span>
+                    <span>Tax: ${String(selectedOrder.tax)}</span>
+                    <span style={{ fontWeight: 700 }}>Total: ${String(selectedOrder.total)}</span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ opacity: 0.8, fontSize: 12 }}>Status</div>
-              <select
-                value={selectedOrder.status}
-                onChange={(e) => void handleUpdateStatus(e.target.value)}
-                style={selectStyle}
-              >
-                {Array.from(new Set([selectedOrder.status, ...COMMON_STATUSES])).map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span className="meta-label" style={{ marginBottom: 0 }}>Status</span>
+                <select
+                  className="form-select"
+                  value={selectedOrder.status}
+                  onChange={(e) => void handleUpdateStatus(e.target.value)}
+                >
+                  {Array.from(new Set([selectedOrder.status, ...COMMON_STATUSES])).map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </div>
 
-            <div style={{ marginTop: 14 }}>
-              <h3 style={{ marginTop: 0 }}>Items</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ marginTop: 20 }}>
+                <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>Items</h3>
                 {items.map((it) => (
-                  <GlassSurface key={it.id} preset="subtle" style={{ padding: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                      <div>
-                        <div style={{ fontWeight: 800 }}>x{it.quantity}</div>
-                        <div style={{ opacity: 0.75, fontSize: 12 }}>menu_item_id: {it.menu_item_id}</div>
+                  <div key={it.id} className="list-item" style={{ cursor: 'default' }}>
+                    <div>
+                      <span style={{ fontWeight: 600 }}>x{it.quantity}</span>
+                      <div style={{ fontSize: 11, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                        {it.menu_item_id}
                       </div>
-                      <div style={{ fontWeight: 800 }}>${String(it.price_snapshot)}</div>
                     </div>
-                  </GlassSurface>
+                    <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>${String(it.price_snapshot)}</span>
+                  </div>
                 ))}
-                {!items.length ? <div style={{ opacity: 0.7 }}>No items.</div> : null}
+                {!items.length && <div className="empty-state" style={{ padding: '16px 0' }}>No items.</div>}
               </div>
             </div>
-          </>
-        ) : (
-          <div style={{ opacity: 0.75 }}>Select an order.</div>
-        )}
-
-        {error ? <div style={{ marginTop: 12, color: 'crimson' }}>{error}</div> : null}
-      </GlassCard>
-    </div>
+          ) : (
+            <div className="card-body">
+              <div className="empty-state" style={{ padding: '16px 0' }}>Select an order to view details.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   )
-}
-
-const metaLabel: React.CSSProperties = { opacity: 0.7, fontSize: 12 }
-const mono: React.CSSProperties = { fontFamily: 'ui-monospace, SFMono-Regular', fontSize: 12, opacity: 0.9 }
-
-const selectStyle: React.CSSProperties = {
-  padding: '8px 10px',
-  borderRadius: 12,
-  border: '1px solid rgba(255,255,255,0.22)',
-  background: 'rgba(255,255,255,0.10)',
-  color: 'inherit',
 }

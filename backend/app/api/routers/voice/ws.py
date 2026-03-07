@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 
@@ -12,6 +13,7 @@ from app.api.host_policy import get_host_policy
 from app.core.errors import AppError
 from app.core.security import decode_access_token
 from app.db.session import get_db
+from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.voice import (
@@ -111,10 +113,12 @@ async def voice_ws(
 
     # Load voice runtime config, system prompt, 
     # and initialize tool handlers with the current context (store_id, user_id, order_id).
-    menu = load_menu_for_store(db, store_id)  # Implement this function to load menu data as needed for the system prompt.
+    store = db.get(Store, store_id)
+    store_name = store.name if store else None
+    menu = load_menu_for_store(db, store_id)
     runtime = load_voice_runtime_config()
     google_config = load_google_voice_config()
-    system_prompt = build_system_prompt(menu_lines=menu)
+    system_prompt = build_system_prompt(menu_lines=menu, store_name=store_name)
 
     # The tool context provides necessary information for the tool handlers to operate, 
     # such as database access and user/store/order context.
@@ -123,6 +127,7 @@ async def voice_ws(
         store_id=store_id,
         user_id=current_user.id,
         order_id=order_id,
+        session_id=session_id,
         channel="voice",
     )
     tool_handlers = create_voice_tool_handlers(tool_context)
@@ -132,8 +137,14 @@ async def voice_ws(
     transport = create_websocket_transport(websocket)
     # TODO: We may want to implement some form of cancellation or timeout handling, 
     # especially for long-running pipelines, to avoid orphaned tasks if the client disconnects.
-    print("system_prompt: %s", system_prompt, flush=True)
-    print("------", flush=True)
+    async def send_transcript(role: str, content: str) -> None:
+        try:
+            await websocket.send_text(
+                json.dumps({"type": f"transcript_{role}", "text": content})
+            )
+        except Exception:
+            pass
+
     task = create_voice_pipeline_task(
         transport=transport,
         runtime=runtime,
@@ -141,6 +152,7 @@ async def voice_ws(
         system_prompt=system_prompt,
         tool_schema=GEMINI_VOICE_TOOLS_SCHEMA,
         tool_handlers=tool_handlers,
+        on_transcript=send_transcript,
     )
 
     runner = PipelineRunner()

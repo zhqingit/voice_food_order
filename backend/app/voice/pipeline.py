@@ -6,19 +6,32 @@ from app.voice.config import GoogleVoiceConfig, VoiceRuntimeConfig
 
 try:
     from pipecat.adapters.schemas.tools_schema import AdapterType, ToolsSchema
-    from pipecat.frames.frames import LLMContextFrame
+    from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
+    from pipecat.frames.frames import LLMRunFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.llm_context import LLMContext
+    from pipecat.processors.aggregators.llm_response_universal import (
+        AssistantTurnStoppedMessage,
+        LLMContextAggregatorPair,
+        LLMUserAggregatorParams,
+        UserTurnStoppedMessage,
+    )
     from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 except ImportError:  # pragma: no cover - optional dependency
     AdapterType = None
     ToolsSchema = None
-    LLMContextFrame = None
+    SileroVADAnalyzer = None
+    VADParams = None
+    LLMRunFrame = None
     Pipeline = None
     PipelineParams = None
     PipelineTask = None
     LLMContext = None
+    LLMContextAggregatorPair = None
+    LLMUserAggregatorParams = None
+    AssistantTurnStoppedMessage = None
+    UserTurnStoppedMessage = None
     GeminiLiveLLMService = None
 
 
@@ -30,6 +43,7 @@ def create_voice_pipeline_task(
     system_prompt: str,
     tool_schema: Any,
     tool_handlers: dict[str, Callable[[Any], Awaitable[Any]]] | None = None,
+    on_transcript: Callable[[str, str], Awaitable[None]] | None = None,
     enable_metrics: bool = True,
 ) -> Any:
     """
@@ -47,28 +61,39 @@ def create_voice_pipeline_task(
     if Pipeline is None:
         raise RuntimeError("pipecat is required for voice pipeline")
 
-    # TODO: Re-enable tools once Gemini Live API 1008 bug with tool calls is fixed.
-    # See: https://discuss.ai.google.dev/t/gemini-live-api-random-websocket-closures-after-sendtoolresponse/109319
-    # tools = ToolsSchema(standard_tools=[], custom_tools={AdapterType.GEMINI: tool_schema})
+    tools = ToolsSchema(standard_tools=[], custom_tools={AdapterType.GEMINI: tool_schema})
 
     llm = GeminiLiveLLMService(
         api_key=google_config.api_key,
         model=runtime.llm_model,
         system_instruction=system_prompt,
-        #tools=tools,  # Disabled: causes 1008 crashes
+        tools=tools,
         voice_id="Puck",
     )
 
-    # if tool_handlers:
-    #     for name, handler in tool_handlers.items():
-    #         llm.register_function(name, handler)
+    if tool_handlers:
+        for name, handler in tool_handlers.items():
+            llm.register_function(name, handler)
 
-    # Gemini Live processes audio natively — pipe audio directly to LLM.
-    # No LLMContextAggregatorPair or local VAD needed.
+    # Create context with greeting message for the aggregator pair.
+    context = LLMContext(
+        messages=[{"role": "user", "content": "Greet me and ask what I want to order."}],
+    )
+
+    # Use context aggregators with VAD for transcript capture.
+    user_agg, assistant_agg = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.5)),
+        ),
+    )
+
     pipeline = Pipeline([
         transport.input(),
+        user_agg,
         llm,
         transport.output(),
+        assistant_agg,
     ])
 
     task = PipelineTask(
@@ -80,15 +105,19 @@ def create_voice_pipeline_task(
         ),
     )
 
+    # Register transcript event handlers.
+    if on_transcript is not None:
+        @user_agg.event_handler("on_user_turn_stopped")
+        async def _on_user_turn(agg: Any, strategy: Any, message: UserTurnStoppedMessage) -> None:
+            await on_transcript("user", message.content)
+
+        @assistant_agg.event_handler("on_assistant_turn_stopped")
+        async def _on_assistant_turn(agg: Any, message: AssistantTurnStoppedMessage) -> None:
+            await on_transcript("assistant", message.content)
+
     @task.event_handler("on_pipeline_started")
     async def on_pipeline_started(task: PipelineTask, frame: Any):
-        # Send initial context to trigger a greeting.
-        # LLMContextFrame → _handle_context() → _create_initial_response()
-        # which correctly handles the case where the Gemini session isn't
-        # ready yet (sets _run_llm_when_session_ready = True).
-        context = LLMContext(
-            messages=[{"role": "user", "content": "Greet me and ask what I want to order."}],
-        )
-        await task.queue_frames([LLMContextFrame(context=context)])
+        # Context is already set via the aggregator pair; just trigger the LLM run.
+        await task.queue_frames([LLMRunFrame()])
 
     return task

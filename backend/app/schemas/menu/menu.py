@@ -28,10 +28,14 @@ class MenuUpdate(BaseModel):
 
 class MenuItemOut(BaseModel):
     id: uuid.UUID
-    menu_id: uuid.UUID
+    store_id: uuid.UUID
     name: str
     alias_name: str | None = None
+    category: str | None = None
     price: Decimal
+    price_small: Decimal | None = None
+    price_medium: Decimal | None = None
+    price_large: Decimal | None = None
     description: str | None = None
     ingredient: str | None = None
     note: str | None = None
@@ -43,7 +47,11 @@ class MenuItemOut(BaseModel):
 class MenuItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     alias_name: str | None = Field(default=None, max_length=255)
+    category: str | None = Field(default=None, max_length=255)
     price: Decimal
+    price_small: Decimal | None = None
+    price_medium: Decimal | None = None
+    price_large: Decimal | None = None
     description: str | None = Field(default=None, max_length=512)
     ingredient: str | None = Field(default=None, max_length=512)
     note: str | None = Field(default=None, max_length=512)
@@ -55,7 +63,11 @@ class MenuItemCreate(BaseModel):
 class MenuItemUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     alias_name: str | None = Field(default=None, max_length=255)
+    category: str | None = Field(default=None, max_length=255)
     price: Decimal | None = None
+    price_small: Decimal | None = None
+    price_medium: Decimal | None = None
+    price_large: Decimal | None = None
     description: str | None = Field(default=None, max_length=512)
     ingredient: str | None = Field(default=None, max_length=512)
     note: str | None = Field(default=None, max_length=512)
