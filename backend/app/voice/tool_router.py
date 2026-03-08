@@ -122,6 +122,7 @@ class VoiceToolRouter:
 
         price = menu_item.price_for_size(size)
         order_service.create_order_item(self._context.db, order=order, menu_item=menu_item, quantity=quantity, price_override=price)
+        self._context.db.flush()
         order_service.recalc_totals(self._context.db, order=order)
         self._context.db.commit()
 
@@ -179,6 +180,9 @@ class VoiceToolRouter:
         order = self._get_order()
         if order is None:
             return {"ok": True, "message": "Order is empty.", "order": None}
+        # Recalculate to ensure totals are fresh (autoflush is off).
+        order_service.recalc_totals(self._context.db, order=order)
+        self._context.db.flush()
         return {"ok": True, "message": "Order summary.", "order": self._build_summary(order)}
 
     def checkout(self) -> dict[str, Any]:

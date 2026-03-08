@@ -18,6 +18,47 @@ class TranscriptEntry {
   const TranscriptEntry({required this.speaker, required this.text});
 }
 
+/// A live order item received from the backend during an active session.
+class LiveOrderItem {
+  final String name;
+  final int quantity;
+  final double lineTotal;
+
+  const LiveOrderItem({required this.name, required this.quantity, required this.lineTotal});
+
+  factory LiveOrderItem.fromJson(Map<String, dynamic> json) {
+    return LiveOrderItem(
+      name: json['name'] as String? ?? 'Item',
+      quantity: json['quantity'] as int? ?? 1,
+      lineTotal: (json['line_total'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+/// Live order summary received via WebSocket during an active session.
+class LiveOrderSummary {
+  final String status;
+  final double subtotal;
+  final double tax;
+  final double total;
+  final List<LiveOrderItem> items;
+
+  const LiveOrderSummary({required this.status, required this.subtotal, required this.tax, required this.total, required this.items});
+
+  factory LiveOrderSummary.fromJson(Map<String, dynamic> json) {
+    final itemsList = (json['items'] as List<dynamic>?)
+        ?.map((e) => LiveOrderItem.fromJson(e as Map<String, dynamic>))
+        .toList() ?? [];
+    return LiveOrderSummary(
+      status: json['status'] as String? ?? 'draft',
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      tax: (json['tax'] as num?)?.toDouble() ?? 0,
+      total: (json['total'] as num?)?.toDouble() ?? 0,
+      items: itemsList,
+    );
+  }
+}
+
 class VoiceUiState {
   final bool connecting;
   final bool connected;
@@ -25,6 +66,9 @@ class VoiceUiState {
   final String? error;
   final List<String> logs;
   final List<TranscriptEntry> transcripts;
+
+  // Live order state (updated during active session)
+  final LiveOrderSummary? liveOrder;
 
   // Post-session state
   final bool sessionEnded;
@@ -40,6 +84,7 @@ class VoiceUiState {
     required this.error,
     required this.logs,
     required this.transcripts,
+    required this.liveOrder,
     required this.sessionEnded,
     required this.orderSummary,
     required this.orderItems,
@@ -54,6 +99,7 @@ class VoiceUiState {
         error: null,
         logs: <String>[],
         transcripts: <TranscriptEntry>[],
+        liveOrder: null,
         sessionEnded: false,
         orderSummary: null,
         orderItems: null,
@@ -68,6 +114,8 @@ class VoiceUiState {
     String? error,
     List<String>? logs,
     List<TranscriptEntry>? transcripts,
+    LiveOrderSummary? liveOrder,
+    bool clearLiveOrder = false,
     bool? sessionEnded,
     OrderOut? orderSummary,
     List<OrderItemOut>? orderItems,
@@ -81,6 +129,7 @@ class VoiceUiState {
       error: error,
       logs: logs ?? this.logs,
       transcripts: transcripts ?? this.transcripts,
+      liveOrder: clearLiveOrder ? null : (liveOrder ?? this.liveOrder),
       sessionEnded: sessionEnded ?? this.sessionEnded,
       orderSummary: orderSummary ?? this.orderSummary,
       orderItems: orderItems ?? this.orderItems,
@@ -188,6 +237,11 @@ class VoiceController extends Notifier<VoiceUiState> {
           _addTranscript('user', evt['text'] as String? ?? '');
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
+        } else if (type == 'order_update') {
+          final orderJson = evt['order'] as Map<String, dynamic>?;
+          if (orderJson != null) {
+            state = state.copyWith(liveOrder: LiveOrderSummary.fromJson(orderJson));
+          }
         } else if (type == 'closed' && state.connected) {
           stop();
         }

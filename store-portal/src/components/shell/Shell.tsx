@@ -1,19 +1,22 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { logout } from '../../auth/authApi'
 import { setAccessToken } from '../../auth/tokenStore'
 import { getMe } from '../../api/storeApi'
+import { changeLanguage, SUPPORTED_LANGUAGES } from '../../i18n'
 
-const navItems = [
-  { to: '/menu', label: 'Menu', icon: menuIcon },
-  { to: '/orders', label: 'Orders', icon: ordersIcon },
-  { to: '/profile', label: 'Profile', icon: profileIcon },
+const navKeys = [
+  { to: '/menu', labelKey: 'nav.menu', icon: menuIcon },
+  { to: '/orders', labelKey: 'nav.orders', icon: ordersIcon },
+  { to: '/profile', labelKey: 'nav.profile', icon: profileIcon },
 ]
 
 export function Shell({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const { t, i18n } = useTranslation()
   const location = useLocation()
   const [storeId, setStoreId] = useState<string | null>(null)
-  const [storeName, setStoreName] = useState<string>('Store Portal')
+  const [storeName, setStoreName] = useState<string>(t('auth.title'))
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -51,25 +54,38 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
         </div>
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => {
+          {navKeys.map((item) => {
             const active = location.pathname.startsWith(item.to)
             return (
               <Link key={item.to} to={item.to} className={active ? 'active' : undefined}>
                 {item.icon()}
-                {item.label}
+                {t(item.labelKey)}
               </Link>
             )
           })}
         </nav>
 
         <div className="sidebar-footer">
+          {/* Language switcher */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 8 }}>
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <button
+                key={lang.code}
+                className={`btn btn-sm ${i18n.language === lang.code ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => changeLanguage(lang.code)}
+                style={{ flex: 1, minWidth: 0 }}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
           {storeId && (
             <button className="sidebar-store-id" onClick={handleCopyId} title="Click to copy store ID">
-              {copied ? 'Copied!' : `ID: ${storeId.slice(0, 8)}...`}
+              {copied ? t('common.copied') : t('common.storeIdPrefix', { id: storeId.slice(0, 8) })}
             </button>
           )}
           <button className="btn btn-secondary btn-sm" style={{ width: '100%' }} onClick={() => void handleLogout()}>
-            Logout
+            {t('nav.logout')}
           </button>
         </div>
       </aside>

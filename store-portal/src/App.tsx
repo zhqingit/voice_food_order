@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import axios from 'axios'
 
 import { getAccessToken } from './auth/tokenStore'
@@ -9,8 +10,10 @@ import { Shell } from './components/shell/Shell'
 import { MenuRoute } from './routes/MenuRoute'
 import { OrdersRoute } from './routes/OrdersRoute'
 import { ProfileRoute } from './routes/ProfileRoute'
+import { changeLanguage, SUPPORTED_LANGUAGES } from './i18n'
 
 export function App(): React.JSX.Element {
+  const { t } = useTranslation()
   const [bootstrapped, setBootstrapped] = useState(false)
   const [token, setToken] = useState<string | null>(getAccessToken())
 
@@ -32,7 +35,7 @@ export function App(): React.JSX.Element {
   if (!bootstrapped) {
     return (
       <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', color: '#6b7280' }}>
-        Loading...
+        {t('common.loading')}
       </div>
     )
   }
@@ -55,6 +58,7 @@ export function App(): React.JSX.Element {
 }
 
 function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
+  const { t, i18n } = useTranslation()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -116,14 +120,14 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
       }
       try { await getMe() } catch {}
       try { await seedDemoData() } catch {}
-      setMessage('Signed in with demo account.')
+      setMessage(t('auth.signedInDemo'))
       onAuthed()
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
-        setError(data?.detail ?? data?.code ?? 'Demo sign-in failed')
+        setError(data?.detail ?? data?.code ?? t('auth.demoSignInFailed'))
       } else {
-        setError('Demo sign-in failed')
+        setError(t('auth.demoSignInFailed'))
       }
     } finally {
       setBusy(false)
@@ -150,9 +154,9 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
-        setError(data?.detail ?? data?.code ?? 'Login failed')
+        setError(data?.detail ?? data?.code ?? t('auth.loginFailed'))
       } else {
-        setError('Login failed')
+        setError(t('auth.loginFailed'))
       }
     }
   }
@@ -167,9 +171,9 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
-        setError(data?.detail ?? data?.code ?? 'Signup failed')
+        setError(data?.detail ?? data?.code ?? t('auth.signupFailed'))
       } else {
-        setError('Signup failed')
+        setError(t('auth.signupFailed'))
       }
     }
   }
@@ -178,9 +182,9 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     setError(null)
     try {
       await logout()
-      setMessage('Session cleared.')
+      setMessage(t('auth.sessionCleared'))
     } catch {
-      setError('Failed to clear session')
+      setError(t('auth.clearSessionFailed'))
     }
   }
 
@@ -190,19 +194,33 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
         <div style={{ padding: '24px 20px 16px', textAlign: 'center' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <span className="sidebar-brand-dot" />
-            <span style={{ fontSize: 18, fontWeight: 700 }}>Store Portal</span>
+            <span style={{ fontSize: 18, fontWeight: 700 }}>{t('auth.title')}</span>
           </div>
           <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-            Manage your restaurant
+            {t('auth.subtitle')}
           </p>
+        </div>
+
+        {/* Language switcher */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginBottom: 8 }}>
+          {SUPPORTED_LANGUAGES.map((lang) => (
+            <button
+              key={lang.code}
+              className={`btn btn-sm ${i18n.language === lang.code ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => changeLanguage(lang.code)}
+              style={{ minWidth: 44 }}
+            >
+              {lang.label}
+            </button>
+          ))}
         </div>
 
         <div className="auth-tabs">
           <button className={`auth-tab ${mode === 'login' ? 'active' : ''}`} onClick={() => setMode('login')}>
-            Login
+            {t('auth.login')}
           </button>
           <button className={`auth-tab ${mode === 'signup' ? 'active' : ''}`} onClick={() => setMode('signup')}>
-            Sign Up
+            {t('auth.signup')}
           </button>
         </div>
 
@@ -210,33 +228,33 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
           {mode === 'signup' && (
             <>
               <div className="form-group">
-                <label className="form-label">Store Name</label>
+                <label className="form-label">{t('auth.storeName')}</label>
                 <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-label">Phone (optional)</label>
+                <label className="form-label">{t('auth.phone')}</label>
                 <input className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
             </>
           )}
           <div className="form-group">
-            <label className="form-label">Email</label>
+            <label className="form-label">{t('auth.email')}</label>
             <input className="form-input" value={email} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label">{t('auth.password')}</label>
             <input className="form-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '10px 16px' }}>
-            {mode === 'login' ? 'Login' : 'Create Account'}
+            {mode === 'login' ? t('auth.login') : t('auth.createAccount')}
           </button>
 
           {import.meta.env.DEV && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleDemoAccount()} disabled={busy}>
-                {busy ? 'Signing in...' : 'Demo Account'}
+                {busy ? t('auth.signingIn') : t('auth.demoAccount')}
               </button>
-              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>DEV only</span>
+              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{t('auth.devOnly')}</span>
             </div>
           )}
         </form>
@@ -246,7 +264,7 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
 
         <div style={{ padding: '0 20px 16px', textAlign: 'center' }}>
           <button className="btn btn-ghost btn-sm" onClick={() => void handleClearSession()}>
-            Clear session
+            {t('auth.clearSession')}
           </button>
         </div>
       </div>

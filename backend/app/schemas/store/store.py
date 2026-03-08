@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field
 
+from app.schemas.store.hours import DayHours
+
 
 class StorePublicOut(BaseModel):
     """Public store info — safe to expose to unauthenticated users (no email/credentials)."""
@@ -21,6 +23,9 @@ class StorePublicOut(BaseModel):
     allow_pickup: bool
     allow_delivery: bool
     min_order_amount: Decimal | None = None
+    voice_tone: str | None = None
+    logo_url: str | None = None
+    hours: list[DayHours] = []
 
 
 class StoreOut(BaseModel):
@@ -37,6 +42,8 @@ class StoreOut(BaseModel):
     allow_pickup: bool | None = None
     allow_delivery: bool | None = None
     min_order_amount: Decimal | None = None
+    voice_tone: str | None = None
+    logo_url: str | None = None
     email: EmailStr
     created_at: datetime
 
@@ -54,3 +61,5 @@ class StoreUpdate(BaseModel):
     allow_pickup: bool | None = None
     allow_delivery: bool | None = None
     min_order_amount: Decimal | None = None
+    voice_tone: str | None = Field(default=None, max_length=32)
+    logo_url: str | None = Field(default=None, max_length=512)

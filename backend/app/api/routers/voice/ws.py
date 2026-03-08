@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import uuid
@@ -26,6 +27,8 @@ from app.voice import (
     load_voice_runtime_config,
 )
 from app.voice.menu import load_menu_for_store
+from app.core.config import settings
+from app.voice.monitor import ConversationMonitor, MonitorConfig
 from app.voice.transports.websocket import create_websocket_transport
 
 try:
@@ -115,12 +118,19 @@ async def voice_ws(
     # and initialize tool handlers with the current context (store_id, user_id, order_id).
     store = db.get(Store, store_id)
     store_name = store.name if store else None
+
+    # Map store voice tone preference to Gemini voice ID
+    _VOICE_TONE_MAP = {
+        "male": "Puck",
+        "female": "Kore",
+    }
+    voice_id = _VOICE_TONE_MAP.get(store.voice_tone, "Puck") if store else "Puck"
     menu = load_menu_for_store(db, store_id)
     runtime = load_voice_runtime_config()
     google_config = load_google_voice_config()
     system_prompt = build_system_prompt(menu_lines=menu, store_name=store_name)
 
-    # The tool context provides necessary information for the tool handlers to operate, 
+    # The tool context provides necessary information for the tool handlers to operate,
     # such as database access and user/store/order context.
     tool_context = VoiceToolContext(
         db=db,
@@ -130,20 +140,45 @@ async def voice_ws(
         session_id=session_id,
         channel="voice",
     )
-    tool_handlers = create_voice_tool_handlers(tool_context)
 
-    # Create a WebSocket transport that the voice pipeline can use to send/receive messages, 
+    # Create the async conversation monitor (Gemini Pro checks each bot turn).
+    menu_text = "\n".join(menu) if menu else ""
+    monitor = ConversationMonitor(
+        menu_text=menu_text,
+        config=MonitorConfig(
+            model=settings.voice_monitor_model,
+            enabled=settings.voice_monitor_enabled,
+        ),
+    )
+
+    # Create a WebSocket transport that the voice pipeline can use to send/receive messages,
     # and run the pipeline in a background task.
     transport = create_websocket_transport(websocket)
     # TODO: We may want to implement some form of cancellation or timeout handling, 
     # especially for long-running pipelines, to avoid orphaned tasks if the client disconnects.
+    # Lock to prevent concurrent WebSocket text sends (pipecat transport
+    # may be sending binary audio at the same time).
+    ws_send_lock = asyncio.Lock()
+
     async def send_transcript(role: str, content: str) -> None:
         try:
-            await websocket.send_text(
-                json.dumps({"type": f"transcript_{role}", "text": content})
-            )
+            async with ws_send_lock:
+                await websocket.send_text(
+                    json.dumps({"type": f"transcript_{role}", "text": content})
+                )
         except Exception:
-            pass
+            logger.debug("send_transcript failed for role=%s", role, exc_info=True)
+
+    async def send_order_update(order: dict) -> None:
+        try:
+            async with ws_send_lock:
+                await websocket.send_text(
+                    json.dumps({"type": "order_update", "order": order})
+                )
+        except Exception:
+            logger.debug("send_order_update failed", exc_info=True)
+
+    tool_handlers = create_voice_tool_handlers(tool_context, monitor=monitor, on_order_update=send_order_update)
 
     task = create_voice_pipeline_task(
         transport=transport,
@@ -153,6 +188,8 @@ async def voice_ws(
         tool_schema=GEMINI_VOICE_TOOLS_SCHEMA,
         tool_handlers=tool_handlers,
         on_transcript=send_transcript,
+        monitor=monitor,
+        voice_id=voice_id,
     )
 
     runner = PipelineRunner()

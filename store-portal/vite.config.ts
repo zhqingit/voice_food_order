@@ -29,6 +29,10 @@ export default defineConfig({
           })
         },
       },
+      '/uploads': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
     },
   },
 })

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routers.user.auth import router as user_auth_router
 from app.api.routers.user.me import router as user_router
@@ -48,3 +51,7 @@ app.include_router(voice_telephony_router)
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+UPLOADS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")

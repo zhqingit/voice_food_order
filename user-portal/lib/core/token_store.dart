@@ -12,6 +12,7 @@ class TokenStore {
   static const _kAccessToken = 'access_token';
   static const _kRefreshToken = 'refresh_token';
   static const _kSessionId = 'session_id';
+  static const _kIsGuest = 'is_guest';
 
   final FlutterSecureStorage _storage;
 
@@ -25,15 +26,22 @@ class TokenStore {
     return TokenBundle(accessToken: access, refreshToken: refresh, sessionId: sessionId);
   }
 
-  Future<void> write(TokenBundle bundle) async {
+  Future<void> write(TokenBundle bundle, {bool isGuest = false}) async {
     await _storage.write(key: _kAccessToken, value: bundle.accessToken);
     await _storage.write(key: _kRefreshToken, value: bundle.refreshToken);
     await _storage.write(key: _kSessionId, value: bundle.sessionId);
+    await _storage.write(key: _kIsGuest, value: isGuest.toString());
+  }
+
+  Future<bool> readIsGuest() async {
+    final value = await _storage.read(key: _kIsGuest);
+    return value == 'true';
   }
 
   Future<void> clear() async {
     await _storage.delete(key: _kAccessToken);
     await _storage.delete(key: _kRefreshToken);
     await _storage.delete(key: _kSessionId);
+    await _storage.delete(key: _kIsGuest);
   }
 }

@@ -47,6 +47,14 @@ class AuthController extends Notifier<AuthState> {
       return;
     }
 
+    // Guest users always see the login screen on app open.
+    final isGuest = await tokenStore.readIsGuest();
+    if (isGuest) {
+      await tokenStore.clear();
+      state = const Unauthenticated();
+      return;
+    }
+
     // If access token still valid, we can treat user as signed-in immediately.
     final accessExpired = _isJwtExpiredSafe(bundle.accessToken);
     if (!accessExpired) {
@@ -103,7 +111,7 @@ class AuthController extends Notifier<AuthState> {
     final tokenStore = ref.read(tokenStoreProvider);
     try {
       final bundle = await repo.guestLogin();
-      await tokenStore.write(bundle);
+      await tokenStore.write(bundle, isGuest: true);
       state = const Authenticated();
     } catch (e) {
       state = Unauthenticated(message: _messageFromError(e));

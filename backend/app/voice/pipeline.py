@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from app.voice.config import GoogleVoiceConfig, VoiceRuntimeConfig
 
+if TYPE_CHECKING:
+    from app.voice.monitor import ConversationMonitor
+
 try:
     from pipecat.adapters.schemas.tools_schema import AdapterType, ToolsSchema
-    from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
     from pipecat.frames.frames import LLMRunFrame
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
@@ -14,22 +16,18 @@ try:
     from pipecat.processors.aggregators.llm_response_universal import (
         AssistantTurnStoppedMessage,
         LLMContextAggregatorPair,
-        LLMUserAggregatorParams,
         UserTurnStoppedMessage,
     )
     from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 except ImportError:  # pragma: no cover - optional dependency
     AdapterType = None
     ToolsSchema = None
-    SileroVADAnalyzer = None
-    VADParams = None
     LLMRunFrame = None
     Pipeline = None
     PipelineParams = None
     PipelineTask = None
     LLMContext = None
     LLMContextAggregatorPair = None
-    LLMUserAggregatorParams = None
     AssistantTurnStoppedMessage = None
     UserTurnStoppedMessage = None
     GeminiLiveLLMService = None
@@ -44,7 +42,9 @@ def create_voice_pipeline_task(
     tool_schema: Any,
     tool_handlers: dict[str, Callable[[Any], Awaitable[Any]]] | None = None,
     on_transcript: Callable[[str, str], Awaitable[None]] | None = None,
+    monitor: "ConversationMonitor | None" = None,
     enable_metrics: bool = True,
+    voice_id: str = "Puck",
 ) -> Any:
     """
     Build a pipecat PipelineTask for a single voice session.
@@ -68,7 +68,7 @@ def create_voice_pipeline_task(
         model=runtime.llm_model,
         system_instruction=system_prompt,
         tools=tools,
-        voice_id="Puck",
+        voice_id=voice_id,
     )
 
     if tool_handlers:
@@ -80,13 +80,11 @@ def create_voice_pipeline_task(
         messages=[{"role": "user", "content": "Greet me and ask what I want to order."}],
     )
 
-    # Use context aggregators with VAD for transcript capture.
-    user_agg, assistant_agg = LLMContextAggregatorPair(
-        context,
-        user_params=LLMUserAggregatorParams(
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.5)),
-        ),
-    )
+    # Use context aggregators for transcript capture.
+    # Do NOT add a local VAD — Gemini Live handles VAD and turn-taking
+    # internally.  Adding SileroVAD causes transcription events to trigger
+    # spurious interruptions that cancel pending tool calls.
+    user_agg, assistant_agg = LLMContextAggregatorPair(context)
 
     pipeline = Pipeline([
         transport.input(),
@@ -105,14 +103,23 @@ def create_voice_pipeline_task(
         ),
     )
 
+    # Attach monitor to the pipeline task so it can inject corrections.
+    if monitor is not None:
+        monitor.attach(task)
+
     # Register transcript event handlers.
-    if on_transcript is not None:
-        @user_agg.event_handler("on_user_turn_stopped")
-        async def _on_user_turn(agg: Any, strategy: Any, message: UserTurnStoppedMessage) -> None:
+    @user_agg.event_handler("on_user_turn_stopped")
+    async def _on_user_turn(agg: Any, strategy: Any, message: UserTurnStoppedMessage) -> None:
+        if monitor is not None:
+            monitor.record_user(message.content)
+        if on_transcript is not None:
             await on_transcript("user", message.content)
 
-        @assistant_agg.event_handler("on_assistant_turn_stopped")
-        async def _on_assistant_turn(agg: Any, message: AssistantTurnStoppedMessage) -> None:
+    @assistant_agg.event_handler("on_assistant_turn_stopped")
+    async def _on_assistant_turn(agg: Any, message: AssistantTurnStoppedMessage) -> None:
+        if monitor is not None:
+            monitor.record_assistant(message.content)
+        if on_transcript is not None:
             await on_transcript("assistant", message.content)
 
     @task.event_handler("on_pipeline_started")

@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     voice_provider_llm: str = "google"
     voice_llm_model: str = "models/gemini-2.5-flash-native-audio-preview-12-2025"
 
+    voice_monitor_model: str = "gemini-3.1-flash-lite-preview"
+    voice_monitor_enabled: bool = True
+
     voice_ws_max_seconds: int = 900
     voice_ws_max_payload_kb: int = 256
     voice_audio_sample_rate_hz: int = 16000

@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart' as intl;
 
 import 'app_localizations_en.dart';
+import 'app_localizations_es.dart';
 import 'app_localizations_zh.dart';
 
 // ignore_for_file: type=lint
@@ -96,6 +97,7 @@ abstract class AppLocalizations {
   static const List<Locale> supportedLocales = <Locale>[
     Locale('en'),
     Locale('zh'),
+    Locale('es'),
   ];
 
   /// No description provided for @appTitle.
@@ -113,7 +115,7 @@ abstract class AppLocalizations {
   /// No description provided for @pickStore.
   ///
   /// In en, this message translates to:
-  /// **'Pick a store'**
+  /// **'What are you craving today?'**
   String get pickStore;
 
   /// No description provided for @storeId.
@@ -161,7 +163,7 @@ abstract class AppLocalizations {
   /// No description provided for @authTitle.
   ///
   /// In en, this message translates to:
-  /// **'Sign in'**
+  /// **'Sign in to continue'**
   String get authTitle;
 
   /// No description provided for @login.
@@ -194,6 +196,12 @@ abstract class AppLocalizations {
   /// **'Continue as Guest'**
   String get continueAsGuest;
 
+  /// No description provided for @guestModeEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Guest mode enabled.'**
+  String get guestModeEnabled;
+
   /// No description provided for @voiceTitle.
   ///
   /// In en, this message translates to:
@@ -205,6 +213,234 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Listening…'**
   String get listening;
+
+  /// No description provided for @connecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get connecting;
+
+  /// No description provided for @tapMicToStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap the mic to start'**
+  String get tapMicToStart;
+
+  /// No description provided for @whatAreYouCraving.
+  ///
+  /// In en, this message translates to:
+  /// **'What are you\ncraving?'**
+  String get whatAreYouCraving;
+
+  /// No description provided for @goodMorning.
+  ///
+  /// In en, this message translates to:
+  /// **'Good morning'**
+  String get goodMorning;
+
+  /// No description provided for @goodAfternoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Good afternoon'**
+  String get goodAfternoon;
+
+  /// No description provided for @goodEvening.
+  ///
+  /// In en, this message translates to:
+  /// **'Good evening'**
+  String get goodEvening;
+
+  /// No description provided for @searchRestaurants.
+  ///
+  /// In en, this message translates to:
+  /// **'Search restaurants...'**
+  String get searchRestaurants;
+
+  /// No description provided for @nearbyRestaurants.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby Restaurants'**
+  String get nearbyRestaurants;
+
+  /// No description provided for @somethingWentWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong'**
+  String get somethingWentWrong;
+
+  /// No description provided for @tryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try Again'**
+  String get tryAgain;
+
+  /// No description provided for @noMatchesFound.
+  ///
+  /// In en, this message translates to:
+  /// **'No matches found'**
+  String get noMatchesFound;
+
+  /// No description provided for @noRestaurantsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No restaurants yet'**
+  String get noRestaurantsYet;
+
+  /// No description provided for @storeOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get storeOpen;
+
+  /// No description provided for @storeClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get storeClosed;
+
+  /// No description provided for @pickup.
+  ///
+  /// In en, this message translates to:
+  /// **'Pickup'**
+  String get pickup;
+
+  /// No description provided for @delivery.
+  ///
+  /// In en, this message translates to:
+  /// **'Delivery'**
+  String get delivery;
+
+  /// No description provided for @sessionComplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Session Complete'**
+  String get sessionComplete;
+
+  /// No description provided for @thanksForOrdering.
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks for ordering at {storeName}'**
+  String thanksForOrdering(Object storeName);
+
+  /// No description provided for @orderSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Order Summary'**
+  String get orderSummary;
+
+  /// No description provided for @item.
+  ///
+  /// In en, this message translates to:
+  /// **'Item'**
+  String get item;
+
+  /// No description provided for @subtotal.
+  ///
+  /// In en, this message translates to:
+  /// **'Subtotal'**
+  String get subtotal;
+
+  /// No description provided for @tax.
+  ///
+  /// In en, this message translates to:
+  /// **'Tax'**
+  String get tax;
+
+  /// No description provided for @total.
+  ///
+  /// In en, this message translates to:
+  /// **'Total'**
+  String get total;
+
+  /// No description provided for @noItemsOrdered.
+  ///
+  /// In en, this message translates to:
+  /// **'No items were ordered.'**
+  String get noItemsOrdered;
+
+  /// No description provided for @howWasExperience.
+  ///
+  /// In en, this message translates to:
+  /// **'How was your experience?'**
+  String get howWasExperience;
+
+  /// No description provided for @thanksForFeedback.
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks for your feedback!'**
+  String get thanksForFeedback;
+
+  /// No description provided for @newOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'New Order'**
+  String get newOrder;
+
+  /// No description provided for @about.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get about;
+
+  /// No description provided for @appName.
+  ///
+  /// In en, this message translates to:
+  /// **'App Name'**
+  String get appName;
+
+  /// No description provided for @appNameValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Resto AI'**
+  String get appNameValue;
+
+  /// No description provided for @version.
+  ///
+  /// In en, this message translates to:
+  /// **'Version'**
+  String get version;
+
+  /// No description provided for @themeSignature.
+  ///
+  /// In en, this message translates to:
+  /// **'Signature'**
+  String get themeSignature;
+
+  /// No description provided for @themeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get themeLight;
+
+  /// No description provided for @themeDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get themeDark;
+
+  /// No description provided for @themeOcean.
+  ///
+  /// In en, this message translates to:
+  /// **'Ocean'**
+  String get themeOcean;
+
+  /// No description provided for @themeSunset.
+  ///
+  /// In en, this message translates to:
+  /// **'Sunset'**
+  String get themeSunset;
+
+  /// No description provided for @themeForest.
+  ///
+  /// In en, this message translates to:
+  /// **'Forest'**
+  String get themeForest;
+
+  /// No description provided for @themeContrast.
+  ///
+  /// In en, this message translates to:
+  /// **'Contrast'**
+  String get themeContrast;
 }
 
 class _AppLocalizationsDelegate
@@ -218,7 +454,7 @@ class _AppLocalizationsDelegate
 
   @override
   bool isSupported(Locale locale) =>
-      <String>['en', 'zh'].contains(locale.languageCode);
+      <String>['en', 'es', 'zh'].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -229,6 +465,8 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
   switch (locale.languageCode) {
     case 'en':
       return AppLocalizationsEn();
+    case 'es':
+      return AppLocalizationsEs();
     case 'zh':
       return AppLocalizationsZh();
   }

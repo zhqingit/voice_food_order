@@ -15,6 +15,8 @@ export type StoreMe = {
   allow_pickup: boolean | null
   allow_delivery: boolean | null
   min_order_amount: Money | null
+  voice_tone: string | null
+  logo_url: string | null
   email: string
   created_at: string
 }
@@ -34,6 +36,8 @@ export type StoreMeUpdate = Partial<
     | 'allow_pickup'
     | 'allow_delivery'
     | 'min_order_amount'
+    | 'voice_tone'
+    | 'logo_url'
   >
 >
 
@@ -44,5 +48,35 @@ export async function getMe(): Promise<StoreMe> {
 
 export async function updateMe(payload: StoreMeUpdate): Promise<StoreMe> {
   const res = await apiClient.patch('/store/me', payload)
+  return res.data as StoreMe
+}
+
+// ── Store Hours ──────────────────────────────────────────────────────────────
+
+export type DayHours = {
+  day_of_week: number // 0=Mon .. 6=Sun
+  open_time: string   // "HH:MM"
+  close_time: string  // "HH:MM"
+  is_closed: boolean
+}
+
+export async function getHours(): Promise<DayHours[]> {
+  const res = await apiClient.get('/store/me/hours')
+  return res.data as DayHours[]
+}
+
+export async function updateHours(hours: DayHours[]): Promise<DayHours[]> {
+  const res = await apiClient.put('/store/me/hours', { hours })
+  return res.data as DayHours[]
+}
+
+// ── Logo ─────────────────────────────────────────────────────────────────────
+
+export async function uploadLogo(file: File): Promise<StoreMe> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await apiClient.post('/store/me/logo', form, {
+    headers: { 'Content-Type': undefined },
+  })
   return res.data as StoreMe
 }

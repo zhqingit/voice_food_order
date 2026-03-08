@@ -134,6 +134,8 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenResp
         .where(RefreshToken.session_id == session.id)
         .where(RefreshToken.revoked_at.is_(None))
         .where(RefreshToken.replaced_by_id.is_(None))
+        .order_by(RefreshToken.created_at.desc())
+        .limit(1)
     ).scalar_one_or_none()
 
     if active_token is None:

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   type OrderItemOut,
   type OrderOut,
@@ -10,6 +11,7 @@ import {
 const COMMON_STATUSES = ['draft', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 
 export function OrdersRoute(): React.JSX.Element {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -36,7 +38,7 @@ export function OrdersRoute(): React.JSX.Element {
       try {
         await reloadOrders()
       } catch {
-        setError('Failed to load orders')
+        setError(t('orders.failedLoadOrders'))
       } finally {
         setLoading(false)
       }
@@ -55,7 +57,7 @@ export function OrdersRoute(): React.JSX.Element {
         const data = await listOrderItems(selectedOrderId)
         setItems(data)
       } catch {
-        setError('Failed to load order items')
+        setError(t('orders.failedLoadItems'))
       }
     })()
   }, [selectedOrderId])
@@ -67,15 +69,15 @@ export function OrdersRoute(): React.JSX.Element {
       const updated = await updateOrderStatus(selectedOrder.id, next)
       setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
     } catch {
-      setError('Failed to update order')
+      setError(t('orders.failedUpdateOrder'))
     }
   }
 
   return (
     <>
       <div className="page-header">
-        <h1>Orders</h1>
-        <p>View and manage incoming orders.</p>
+        <h1>{t('orders.title')}</h1>
+        <p>{t('orders.subtitle')}</p>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
@@ -84,9 +86,9 @@ export function OrdersRoute(): React.JSX.Element {
         {/* Left: Orders list */}
         <div className="card">
           <div className="card-header">
-            <h2>Orders</h2>
+            <h2>{t('orders.orders')}</h2>
             <button className="btn btn-secondary btn-sm" onClick={() => void reloadOrders()}>
-              Refresh
+              {t('common.refresh')}
             </button>
           </div>
           <div>
@@ -107,42 +109,42 @@ export function OrdersRoute(): React.JSX.Element {
                 </div>
               </div>
             ))}
-            {!orders.length && !loading && <div className="empty-state">No orders yet.</div>}
+            {!orders.length && !loading && <div className="empty-state">{t('orders.noOrders')}</div>}
           </div>
         </div>
 
         {/* Right: Order details */}
         <div className="card">
           <div className="card-header">
-            <h2>Order Details</h2>
+            <h2>{t('orders.orderDetails')}</h2>
           </div>
           {selectedOrder ? (
             <div className="card-body">
               <div className="grid-2">
                 <div className="form-group">
-                  <span className="meta-label">Order ID</span>
+                  <span className="meta-label">{t('orders.orderId')}</span>
                   <span className="mono">{selectedOrder.id}</span>
                 </div>
                 <div className="form-group">
-                  <span className="meta-label">User ID</span>
+                  <span className="meta-label">{t('orders.userId')}</span>
                   <span className="mono">{selectedOrder.user_id ?? '—'}</span>
                 </div>
                 <div className="form-group">
-                  <span className="meta-label">Created</span>
+                  <span className="meta-label">{t('orders.created')}</span>
                   <span>{new Date(selectedOrder.created_at).toLocaleString()}</span>
                 </div>
                 <div className="form-group">
-                  <span className="meta-label">Totals</span>
+                  <span className="meta-label">{t('orders.totals')}</span>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    <span>Subtotal: ${String(selectedOrder.subtotal)}</span>
-                    <span>Tax: ${String(selectedOrder.tax)}</span>
-                    <span style={{ fontWeight: 700 }}>Total: ${String(selectedOrder.total)}</span>
+                    <span>{t('orders.subtotal')}: ${String(selectedOrder.subtotal)}</span>
+                    <span>{t('orders.tax')}: ${String(selectedOrder.tax)}</span>
+                    <span style={{ fontWeight: 700 }}>{t('orders.total')}: ${String(selectedOrder.total)}</span>
                   </div>
                 </div>
               </div>
 
               <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                <span className="meta-label" style={{ marginBottom: 0 }}>Status</span>
+                <span className="meta-label" style={{ marginBottom: 0 }}>{t('orders.status')}</span>
                 <select
                   className="form-select"
                   value={selectedOrder.status}
@@ -155,7 +157,7 @@ export function OrdersRoute(): React.JSX.Element {
               </div>
 
               <div style={{ marginTop: 20 }}>
-                <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>Items</h3>
+                <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>{t('orders.items')}</h3>
                 {items.map((it) => (
                   <div key={it.id} className="list-item" style={{ cursor: 'default' }}>
                     <div>
@@ -167,12 +169,12 @@ export function OrdersRoute(): React.JSX.Element {
                     <span style={{ fontWeight: 700, color: 'var(--color-primary)' }}>${String(it.price_snapshot)}</span>
                   </div>
                 ))}
-                {!items.length && <div className="empty-state" style={{ padding: '16px 0' }}>No items.</div>}
+                {!items.length && <div className="empty-state" style={{ padding: '16px 0' }}>{t('orders.noItems')}</div>}
               </div>
             </div>
           ) : (
             <div className="card-body">
-              <div className="empty-state" style={{ padding: '16px 0' }}>Select an order to view details.</div>
+              <div className="empty-state" style={{ padding: '16px 0' }}>{t('orders.selectOrder')}</div>
             </div>
           )}
         </div>

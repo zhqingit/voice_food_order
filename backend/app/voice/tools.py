@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from app.voice.tool_router import VoiceToolContext, VoiceToolRouter
+
+if TYPE_CHECKING:
+    from app.voice.monitor import ConversationMonitor
 
 GEMINI_VOICE_TOOLS_SCHEMA = [
     {
@@ -85,22 +88,33 @@ def _result_callback(params: Any) -> Callable[[Any], Awaitable[Any]] | None:
     return getattr(params, "result_callback", None)
 
 
-def create_voice_tool_handlers(context: VoiceToolContext) -> dict[str, Callable[[Any], Awaitable[Any]]]:
+def create_voice_tool_handlers(
+    context: VoiceToolContext,
+    monitor: "ConversationMonitor | None" = None,
+    on_order_update: Callable[[dict], Awaitable[None]] | None = None,
+) -> dict[str, Callable[[Any], Awaitable[Any]]]:
     """Create async tool handler functions for voice interactions, using the provided context to perform actions."""
-    """Parameters:
-    - context: The VoiceToolContext containing necessary information for handling tool calls (e.g. database access, user/store/order context)."""
-    # The actual implementations of these handlers will depend on the VoiceToolRouter and the specific actions it supports.
     router = VoiceToolRouter(context)
+
+    async def _notify_order(result: dict) -> None:
+        """Send order update to the client if the tool result contains order data."""
+        if on_order_update is not None and result.get("ok") and result.get("order"):
+            await on_order_update(result["order"])
 
     # Each handler extracts arguments from the params, calls the corresponding method on the router, and then invokes the result callback if it exists.
     async def add_item(params: Any):
         args = _extract_args(params)
+        if monitor is not None:
+            monitor.record_tool_call("add_item", args)
         result = router.add_item(
             menu_item_id=_parse_uuid(args.get("menu_item_id")),
             item_name=(args.get("item_name") or None),
             quantity=int(args.get("quantity", 1) or 1),
             size=(args.get("size") or None),
         )
+        if monitor is not None:
+            monitor.record_tool_result("add_item", result)
+        await _notify_order(result)
         callback = _result_callback(params)
         if callback:
             await callback(result)
@@ -109,11 +123,16 @@ def create_voice_tool_handlers(context: VoiceToolContext) -> dict[str, Callable[
     # The remove_item handler supports multiple ways to identify the item to remove (order_item_id, menu_item_id, or item_name) to provide flexibility in how the tool can be called.
     async def remove_item(params: Any):
         args = _extract_args(params)
+        if monitor is not None:
+            monitor.record_tool_call("remove_item", args)
         result = router.remove_item(
             order_item_id=_parse_uuid(args.get("order_item_id")),
             menu_item_id=_parse_uuid(args.get("menu_item_id")),
             item_name=(args.get("item_name") or None),
         )
+        if monitor is not None:
+            monitor.record_tool_result("remove_item", result)
+        await _notify_order(result)
         callback = _result_callback(params)
         if callback:
             await callback(result)
@@ -122,16 +141,26 @@ def create_voice_tool_handlers(context: VoiceToolContext) -> dict[str, Callable[
     # The get_summary and checkout handlers are simpler since they don't require parameters, but they still support result callbacks for asynchronous handling of the results.
     async def get_summary(params: Any):
         """Get current order summary and totals."""
+        if monitor is not None:
+            monitor.record_tool_call("get_summary", {})
         result = router.get_summary()
+        if monitor is not None:
+            monitor.record_tool_result("get_summary", result)
+        await _notify_order(result)
         callback = _result_callback(params)
         if callback:
             await callback(result)
         return result
 
-    # The checkout handler would typically finalize the order and may involve additional steps such as confirming the order details with the user, handling payment, etc. 
+    # The checkout handler would typically finalize the order and may involve additional steps such as confirming the order details with the user, handling payment, etc.
     # For simplicity, this example just calls the checkout method on the router and supports a result callback.
     async def checkout(params: Any):
+        if monitor is not None:
+            monitor.record_tool_call("checkout", {})
         result = router.checkout()
+        if monitor is not None:
+            monitor.record_tool_result("checkout", result)
+        await _notify_order(result)
         callback = _result_callback(params)
         if callback:
             await callback(result)
