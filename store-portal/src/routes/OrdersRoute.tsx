@@ -161,6 +161,54 @@ export function OrdersRoute(): React.JSX.Element {
     })()
   }, [selectedOrderId])
 
+  function handlePrint(): void {
+    if (!selectedOrder) return
+    const rows = items.map((it) =>
+      `<tr>
+        <td style="padding:4px 8px">${it.name ?? 'Unknown item'}</td>
+        <td style="padding:4px 8px;text-align:center">${it.quantity}</td>
+        <td style="padding:4px 8px;text-align:right">$${String(it.price_snapshot)}</td>
+        <td style="padding:4px 8px;text-align:right">$${(Number(it.price_snapshot) * it.quantity).toFixed(2)}</td>
+      </tr>`
+    ).join('')
+
+    const html = `<!DOCTYPE html><html><head><title>Order ${selectedOrder.id.slice(0, 8)}</title>
+      <style>
+        body { font-family: sans-serif; padding: 24px; max-width: 400px; margin: 0 auto; }
+        h2 { margin: 0 0 4px; font-size: 18px; }
+        .meta { font-size: 12px; color: #666; margin-bottom: 16px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+        th { text-align: left; padding: 4px 8px; border-bottom: 2px solid #ccc; font-size: 12px; }
+        td { border-bottom: 1px solid #eee; }
+        .totals { margin-top: 12px; font-size: 13px; }
+        .totals .row { display: flex; justify-content: space-between; padding: 2px 0; }
+        .totals .total { font-weight: 700; font-size: 15px; border-top: 2px solid #333; margin-top: 4px; padding-top: 4px; }
+        @media print { body { padding: 0; } }
+      </style></head><body>
+      <h2>Order #${selectedOrder.id.slice(0, 8)}</h2>
+      <div class="meta">
+        ${localTime(selectedOrder.created_at)}<br/>
+        Status: ${selectedOrder.status} &nbsp; Channel: ${selectedOrder.channel}
+      </div>
+      <table>
+        <thead><tr>
+          <th>Item</th><th style="text-align:center">Qty</th>
+          <th style="text-align:right">Price</th><th style="text-align:right">Total</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="totals">
+        <div class="row"><span>Subtotal</span><span>$${String(selectedOrder.subtotal)}</span></div>
+        <div class="row"><span>Tax</span><span>$${String(selectedOrder.tax)}</span></div>
+        <div class="row total"><span>Total</span><span>$${String(selectedOrder.total)}</span></div>
+      </div>
+      <script>window.onload=function(){window.print()}<\/script>
+    </body></html>`
+
+    const w = window.open('', '_blank')
+    if (w) { w.document.write(html); w.document.close() }
+  }
+
   async function handleUpdateStatus(next: string): Promise<void> {
     if (!selectedOrder) return
     setError(null)
@@ -235,6 +283,9 @@ export function OrdersRoute(): React.JSX.Element {
         <div className="card" style={{ marginTop: 20 }}>
           <div className="card-header">
             <h2>{t('orders.orderDetails')}</h2>
+            <button className="btn btn-secondary btn-sm" onClick={handlePrint}>
+              {t('orders.print')}
+            </button>
           </div>
           <div className="card-body">
             <div className="grid-2">

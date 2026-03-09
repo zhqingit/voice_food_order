@@ -118,6 +118,7 @@
     "noItems": "暂无菜品。",
     "noOrders": "暂无订单。",
     "selectOrder": "选择一个订单查看详情。",
+    "print": "打印",
     "failedLoadOrders": "加载订单失败",
     "failedLoadItems": "加载订单菜品失败",
     "failedUpdateOrder": "更新订单失败"

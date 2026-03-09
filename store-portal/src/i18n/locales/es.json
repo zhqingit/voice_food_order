@@ -118,6 +118,7 @@
     "noItems": "Sin artículos.",
     "noOrders": "Aún no hay pedidos.",
     "selectOrder": "Selecciona un pedido para ver los detalles.",
+    "print": "Imprimir",
     "failedLoadOrders": "Error al cargar pedidos",
     "failedLoadItems": "Error al cargar artículos del pedido",
     "failedUpdateOrder": "Error al actualizar el pedido"
