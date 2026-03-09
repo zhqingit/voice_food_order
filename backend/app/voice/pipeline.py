@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
+
+logger = logging.getLogger(__name__)
 
 from app.voice.config import GoogleVoiceConfig, VoiceRuntimeConfig
 
@@ -9,7 +13,8 @@ if TYPE_CHECKING:
 
 try:
     from pipecat.adapters.schemas.tools_schema import AdapterType, ToolsSchema
-    from pipecat.frames.frames import LLMRunFrame
+    from pipecat.frames.frames import LLMMessagesAppendFrame, LLMRunFrame
+    from pipecat.processors.frame_processor import FrameDirection
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.llm_context import LLMContext
@@ -22,7 +27,9 @@ try:
 except ImportError:  # pragma: no cover - optional dependency
     AdapterType = None
     ToolsSchema = None
+    LLMMessagesAppendFrame = None
     LLMRunFrame = None
+    FrameDirection = None
     Pipeline = None
     PipelineParams = None
     PipelineTask = None
@@ -107,9 +114,37 @@ def create_voice_pipeline_task(
     if monitor is not None:
         monitor.attach(task)
 
+    # ── Silence nudge: if user doesn't speak within 5s after bot finishes, ──
+    # ── prompt the LLM to follow up. ──────────────────────────────────────
+    SILENCE_TIMEOUT = 5.0
+    _nudge_timer: asyncio.Task[None] | None = None
+
+    async def _nudge_after_silence() -> None:
+        await asyncio.sleep(SILENCE_TIMEOUT)
+        logger.info("Silence nudge: user silent for %.1fs, prompting bot follow-up", SILENCE_TIMEOUT)
+        # Push directly to the LLM processor, bypassing transport/aggregator
+        # which may not forward LLMMessagesAppendFrame.
+        frame = LLMMessagesAppendFrame(
+            messages=[{"role": "user", "content": "(The customer has been silent for a few seconds. Briefly ask if they need anything else.)"}],
+        )
+        await llm.process_frame(frame, FrameDirection.DOWNSTREAM)
+
+    def _cancel_nudge() -> None:
+        nonlocal _nudge_timer
+        if _nudge_timer is not None and not _nudge_timer.done():
+            _nudge_timer.cancel()
+        _nudge_timer = None
+
+    def _start_nudge() -> None:
+        nonlocal _nudge_timer
+        _cancel_nudge()
+        _nudge_timer = asyncio.create_task(_nudge_after_silence())
+
     # Register transcript event handlers.
     @user_agg.event_handler("on_user_turn_stopped")
     async def _on_user_turn(agg: Any, strategy: Any, message: UserTurnStoppedMessage) -> None:
+        logger.debug("User turn stopped, cancelling silence nudge timer")
+        _cancel_nudge()
         if monitor is not None:
             monitor.record_user(message.content)
         if on_transcript is not None:
@@ -117,6 +152,8 @@ def create_voice_pipeline_task(
 
     @assistant_agg.event_handler("on_assistant_turn_stopped")
     async def _on_assistant_turn(agg: Any, message: AssistantTurnStoppedMessage) -> None:
+        logger.debug("Assistant turn stopped, starting %ss silence nudge timer", SILENCE_TIMEOUT)
+        _start_nudge()
         if monitor is not None:
             monitor.record_assistant(message.content)
         if on_transcript is not None:
@@ -126,5 +163,9 @@ def create_voice_pipeline_task(
     async def on_pipeline_started(task: PipelineTask, frame: Any):
         # Context is already set via the aggregator pair; just trigger the LLM run.
         await task.queue_frames([LLMRunFrame()])
+
+    @task.event_handler("on_pipeline_stopped")
+    async def on_pipeline_stopped(task: PipelineTask, frame: Any):
+        _cancel_nudge()
 
     return task
