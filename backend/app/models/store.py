@@ -31,6 +31,7 @@ class Store(Base):
     allow_pickup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     allow_delivery: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     min_order_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
     voice_tone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 

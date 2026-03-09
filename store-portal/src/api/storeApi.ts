@@ -15,6 +15,7 @@ export type StoreMe = {
   allow_pickup: boolean | null
   allow_delivery: boolean | null
   min_order_amount: Money | null
+  tax_rate: Money
   voice_tone: string | null
   logo_url: string | null
   email: string
@@ -36,6 +37,7 @@ export type StoreMeUpdate = Partial<
     | 'allow_pickup'
     | 'allow_delivery'
     | 'min_order_amount'
+    | 'tax_rate'
     | 'voice_tone'
     | 'logo_url'
   >

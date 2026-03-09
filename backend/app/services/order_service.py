@@ -65,10 +65,17 @@ def remove_order_item(db: Session, *, order: Order, item_id: uuid.UUID) -> None:
     db.delete(item)
 
 
-def recalc_totals(db: Session, *, order: Order) -> Order:
+def recalc_totals(db: Session, *, order: Order, tax_rate: Decimal | None = None) -> Order:
     items = db.execute(select(OrderItem).where(OrderItem.order_id == order.id)).scalars().all()
     subtotal = sum((item.price_snapshot * item.quantity for item in items), Decimal("0.00"))
-    tax = Decimal("0.00")
+
+    if tax_rate is None:
+        # Look up the store's tax rate.
+        from app.models.store import Store
+        store = db.get(Store, order.store_id)
+        tax_rate = store.tax_rate if store else Decimal("0.0000")
+
+    tax = (subtotal * tax_rate).quantize(Decimal("0.01"))
     total = subtotal + tax
 
     order.subtotal = subtotal

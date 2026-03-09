@@ -23,6 +23,7 @@ class StorePublicOut(BaseModel):
     allow_pickup: bool
     allow_delivery: bool
     min_order_amount: Decimal | None = None
+    tax_rate: Decimal = Decimal("0.0000")
     voice_tone: str | None = None
     logo_url: str | None = None
     hours: list[DayHours] = []
@@ -42,6 +43,7 @@ class StoreOut(BaseModel):
     allow_pickup: bool | None = None
     allow_delivery: bool | None = None
     min_order_amount: Decimal | None = None
+    tax_rate: Decimal = Decimal("0.0000")
     voice_tone: str | None = None
     logo_url: str | None = None
     email: EmailStr
@@ -61,5 +63,6 @@ class StoreUpdate(BaseModel):
     allow_pickup: bool | None = None
     allow_delivery: bool | None = None
     min_order_amount: Decimal | None = None
+    tax_rate: Decimal | None = Field(default=None, ge=0, le=1)
     voice_tone: str | None = Field(default=None, max_length=32)
     logo_url: str | None = Field(default=None, max_length=512)

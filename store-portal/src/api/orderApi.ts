@@ -18,6 +18,7 @@ export type OrderItemOut = {
   id: UUID
   order_id: UUID
   menu_item_id: UUID
+  name: string | null
   quantity: number
   price_snapshot: Money
 }

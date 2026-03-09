@@ -33,6 +33,7 @@ export function ProfileRoute(): React.JSX.Element {
   const [allowPickup, setAllowPickup] = useState<boolean>(true)
   const [allowDelivery, setAllowDelivery] = useState<boolean>(true)
   const [minOrder, setMinOrder] = useState('')
+  const [taxRate, setTaxRate] = useState('')
   const [voiceTone, setVoiceTone] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
@@ -56,9 +57,10 @@ export function ProfileRoute(): React.JSX.Element {
       allowPickup !== Boolean(me.allow_pickup ?? true) ||
       allowDelivery !== Boolean(me.allow_delivery ?? true) ||
       minOrder !== (me.min_order_amount != null ? String(me.min_order_amount) : '') ||
+      taxRate !== String(Number(me.tax_rate ?? 0) * 100) ||
       voiceTone !== (me.voice_tone ?? null)
     )
-  }, [me, name, phone, address1, address2, city, state, postal, country, timezone, allowPickup, allowDelivery, minOrder, voiceTone])
+  }, [me, name, phone, address1, address2, city, state, postal, country, timezone, allowPickup, allowDelivery, minOrder, taxRate, voiceTone])
 
   useEffect(() => {
     void (async () => {
@@ -79,6 +81,7 @@ export function ProfileRoute(): React.JSX.Element {
         setAllowPickup(Boolean(data.allow_pickup ?? true))
         setAllowDelivery(Boolean(data.allow_delivery ?? true))
         setMinOrder(data.min_order_amount != null ? String(data.min_order_amount) : '')
+        setTaxRate(String(Number(data.tax_rate ?? 0) * 100))
         setVoiceTone(data.voice_tone ?? null)
         setHours(hoursData)
       } catch {
@@ -100,6 +103,12 @@ export function ProfileRoute(): React.JSX.Element {
       return
     }
 
+    const taxRateParsed = taxRate.trim() ? Number(taxRate) / 100 : 0
+    if (!Number.isFinite(taxRateParsed) || taxRateParsed < 0 || taxRateParsed > 1) {
+      setError(t('profile.invalidTaxRate'))
+      return
+    }
+
     try {
       const updated = await updateMe({
         name: name.trim() ? name.trim() : undefined,
@@ -114,6 +123,7 @@ export function ProfileRoute(): React.JSX.Element {
         allow_pickup: allowPickup,
         allow_delivery: allowDelivery,
         min_order_amount: minOrderParsed,
+        tax_rate: taxRateParsed,
         voice_tone: voiceTone,
       })
       setMe(updated)
@@ -237,14 +247,20 @@ export function ProfileRoute(): React.JSX.Element {
                 <label className="form-label">{t('profile.minOrderAmount')}</label>
                 <input className="form-input" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} inputMode="decimal" placeholder="0.00" />
               </div>
-
               <div className="form-group">
+                <label className="form-label">{t('profile.taxRate')}</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input className="form-input" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} inputMode="decimal" placeholder="0" style={{ flex: 1 }} />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-secondary)' }}>%</span>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>{t('profile.taxRateDesc')}</p>
+              </div>
+
+              <div className="form-group grid-full" style={{ flexDirection: 'row', gap: 24 }}>
                 <label className="form-check">
                   <input type="checkbox" checked={allowPickup} onChange={(e) => setAllowPickup(e.target.checked)} />
                   {t('profile.allowPickup')}
                 </label>
-              </div>
-              <div className="form-group">
                 <label className="form-check">
                   <input type="checkbox" checked={allowDelivery} onChange={(e) => setAllowDelivery(e.target.checked)} />
                   {t('profile.allowDelivery')}

@@ -10,6 +10,7 @@ from app.api.deps.store import get_current_store_web
 from app.api.host_policy import require_host_policy
 from app.core.errors import AppError
 from app.db.session import get_db
+from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.store import Store
@@ -38,11 +39,13 @@ def _order_out(order: Order) -> OrderOut:
     )
 
 
-def _order_item_out(item: OrderItem) -> OrderItemOut:
+def _order_item_out(item: OrderItem, db: Session) -> OrderItemOut:
+    menu_item = db.get(MenuItem, item.menu_item_id)
     return OrderItemOut(
         id=item.id,
         order_id=item.order_id,
         menu_item_id=item.menu_item_id,
+        name=menu_item.name if menu_item else None,
         quantity=item.quantity,
         price_snapshot=item.price_snapshot,
     )
@@ -105,4 +108,4 @@ def list_order_items(
         raise AppError(status_code=404, code="order_not_found", detail="Order not found")
 
     items = db.execute(select(OrderItem).where(OrderItem.order_id == order.id)).scalars().all()
-    return [_order_item_out(item) for item in items]
+    return [_order_item_out(item, db) for item in items]

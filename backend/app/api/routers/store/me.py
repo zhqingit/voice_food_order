@@ -40,6 +40,7 @@ def _store_out(s: Store) -> StoreOut:
         allow_pickup=s.allow_pickup,
         allow_delivery=s.allow_delivery,
         min_order_amount=s.min_order_amount,
+        tax_rate=s.tax_rate,
         voice_tone=s.voice_tone,
         logo_url=s.logo_url,
         email=s.email,
