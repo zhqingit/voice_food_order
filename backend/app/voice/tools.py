@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from app.voice.tool_router import VoiceToolContext, VoiceToolRouter
@@ -133,7 +134,8 @@ def create_voice_tool_handlers(
         args = _extract_args(params)
         if monitor is not None:
             monitor.record_tool_call("add_item", args)
-        result = router.add_item(
+        result = await asyncio.to_thread(
+            router.add_item,
             menu_item_id=_parse_uuid(args.get("menu_item_id")),
             item_name=(args.get("item_name") or None),
             quantity=int(args.get("quantity", 1) or 1),
@@ -153,7 +155,8 @@ def create_voice_tool_handlers(
         args = _extract_args(params)
         if monitor is not None:
             monitor.record_tool_call("remove_item", args)
-        result = router.remove_item(
+        result = await asyncio.to_thread(
+            router.remove_item,
             order_item_id=_parse_uuid(args.get("order_item_id")),
             menu_item_id=_parse_uuid(args.get("menu_item_id")),
             item_name=(args.get("item_name") or None),
@@ -171,7 +174,7 @@ def create_voice_tool_handlers(
         """Get current order summary and totals."""
         if monitor is not None:
             monitor.record_tool_call("get_summary", {})
-        result = router.get_summary()
+        result = await asyncio.to_thread(router.get_summary)
         if monitor is not None:
             monitor.record_tool_result("get_summary", result)
         await _notify_order(result)
@@ -186,7 +189,10 @@ def create_voice_tool_handlers(
         args = _extract_args(params)
         if monitor is not None:
             monitor.record_tool_call("checkout", args)
-        result = router.checkout(customer_name=args.get("customer_name") or None)
+        result = await asyncio.to_thread(
+            router.checkout,
+            customer_name=args.get("customer_name") or None,
+        )
         if monitor is not None:
             monitor.record_tool_result("checkout", result)
         await _notify_order(result)
@@ -199,7 +205,10 @@ def create_voice_tool_handlers(
         args = _extract_args(params)
         if monitor is not None:
             monitor.record_tool_call("set_order_note", args)
-        result = router.set_order_note(note=args.get("note", ""))
+        result = await asyncio.to_thread(
+            router.set_order_note,
+            note=args.get("note", ""),
+        )
         if monitor is not None:
             monitor.record_tool_result("set_order_note", result)
         await _notify_order(result)

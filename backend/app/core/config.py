@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     user_api_hosts: str = "user-api.local"
     store_api_hosts: str = "store-api.local"
 
+    # Multi-worker deployment
+    web_workers: int = 4
+    web_reload: bool = False
+
     cookie_secure: bool = False
     cookie_domain: str | None = None
 
