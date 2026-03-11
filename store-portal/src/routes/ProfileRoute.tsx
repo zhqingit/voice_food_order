@@ -133,6 +133,19 @@ export function ProfileRoute(): React.JSX.Element {
     }
   }
 
+  async function handleTogglePublish(): Promise<void> {
+    if (!me) return
+    setError(null)
+    setMessage(null)
+    try {
+      const updated = await updateMe({ is_published: !me.is_published })
+      setMe(updated)
+      setMessage(updated.is_published ? t('profile.publishedOn') : t('profile.publishedOff'))
+    } catch {
+      setError(t('profile.failedSave'))
+    }
+  }
+
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = e.target.files?.[0]
     if (!file) return
@@ -183,6 +196,31 @@ export function ProfileRoute(): React.JSX.Element {
 
       {message && <div className="alert alert-success" style={{ marginBottom: 16 }}>{message}</div>}
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      {/* Publish Toggle Card */}
+      {me && (
+        <div className="card" style={{ maxWidth: 900, marginBottom: 24 }}>
+          <div className="card-body" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16 }}>{t('profile.publishTitle')}</h3>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                {t('profile.publishDesc')}
+              </p>
+            </div>
+            <button
+              type="button"
+              className={`btn btn-sm ${me.is_published ? 'btn-primary' : 'btn-secondary'}`}
+              style={{
+                minWidth: 100,
+                ...(me.is_published ? { background: '#16a34a', borderColor: '#16a34a' } : {}),
+              }}
+              onClick={() => void handleTogglePublish()}
+            >
+              {me.is_published ? t('profile.published') : t('profile.unpublished')}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card" style={{ maxWidth: 900 }}>
         <div className="card-header">

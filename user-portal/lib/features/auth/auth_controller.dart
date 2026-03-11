@@ -47,34 +47,43 @@ class AuthController extends Notifier<AuthState> {
       return;
     }
 
-    // Guest users always see the login screen on app open.
     final isGuest = await tokenStore.readIsGuest();
-    if (isGuest) {
-      await tokenStore.clear();
-      state = const Unauthenticated();
-      return;
-    }
 
-    // If access token still valid, we can treat user as signed-in immediately.
+    // If access token still valid, restore session immediately.
     final accessExpired = _isJwtExpiredSafe(bundle.accessToken);
     if (!accessExpired) {
-      state = const Authenticated();
+      state = isGuest ? const Guest() : const Authenticated();
       return;
     }
 
     // Access expired: try refresh (if online).
     if (!await _isOnline()) {
-      state = const Unauthenticated(message: 'Offline: cannot restore session.');
+      // Guest users get a fresh guest session when back online;
+      // registered users must re-login.
+      if (isGuest) {
+        state = const Guest();
+      } else {
+        state = const Unauthenticated(message: 'Offline: cannot restore session.');
+      }
       return;
     }
 
     try {
       final refreshed = await repo.refresh(current: bundle);
-      await tokenStore.write(refreshed);
-      state = const Authenticated();
+      await tokenStore.write(refreshed, isGuest: isGuest);
+      state = isGuest ? const Guest() : const Authenticated();
     } catch (e) {
       // If refresh fails, clear local tokens and require login.
       await tokenStore.clear();
+      if (isGuest) {
+        // Silently create a new guest session.
+        try {
+          final bundle = await repo.guestLogin();
+          await tokenStore.write(bundle, isGuest: true);
+          state = const Guest();
+          return;
+        } catch (_) {}
+      }
       state = Unauthenticated(message: _messageFromError(e));
     }
   }
@@ -145,7 +154,7 @@ class AuthController extends Notifier<AuthState> {
 
   /// Called on app resume or before protected calls.
   Future<void> refreshIfNeeded({Duration leeway = const Duration(seconds: 30)}) async {
-    if (state is! Authenticated) return;
+    if (state is! Authenticated && state is! Guest) return;
 
     final tokenStore = ref.read(tokenStoreProvider);
     final repo = ref.read(authRepositoryProvider);
@@ -161,10 +170,12 @@ class AuthController extends Notifier<AuthState> {
 
     if (!await _isOnline()) return;
 
+    final isGuest = await tokenStore.readIsGuest();
+
     try {
       final refreshed = await repo.refresh(current: bundle);
-      await tokenStore.write(refreshed);
-      state = const Authenticated();
+      await tokenStore.write(refreshed, isGuest: isGuest);
+      state = isGuest ? const Guest() : const Authenticated();
     } catch (e) {
       // If refresh failed due to bad network, keep signed-in state.
       if (_isNetworkError(e)) return;

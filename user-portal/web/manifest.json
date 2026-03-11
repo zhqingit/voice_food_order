@@ -1,11 +1,11 @@
 {
-    "name": "frontend",
-    "short_name": "frontend",
+    "name": "VoxEats",
+    "short_name": "VoxEats",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "VoxEats - AI Voice Food Ordering",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

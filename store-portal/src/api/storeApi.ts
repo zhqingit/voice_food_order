@@ -18,6 +18,7 @@ export type StoreMe = {
   tax_rate: Money
   voice_tone: string | null
   logo_url: string | null
+  is_published: boolean
   email: string
   created_at: string
 }
@@ -40,6 +41,7 @@ export type StoreMeUpdate = Partial<
     | 'tax_rate'
     | 'voice_tone'
     | 'logo_url'
+    | 'is_published'
   >
 >
 

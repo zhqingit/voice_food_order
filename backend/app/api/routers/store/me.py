@@ -43,6 +43,7 @@ def _store_out(s: Store) -> StoreOut:
         tax_rate=s.tax_rate,
         voice_tone=s.voice_tone,
         logo_url=s.logo_url,
+        is_published=s.is_published,
         email=s.email,
         created_at=s.created_at,
     )

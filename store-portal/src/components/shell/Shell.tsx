@@ -12,12 +12,42 @@ const navKeys = [
   { to: '/profile', labelKey: 'nav.profile', icon: profileIcon },
 ]
 
+const MIN_WIDTH = 180
+const MAX_WIDTH = 480
+const DEFAULT_WIDTH = 240
+
 export function Shell({ children }: { children: React.ReactNode }): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const location = useLocation()
   const [storeId, setStoreId] = useState<string | null>(null)
   const [storeName, setStoreName] = useState<string>(t('auth.title'))
   const [copied, setCopied] = useState(false)
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    const saved = localStorage.getItem('sidebar-width')
+    return saved ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, Number(saved))) : DEFAULT_WIDTH
+  })
+  const dragging = React.useRef(false)
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      if (!dragging.current) return
+      const w = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, e.clientX))
+      setSidebarWidth(w)
+    }
+    function onMouseUp() {
+      if (!dragging.current) return
+      dragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      localStorage.setItem('sidebar-width', String(sidebarWidth))
+    }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [sidebarWidth])
 
   useEffect(() => {
     void getMe()
@@ -45,10 +75,10 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
 
   return (
     <div className="app-layout">
-      <aside className="sidebar">
+      <aside className="sidebar" style={{ width: sidebarWidth }}>
         <div className="sidebar-brand">
           <h1>
-            <span className="sidebar-brand-dot" />
+            <img src="/logo.png" alt="VoxEats" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 6, verticalAlign: 'middle', marginRight: 8 }} />
             {storeName}
           </h1>
         </div>
@@ -81,7 +111,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
           </div>
           {storeId && (
             <button className="sidebar-store-id" onClick={handleCopyId} title="Click to copy store ID">
-              {copied ? t('common.copied') : t('common.storeIdPrefix', { id: storeId.slice(0, 8) })}
+              {copied ? t('common.copied') : `ID: ${storeId}`}
             </button>
           )}
           <button className="btn btn-secondary btn-sm" style={{ width: '100%' }} onClick={() => void handleLogout()}>
@@ -90,7 +120,16 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
         </div>
       </aside>
 
-      <main className="main-content">{children}</main>
+      <div
+        className="sidebar-resize-handle"
+        style={{ left: sidebarWidth - 2 }}
+        onMouseDown={() => {
+          dragging.current = true
+          document.body.style.cursor = 'col-resize'
+          document.body.style.userSelect = 'none'
+        }}
+      />
+      <main className="main-content" style={{ marginLeft: sidebarWidth }}>{children}</main>
     </div>
   )
 }

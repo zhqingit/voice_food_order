@@ -169,6 +169,9 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)) -> TokenResp
     active_token.revoked_at = utcnow_naive()
     active_token.replaced_by_id = new_token_row.id
 
+    # Sliding expiration: extend session lifetime on each refresh
+    session.expires_at = utcnow_naive() + timedelta(days=settings.refresh_token_ttl_days)
+
     access_token = create_access_token(subject=str(session.principal_id), role=PrincipalType.user, audience=Audience.mobile)
     db.commit()
 

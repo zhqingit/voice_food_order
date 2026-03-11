@@ -1,6 +1,6 @@
 {
   "@@locale": "zh",
-  "appTitle": "点餐",
+  "appTitle": "VoxEats",
 
   "storesTitle": "店铺",
   "pickStore": "今天想吃什么？",
@@ -36,6 +36,7 @@
   "tryAgain": "重试",
   "noMatchesFound": "未找到匹配结果",
   "noRestaurantsYet": "暂无餐厅",
+  "storeUnavailable": "该店铺已不再可用。",
   "storeOpen": "营业中",
   "storeClosed": "已关闭",
   "pickup": "自取",
@@ -55,7 +56,7 @@
 
   "about": "关于",
   "appName": "应用名称",
-  "appNameValue": "Resto AI",
+  "appNameValue": "VoxEats",
   "version": "版本",
 
   "themeSignature": "招牌",

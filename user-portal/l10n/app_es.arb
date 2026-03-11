@@ -1,6 +1,6 @@
 {
   "@@locale": "es",
-  "appTitle": "Pedido",
+  "appTitle": "VoxEats",
 
   "storesTitle": "Tiendas",
   "pickStore": "¿Qué se te antoja hoy?",
@@ -36,6 +36,7 @@
   "tryAgain": "Reintentar",
   "noMatchesFound": "Sin resultados",
   "noRestaurantsYet": "Aún no hay restaurantes",
+  "storeUnavailable": "Esta tienda ya no está disponible.",
   "storeOpen": "Abierto",
   "storeClosed": "Cerrado",
   "pickup": "Recoger",
@@ -55,7 +56,7 @@
 
   "about": "Acerca de",
   "appName": "Nombre de la app",
-  "appNameValue": "Resto AI",
+  "appNameValue": "VoxEats",
   "version": "Versión",
 
   "themeSignature": "Firma",

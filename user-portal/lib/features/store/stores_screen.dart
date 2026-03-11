@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -69,7 +70,25 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     }
   }
 
-  void _openVoiceOrder(String storeName, String storeId) {
+  Future<void> _openVoiceOrder(String storeName, String storeId) async {
+    final l10n = AppLocalizations.of(context)!;
+    try {
+      await ref.read(storeRepositoryProvider).getStore(storeId);
+    } on DioException catch (e) {
+      final statusCode = e.response?.statusCode;
+      if (statusCode == 410 || statusCode == 404) {
+        // Store is unpublished or removed — drop it from the cached list
+        setState(() { _stores?.removeWhere((s) => s.id == storeId); });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.storeUnavailable)),
+          );
+        }
+        return;
+      }
+      rethrow;
+    }
+    if (!mounted) return;
     Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => VoiceOrderScreen(storeName: storeName, storeId: storeId),
     ));
@@ -279,7 +298,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 
 class _StoreCard extends StatelessWidget {
   final StorePublicOut store;
-  final void Function(String name, String id) onTap;
+  final Future<void> Function(String name, String id) onTap;
 
   const _StoreCard({required this.store, required this.onTap});
 

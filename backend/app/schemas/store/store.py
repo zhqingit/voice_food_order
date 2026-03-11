@@ -46,6 +46,7 @@ class StoreOut(BaseModel):
     tax_rate: Decimal = Decimal("0.0000")
     voice_tone: str | None = None
     logo_url: str | None = None
+    is_published: bool = False
     email: EmailStr
     created_at: datetime
 
@@ -66,3 +67,4 @@ class StoreUpdate(BaseModel):
     tax_rate: Decimal | None = Field(default=None, ge=0, le=1)
     voice_tone: str | None = Field(default=None, max_length=32)
     logo_url: str | None = Field(default=None, max_length=512)
+    is_published: bool | None = None

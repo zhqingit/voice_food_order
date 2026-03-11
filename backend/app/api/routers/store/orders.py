@@ -14,6 +14,7 @@ from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.store import Store
+from app.models.user import User
 from app.models.voice_session import VoiceSession
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderItemOut, OrderOut, OrderStatusUpdate
@@ -25,7 +26,12 @@ router = APIRouter(
 )
 
 
-def _order_out(order: Order) -> OrderOut:
+def _order_out(order: Order, db: Session) -> OrderOut:
+    user_email: str | None = None
+    if order.user_id is not None:
+        user = db.get(User, order.user_id)
+        if user is not None:
+            user_email = user.email
     return OrderOut(
         id=order.id,
         store_id=order.store_id,
@@ -36,6 +42,7 @@ def _order_out(order: Order) -> OrderOut:
         tax=order.tax,
         total=order.total,
         customer_name=order.customer_name,
+        user_email=user_email,
         notes=order.notes,
         created_at=order.created_at,
     )
@@ -62,7 +69,7 @@ def list_orders(
     orders = db.execute(
         select(Order).where(Order.store_id == current_store.id).order_by(Order.created_at.desc())
     ).scalars().all()
-    return [_order_out(order) for order in orders]
+    return [_order_out(order, db) for order in orders]
 
 
 @router.get("/{order_id}", response_model=OrderOut)
@@ -76,7 +83,7 @@ def get_order(
     ).scalar_one_or_none()
     if order is None:
         raise AppError(status_code=404, code="order_not_found", detail="Order not found")
-    return _order_out(order)
+    return _order_out(order, db)
 
 
 @router.patch("/{order_id}", response_model=OrderOut)
@@ -95,7 +102,7 @@ def update_order_status(
     order.status = payload.status
     db.commit()
     db.refresh(order)
-    return _order_out(order)
+    return _order_out(order, db)
 
 
 @router.get("/{order_id}/items", response_model=list[OrderItemOut])

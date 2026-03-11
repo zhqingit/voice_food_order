@@ -85,30 +85,13 @@ class _AuthScreenState extends ConsumerState<AuthScreen> with TickerProviderStat
                 ),
                 const SizedBox(height: 12),
 
-                // Hero
+                // Hero logo
                 Center(
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [_kPrimaryStart, _kPrimaryEnd],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: [
-                        BoxShadow(color: _kPrimaryStart.withValues(alpha: 0.35), blurRadius: 20, offset: const Offset(0, 8)),
-                      ],
-                    ),
-                    child: const Center(child: Icon(Icons.restaurant_rounded, size: 40, color: Colors.white)),
+                  child: Image.asset(
+                    'assets/logo.png',
+                    width: 160,
+                    height: 160,
                   ),
-                ),
-                const SizedBox(height: 24),
-                Text(
-                  l10n?.appTitle ?? 'Food Order',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800, color: _kTextDark, letterSpacing: -0.5),
                 ),
                 const SizedBox(height: 6),
                 Text(

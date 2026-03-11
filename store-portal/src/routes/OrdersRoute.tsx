@@ -199,6 +199,7 @@ export function OrdersRoute(): React.JSX.Element {
         ${localTime(selectedOrder.created_at)}<br/>
         Status: ${selectedOrder.status} &nbsp; Channel: ${selectedOrder.channel}
         ${selectedOrder.customer_name ? `<br/>Customer: <strong>${selectedOrder.customer_name}</strong>` : ''}
+        ${selectedOrder.user_email ? `<br/>Account: ${selectedOrder.user_email}` : ''}
       </div>
       <table>
         <thead><tr>
@@ -255,6 +256,7 @@ export function OrdersRoute(): React.JSX.Element {
                 <th style={thSortStyle} onClick={() => toggleSort('status')}>{t('orders.status')}{sortIndicator('status', sortKey, sortDir)}</th>
                 <th style={thSortStyle} onClick={() => toggleSort('created_at')}>{t('orders.created')}{sortIndicator('created_at', sortKey, sortDir)}</th>
                 <th style={thSortStyle} onClick={() => toggleSort('channel')}>{t('orders.channel')}{sortIndicator('channel', sortKey, sortDir)}</th>
+                <th style={thStyle}>Account</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('subtotal')}>{t('orders.subtotal')}{sortIndicator('subtotal', sortKey, sortDir)}</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('tax')}>{t('orders.tax')}{sortIndicator('tax', sortKey, sortDir)}</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('total')}>{t('orders.total')}{sortIndicator('total', sortKey, sortDir)}</th>
@@ -277,6 +279,7 @@ export function OrdersRoute(): React.JSX.Element {
                   <td style={tdStyle}><span className={`badge badge-${o.status}`}>{o.status}</span></td>
                   <td style={tdStyle}>{localTime(o.created_at)}</td>
                   <td style={tdStyle}>{o.channel}</td>
+                  <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>{o.user_email ?? '—'}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.subtotal)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.tax)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>${String(o.total)}</td>
@@ -305,8 +308,8 @@ export function OrdersRoute(): React.JSX.Element {
                 <span className="mono">{selectedOrder.id}</span>
               </div>
               <div className="form-group">
-                <span className="meta-label">{t('orders.userId')}</span>
-                <span className="mono">{selectedOrder.user_id ?? '—'}</span>
+                <span className="meta-label">Account</span>
+                <span>{selectedOrder.user_email ?? '—'}</span>
               </div>
               <div className="form-group">
                 <span className="meta-label">{t('orders.created')}</span>

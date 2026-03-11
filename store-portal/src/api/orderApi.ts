@@ -11,6 +11,7 @@ export type OrderOut = {
   tax: Money
   total: Money
   customer_name: string | null
+  user_email: string | null
   notes: string | null
   created_at: string
 }

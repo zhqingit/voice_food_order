@@ -17,7 +17,7 @@
     "storeIdPrefix": "ID: {{id}}..."
   },
   "auth": {
-    "title": "Store Portal",
+    "title": "VoxEats Store Portal",
     "subtitle": "Manage your restaurant",
     "login": "Login",
     "signup": "Sign Up",
@@ -181,6 +181,12 @@
     "setDefaultHours": "Set Default Hours",
     "hoursSaved": "Working hours saved.",
     "hoursFailedSave": "Failed to save working hours",
-    "hoursFailedLoad": "Failed to load working hours"
+    "hoursFailedLoad": "Failed to load working hours",
+    "publishTitle": "Store Visibility",
+    "publishDesc": "Control whether your store appears on the customer app.",
+    "published": "Published",
+    "unpublished": "Unpublished",
+    "publishedOn": "Your store is now visible to customers.",
+    "publishedOff": "Your store is now hidden from customers."
   }
 }

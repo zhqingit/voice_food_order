@@ -17,7 +17,7 @@
     "storeIdPrefix": "ID: {{id}}..."
   },
   "auth": {
-    "title": "商家门户",
+    "title": "VoxEats 商家门户",
     "subtitle": "管理您的餐厅",
     "login": "登录",
     "signup": "注册",
@@ -181,6 +181,12 @@
     "setDefaultHours": "设置默认时间",
     "hoursSaved": "营业时间已保存。",
     "hoursFailedSave": "保存营业时间失败",
-    "hoursFailedLoad": "加载营业时间失败"
+    "hoursFailedLoad": "加载营业时间失败",
+    "publishTitle": "店铺可见性",
+    "publishDesc": "控制您的店铺是否在顾客应用中显示。",
+    "published": "已发布",
+    "unpublished": "未发布",
+    "publishedOn": "您的店铺现已对顾客可见。",
+    "publishedOff": "您的店铺现已对顾客隐藏。"
   }
 }

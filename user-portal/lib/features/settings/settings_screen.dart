@@ -1,29 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/settings/app_language.dart';
-import '../../core/settings/app_theme_choice.dart';
-import '../../core/settings/settings_controller.dart';
+import '../../app/providers.dart';
 import '../../gen_l10n/app_localizations.dart';
 import '../../ui/style/app_background.dart';
+import '../auth/auth_controller.dart';
+
+/// Provider that fetches the current user's profile from /user/me.
+final _userProfileProvider = FutureProvider.autoDispose<Map<String, dynamic>>((ref) async {
+  final dio = ref.watch(apiClientProvider).dio;
+  final res = await dio.get<Map<String, dynamic>>('/user/me');
+  return res.data!;
+});
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  static const _themeColors = <AppThemeChoice, Color>{
-    AppThemeChoice.luxlunch: Color(0xFFFFB15A),
-    AppThemeChoice.light: Color(0xFFEAEFF7),
-    AppThemeChoice.dark: Color(0xFFFF8A2A),
-    AppThemeChoice.ocean: Color(0xFF78B4FF),
-    AppThemeChoice.sunset: Color(0xFFFF78DC),
-    AppThemeChoice.forest: Color(0xFF78FFBE),
-    AppThemeChoice.contrast: Color(0xFFFFFFFF),
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
-    final settings = ref.watch(settingsControllerProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -58,58 +53,125 @@ class SettingsScreen extends ConsumerWidget {
       body: Container(
         decoration: AppBackground.decoration(),
         child: SafeArea(
-          child: settings.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('$e')),
-            data: (s) {
-              return ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: ListView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            children: [
+              _ProfileSection(),
+              const SizedBox(height: 20),
+              _SectionCard(
                 children: [
-                  _SectionCard(
-                    children: [
-                      _SectionHeader(icon: Icons.palette_outlined, title: l10n.appearanceTitle),
-                      const SizedBox(height: 20),
-                      Text(
-                        l10n.themeTitle,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF5A5A5A)),
-                      ),
-                      const SizedBox(height: 14),
-                      _ThemeGrid(
-                        selected: s.theme,
-                        onSelected: (next) => ref.read(settingsControllerProvider.notifier).setTheme(next),
-                        themeColors: _themeColors,
-                      ),
-                      const SizedBox(height: 28),
-                      Divider(color: Colors.grey.withValues(alpha: 0.15), height: 1),
-                      const SizedBox(height: 20),
-                      Text(
-                        l10n.languageTitle,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF5A5A5A)),
-                      ),
-                      const SizedBox(height: 14),
-                      _LanguageToggle(
-                        selected: s.language,
-                        onSelected: (next) => ref.read(settingsControllerProvider.notifier).setLanguage(next),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _SectionCard(
-                    children: [
-                      _SectionHeader(icon: Icons.info_outline_rounded, title: l10n.about),
-                      const SizedBox(height: 16),
-                      _AboutRow(label: l10n.appName, value: l10n.appNameValue),
-                      const SizedBox(height: 10),
-                      _AboutRow(label: l10n.version, value: '1.0.0'),
-                    ],
-                  ),
-                  const SizedBox(height: 32),
+                  _SectionHeader(icon: Icons.info_outline_rounded, title: l10n.about),
+                  const SizedBox(height: 16),
+                  _AboutRow(label: l10n.appName, value: l10n.appNameValue),
+                  const SizedBox(height: 10),
+                  _AboutRow(label: l10n.version, value: '1.0.0'),
                 ],
-              );
-            },
+              ),
+              const SizedBox(height: 20),
+              _AccountSection(),
+              const SizedBox(height: 32),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ProfileSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authControllerProvider);
+    final isGuest = authState is Guest;
+    final profile = ref.watch(_userProfileProvider);
+
+    return _SectionCard(
+      children: [
+        const _SectionHeader(icon: Icons.person_outline_rounded, title: 'Profile'),
+        const SizedBox(height: 20),
+        if (isGuest)
+          _GuestProfile()
+        else
+          profile.when(
+            loading: () => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            ),
+            error: (_, __) => const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: Text('Failed to load profile', style: TextStyle(color: Color(0xFF8A8A8A)))),
+            ),
+            data: (data) => _UserProfile(data: data),
+          ),
+      ],
+    );
+  }
+}
+
+class _GuestProfile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F5F5),
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+          ),
+          child: const Icon(Icons.person_outline, size: 32, color: Color(0xFF8A8A8A)),
+        ),
+        const SizedBox(height: 12),
+        const Text('Guest', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF2D2D2D))),
+        const SizedBox(height: 4),
+        const Text(
+          'Sign in to save your orders and preferences',
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 13, color: Color(0xFF8A8A8A)),
+        ),
+      ],
+    );
+  }
+}
+
+class _UserProfile extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _UserProfile({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final email = data['email'] as String? ?? '';
+    final createdAt = data['created_at'] as String? ?? '';
+    final initial = email.isNotEmpty ? email[0].toUpperCase() : '?';
+
+    String memberSince = '';
+    if (createdAt.isNotEmpty) {
+      final dt = DateTime.tryParse(createdAt);
+      if (dt != null) {
+        memberSince = '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+      }
+    }
+
+    return Column(
+      children: [
+        Container(
+          width: 64,
+          height: 64,
+          decoration: const BoxDecoration(
+            color: Color(0xFFFF9F1C),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(initial, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: Colors.white)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _AboutRow(label: 'Email', value: email),
+        const SizedBox(height: 10),
+        if (memberSince.isNotEmpty) _AboutRow(label: 'Member since', value: memberSince),
+      ],
     );
   }
 }
@@ -159,134 +221,6 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _ThemeGrid extends StatelessWidget {
-  final AppThemeChoice selected;
-  final ValueChanged<AppThemeChoice> onSelected;
-  final Map<AppThemeChoice, Color> themeColors;
-
-  const _ThemeGrid({required this.selected, required this.onSelected, required this.themeColors});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-
-    String themeLabel(AppThemeChoice t) {
-      switch (t) {
-        case AppThemeChoice.luxlunch: return l10n.themeSignature;
-        case AppThemeChoice.light: return l10n.themeLight;
-        case AppThemeChoice.dark: return l10n.themeDark;
-        case AppThemeChoice.ocean: return l10n.themeOcean;
-        case AppThemeChoice.sunset: return l10n.themeSunset;
-        case AppThemeChoice.forest: return l10n.themeForest;
-        case AppThemeChoice.contrast: return l10n.themeContrast;
-      }
-    }
-
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      children: AppThemeChoice.values.map((theme) {
-        final isSelected = theme == selected;
-        final color = themeColors[theme] ?? Colors.grey;
-        return GestureDetector(
-          onTap: () => onSelected(theme),
-          child: SizedBox(
-            width: 72,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  curve: Curves.easeInOut,
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isSelected ? const Color(0xFFFF9F1C) : Colors.grey.withValues(alpha: 0.25),
-                      width: isSelected ? 3 : 1.5,
-                    ),
-                    boxShadow: isSelected
-                        ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 3))]
-                        : [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 4, offset: const Offset(0, 2))],
-                  ),
-                  child: isSelected
-                      ? Center(
-                          child: Icon(
-                            Icons.check_rounded,
-                            size: 24,
-                            color: color.computeLuminance() > 0.5 ? const Color(0xFF2D2D2D) : Colors.white,
-                          ),
-                        )
-                      : null,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  themeLabel(theme),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? const Color(0xFF2D2D2D) : const Color(0xFF8A8A8A),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-class _LanguageToggle extends StatelessWidget {
-  final AppLanguage selected;
-  final ValueChanged<AppLanguage> onSelected;
-
-  const _LanguageToggle({required this.selected, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(14)),
-      padding: const EdgeInsets.all(4),
-      child: Row(
-        children: AppLanguage.values.map((lang) {
-          final isActive = lang == selected;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelected(lang),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: isActive ? Colors.white : Colors.transparent,
-                  borderRadius: BorderRadius.circular(11),
-                  boxShadow: isActive
-                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))]
-                      : null,
-                ),
-                child: Center(
-                  child: Text(
-                    lang.shortLabel,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                      color: isActive ? const Color(0xFF2D2D2D) : const Color(0xFF9A9A9A),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
 class _AboutRow extends StatelessWidget {
   final String label;
   final String value;
@@ -298,8 +232,44 @@ class _AboutRow extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Color(0xFF8A8A8A))),
-        Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF3D3D3D))),
+        Flexible(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF3D3D3D)),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _AccountSection extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authControllerProvider);
+    final isGuest = authState is Guest;
+
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () async {
+          await ref.read(authControllerProvider.notifier).logoutCurrent();
+          if (context.mounted) {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+          }
+        },
+        icon: Icon(isGuest ? Icons.login_rounded : Icons.logout_rounded, size: 20),
+        label: Text(isGuest ? 'Sign In' : 'Sign Out'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isGuest ? const Color(0xFFFF9F1C) : const Color(0xFFF5F5F5),
+          foregroundColor: isGuest ? Colors.white : const Color(0xFF3D3D3D),
+          elevation: isGuest ? 2 : 0,
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+      ),
     );
   }
 }

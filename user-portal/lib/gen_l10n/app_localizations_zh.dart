@@ -9,7 +9,7 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
-  String get appTitle => '点餐';
+  String get appTitle => 'VoxEats';
 
   @override
   String get storesTitle => '店铺';
@@ -102,6 +102,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noRestaurantsYet => '暂无餐厅';
 
   @override
+  String get storeUnavailable => '该店铺已不再可用。';
+
+  @override
   String get storeOpen => '营业中';
 
   @override
@@ -155,7 +158,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get appName => '应用名称';
 
   @override
-  String get appNameValue => 'Resto AI';
+  String get appNameValue => 'VoxEats';
 
   @override
   String get version => '版本';

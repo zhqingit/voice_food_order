@@ -17,7 +17,7 @@
     "storeIdPrefix": "ID: {{id}}..."
   },
   "auth": {
-    "title": "Portal de Tienda",
+    "title": "VoxEats Portal de Tienda",
     "subtitle": "Administra tu restaurante",
     "login": "Iniciar sesión",
     "signup": "Registrarse",
@@ -181,6 +181,12 @@
     "setDefaultHours": "Horario predeterminado",
     "hoursSaved": "Horario guardado.",
     "hoursFailedSave": "Error al guardar el horario",
-    "hoursFailedLoad": "Error al cargar el horario"
+    "hoursFailedLoad": "Error al cargar el horario",
+    "publishTitle": "Visibilidad de la tienda",
+    "publishDesc": "Controla si tu tienda aparece en la app de clientes.",
+    "published": "Publicada",
+    "unpublished": "No publicada",
+    "publishedOn": "Tu tienda ahora es visible para los clientes.",
+    "publishedOff": "Tu tienda ahora está oculta para los clientes."
   }
 }

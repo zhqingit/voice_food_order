@@ -61,7 +61,7 @@ class _AppRootState extends ConsumerState<AppRoot> with WidgetsBindingObserver {
           theme: glassThemeName,
           data: glassThemeData,
           child: MaterialApp(
-            onGenerateTitle: (ctx) => AppLocalizations.of(ctx)?.appTitle ?? 'Food Order',
+            onGenerateTitle: (ctx) => AppLocalizations.of(ctx)?.appTitle ?? 'VoxEats',
             theme: AppTheme.materialFor(s.theme),
             darkTheme: AppTheme.materialFor(s.theme),
             themeMode: s.theme == AppThemeChoice.luxlunch ? ThemeMode.light : ThemeMode.dark,

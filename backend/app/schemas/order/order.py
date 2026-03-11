@@ -27,6 +27,7 @@ class OrderOut(BaseModel):
     tax: Decimal
     total: Decimal
     customer_name: str | None = None
+    user_email: str | None = None
     notes: str | None
     created_at: datetime
 

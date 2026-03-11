@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Food Order';
+  String get appTitle => 'VoxEats';
 
   @override
   String get storesTitle => 'Stores';
@@ -102,6 +102,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noRestaurantsYet => 'No restaurants yet';
 
   @override
+  String get storeUnavailable => 'This store is no longer available.';
+
+  @override
   String get storeOpen => 'Open';
 
   @override
@@ -155,7 +158,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appName => 'App Name';
 
   @override
-  String get appNameValue => 'Resto AI';
+  String get appNameValue => 'VoxEats';
 
   @override
   String get version => 'Version';

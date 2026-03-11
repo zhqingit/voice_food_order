@@ -53,6 +53,8 @@ select, input, textarea, button { font: inherit; }
 
 .sidebar {
   width: 240px;
+  min-width: 180px;
+  max-width: 480px;
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   display: flex;
@@ -62,6 +64,21 @@ select, input, textarea, button { font: inherit; }
   left: 0;
   bottom: 0;
   z-index: 10;
+}
+
+.sidebar-resize-handle {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  cursor: col-resize;
+  z-index: 11;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle:active {
+  background: var(--color-primary);
+  opacity: 0.3;
 }
 
 .sidebar-brand {
@@ -145,6 +162,9 @@ select, input, textarea, button { font: inherit; }
   text-align: left;
   margin-bottom: 8px;
   transition: background 0.15s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-store-id:hover {
@@ -153,7 +173,7 @@ select, input, textarea, button { font: inherit; }
 
 .main-content {
   flex: 1;
-  margin-left: 240px;
+  margin-left: 240px; /* fallback; overridden by inline style */
   padding: 28px 32px;
   min-height: 100vh;
 }

@@ -49,6 +49,7 @@ services:
       - api
     volumes:
       - ../store-portal/src:/app/src
+      - ../store-portal/public:/app/public
 
 volumes:
   pgdata:

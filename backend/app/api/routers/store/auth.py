@@ -205,6 +205,9 @@ def refresh(request: Request, response: Response, db: Session = Depends(get_db))
     active_token.revoked_at = utcnow_naive()
     active_token.replaced_by_id = new_token_row.id
 
+    # Sliding expiration: extend session lifetime on each refresh
+    session.expires_at = utcnow_naive() + timedelta(days=settings.refresh_token_ttl_days)
+
     access_token = _issue_store_access_token(session.principal_id)
     db.commit()
 

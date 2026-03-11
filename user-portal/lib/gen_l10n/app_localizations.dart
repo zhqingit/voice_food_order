@@ -103,7 +103,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In en, this message translates to:
-  /// **'Food Order'**
+  /// **'VoxEats'**
   String get appTitle;
 
   /// No description provided for @storesTitle.
@@ -286,6 +286,12 @@ abstract class AppLocalizations {
   /// **'No restaurants yet'**
   String get noRestaurantsYet;
 
+  /// No description provided for @storeUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'This store is no longer available.'**
+  String get storeUnavailable;
+
   /// No description provided for @storeOpen.
   ///
   /// In en, this message translates to:
@@ -391,7 +397,7 @@ abstract class AppLocalizations {
   /// No description provided for @appNameValue.
   ///
   /// In en, this message translates to:
-  /// **'Resto AI'**
+  /// **'VoxEats'**
   String get appNameValue;
 
   /// No description provided for @version.
