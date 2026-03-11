@@ -21,6 +21,7 @@ class VoiceAudioRecorder {
   /// Starts streaming PCM16 mono @ 16kHz.
   ///
   /// Returns false if permission is not granted.
+  /// [onChunk] receives audio when not paused (sent to server).
   /// [onError] is called if the recorder stops unexpectedly.
   Future<bool> start({
     required void Function(Uint8List chunk) onChunk,
@@ -42,7 +43,9 @@ class VoiceAudioRecorder {
 
     _sub = stream.listen(
       (chunk) {
-        if (!_paused) onChunk(chunk);
+        if (!_paused) {
+          onChunk(chunk);
+        }
       },
       onError: (e) {
         onError?.call(e);

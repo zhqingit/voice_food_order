@@ -11,7 +11,7 @@ from app.core.errors import AppError
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
-from app.schemas.voice.voice import VoiceSessionCreate, VoiceSessionOut, VoiceSessionRating
+from app.schemas.voice.voice import VoiceSessionCreate, VoiceSessionOut, VoiceSessionRating, VoiceSessionReview
 from app.services import voice_session_service
 
 router = APIRouter(
@@ -30,6 +30,11 @@ def _session_out(session) -> VoiceSessionOut:
         channel=session.channel,
         status=session.status,
         rating=session.rating,
+        review=session.review,
+        prompt_tokens=session.prompt_tokens,
+        completion_tokens=session.completion_tokens,
+        total_tokens=session.total_tokens,
+        llm_cost=session.llm_cost,
         started_at=session.started_at,
         ended_at=session.ended_at,
     )
@@ -86,6 +91,24 @@ def rate_session(
         raise AppError(status_code=404, code="voice_session_not_found", detail="Voice session not found")
 
     session.rating = payload.rating
+    db.commit()
+    db.refresh(session)
+    return _session_out(session)
+
+
+@router.patch("/{session_id}/review", response_model=VoiceSessionOut)
+def review_session(
+    session_id: uuid.UUID,
+    payload: VoiceSessionReview,
+    current_user: User = Depends(get_current_user_mobile),
+    db: Session = Depends(get_db),
+) -> VoiceSessionOut:
+    """Submit a text review for a voice session."""
+    session = voice_session_service.get_session(db, session_id=session_id)
+    if session is None or session.user_id != current_user.id:
+        raise AppError(status_code=404, code="voice_session_not_found", detail="Voice session not found")
+
+    session.review = payload.review
     db.commit()
     db.refresh(session)
     return _session_out(session)

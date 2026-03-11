@@ -28,3 +28,8 @@ RUN backend:
   alembic upgrade head
 
 
+# check the database
+docker compose exec db psql -U postgres -d auth_template -c "SELECT vs.id::text, vs.rating, vs.review, s.name as store, vs.started_at FROM voice_sessions vs JOIN stores s ON s.id = vs.store_id ORDER BY vs.started_at DESC LIMIT 10;"
+docker compose exec db psql -U postgres -d auth_template -c "SELECT id::text, rating, review, started_at FROM voice_sessions WHERE review IS NOT NULL ORDER BY started_at DESC;"
+
+

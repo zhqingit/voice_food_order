@@ -14,6 +14,7 @@ class OrderItemOut(BaseModel):
     name: str | None = None
     quantity: int
     price_snapshot: Decimal
+    note: str | None = None
 
 
 class OrderOut(BaseModel):
@@ -25,6 +26,7 @@ class OrderOut(BaseModel):
     subtotal: Decimal
     tax: Decimal
     total: Decimal
+    customer_name: str | None = None
     notes: str | None
     created_at: datetime
 

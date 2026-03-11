@@ -46,6 +46,7 @@ class OrderItemOut {
   final String? name;
   final int quantity;
   final double priceSnapshot;
+  final String? note;
 
   const OrderItemOut({
     required this.id,
@@ -54,6 +55,7 @@ class OrderItemOut {
     required this.name,
     required this.quantity,
     required this.priceSnapshot,
+    required this.note,
   });
 
   factory OrderItemOut.fromJson(Map<String, dynamic> json) {
@@ -64,6 +66,7 @@ class OrderItemOut {
       name: json['name'] as String?,
       quantity: json['quantity'] as int,
       priceSnapshot: (json['price_snapshot'] as num).toDouble(),
+      note: json['note'] as String?,
     );
   }
 }

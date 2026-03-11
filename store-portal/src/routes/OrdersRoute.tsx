@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import {
   type OrderItemOut,
   type OrderOut,
+  type OrderUsage,
+  getOrderUsage,
   listOrderItems,
   listOrders,
   updateOrderStatus,
@@ -108,6 +110,7 @@ export function OrdersRoute(): React.JSX.Element {
   )
 
   const [items, setItems] = useState<OrderItemOut[]>([])
+  const [usage, setUsage] = useState<OrderUsage | null>(null)
   const knownStatuses = useRef<Map<string, string> | null>(null)
 
   const reloadOrders = useCallback(async (selectId?: string): Promise<void> => {
@@ -148,13 +151,18 @@ export function OrdersRoute(): React.JSX.Element {
   useEffect(() => {
     if (!selectedOrderId) {
       setItems([])
+      setUsage(null)
       return
     }
     void (async () => {
       setError(null)
       try {
-        const data = await listOrderItems(selectedOrderId)
+        const [data, usageData] = await Promise.all([
+          listOrderItems(selectedOrderId),
+          getOrderUsage(selectedOrderId).catch(() => null),
+        ])
         setItems(data)
+        setUsage(usageData)
       } catch {
         setError(t('orders.failedLoadItems'))
       }
@@ -165,12 +173,13 @@ export function OrdersRoute(): React.JSX.Element {
     if (!selectedOrder) return
     const rows = items.map((it) =>
       `<tr>
-        <td style="padding:4px 8px">${it.name ?? 'Unknown item'}</td>
+        <td style="padding:4px 8px">${it.name ?? 'Unknown item'}${it.note ? `<br/><span style="font-size:11px;color:#666;font-style:italic">${it.note}</span>` : ''}</td>
         <td style="padding:4px 8px;text-align:center">${it.quantity}</td>
         <td style="padding:4px 8px;text-align:right">$${String(it.price_snapshot)}</td>
         <td style="padding:4px 8px;text-align:right">$${(Number(it.price_snapshot) * it.quantity).toFixed(2)}</td>
       </tr>`
     ).join('')
+    const orderNote = selectedOrder.notes ? `<div style="margin-top:12px;font-style:italic;font-size:12px;color:#666">Note: ${selectedOrder.notes}</div>` : ''
 
     const html = `<!DOCTYPE html><html><head><title>Order ${selectedOrder.id.slice(0, 8)}</title>
       <style>
@@ -189,6 +198,7 @@ export function OrdersRoute(): React.JSX.Element {
       <div class="meta">
         ${localTime(selectedOrder.created_at)}<br/>
         Status: ${selectedOrder.status} &nbsp; Channel: ${selectedOrder.channel}
+        ${selectedOrder.customer_name ? `<br/>Customer: <strong>${selectedOrder.customer_name}</strong>` : ''}
       </div>
       <table>
         <thead><tr>
@@ -197,6 +207,7 @@ export function OrdersRoute(): React.JSX.Element {
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      ${orderNote}
       <div class="totals">
         <div class="row"><span>Subtotal</span><span>$${String(selectedOrder.subtotal)}</span></div>
         <div class="row"><span>Tax</span><span>$${String(selectedOrder.tax)}</span></div>
@@ -311,6 +322,32 @@ export function OrdersRoute(): React.JSX.Element {
               </div>
             </div>
 
+            {selectedOrder.customer_name && (
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <span className="meta-label">Customer</span>
+                <span style={{ fontWeight: 600 }}>{selectedOrder.customer_name}</span>
+              </div>
+            )}
+
+            {selectedOrder.notes && (
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <span className="meta-label">{t('orders.orderNote')}</span>
+                <span style={{ fontStyle: 'italic' }}>{selectedOrder.notes}</span>
+              </div>
+            )}
+
+            {usage && usage.total_tokens > 0 && (
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <span className="meta-label">{t('orders.aiUsage')}</span>
+                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
+                  <span>{t('orders.promptTokens')}: {usage.prompt_tokens.toLocaleString()}</span>
+                  <span>{t('orders.completionTokens')}: {usage.completion_tokens.toLocaleString()}</span>
+                  <span>{t('orders.totalTokens')}: {usage.total_tokens.toLocaleString()}</span>
+                  <span style={{ fontWeight: 600 }}>{t('orders.llmCost')}: ${usage.llm_cost}</span>
+                </div>
+              </div>
+            )}
+
             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
               <span className="meta-label" style={{ marginBottom: 0 }}>{t('orders.status')}</span>
               <select
@@ -330,6 +367,7 @@ export function OrdersRoute(): React.JSX.Element {
                 <thead>
                   <tr style={{ borderBottom: '2px solid var(--color-border, #e5e7eb)', textAlign: 'left' }}>
                     <th style={thStyle}>{t('orders.itemName')}</th>
+                    <th style={thStyle}>{t('orders.note')}</th>
                     <th style={{ ...thStyle, textAlign: 'center' }}>{t('orders.qty')}</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>{t('orders.unitPrice')}</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>{t('orders.lineTotal')}</th>
@@ -339,6 +377,7 @@ export function OrdersRoute(): React.JSX.Element {
                   {items.map((it) => (
                     <tr key={it.id} style={{ borderBottom: '1px solid var(--color-border, #f0f0f0)' }}>
                       <td style={tdStyle}>{it.name ?? 'Unknown item'}</td>
+                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)', fontStyle: it.note ? 'italic' : undefined }}>{it.note ?? '—'}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>{it.quantity}</td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>${String(it.price_snapshot)}</td>
                       <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>${(Number(it.price_snapshot) * it.quantity).toFixed(2)}</td>

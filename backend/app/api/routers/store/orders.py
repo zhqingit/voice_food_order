@@ -14,6 +14,7 @@ from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.store import Store
+from app.models.voice_session import VoiceSession
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderItemOut, OrderOut, OrderStatusUpdate
 
@@ -34,6 +35,7 @@ def _order_out(order: Order) -> OrderOut:
         subtotal=order.subtotal,
         tax=order.tax,
         total=order.total,
+        customer_name=order.customer_name,
         notes=order.notes,
         created_at=order.created_at,
     )
@@ -48,6 +50,7 @@ def _order_item_out(item: OrderItem, db: Session) -> OrderItemOut:
         name=menu_item.name if menu_item else None,
         quantity=item.quantity,
         price_snapshot=item.price_snapshot,
+        note=item.note,
     )
 
 
@@ -109,3 +112,31 @@ def list_order_items(
 
     items = db.execute(select(OrderItem).where(OrderItem.order_id == order.id)).scalars().all()
     return [_order_item_out(item, db) for item in items]
+
+
+@router.get("/{order_id}/usage")
+def get_order_usage(
+    order_id: uuid.UUID,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get token usage and cost for the voice session that created this order."""
+    order = db.execute(
+        select(Order).where(Order.store_id == current_store.id).where(Order.id == order_id)
+    ).scalar_one_or_none()
+    if order is None:
+        raise AppError(status_code=404, code="order_not_found", detail="Order not found")
+
+    vs = db.execute(
+        select(VoiceSession).where(VoiceSession.order_id == order_id)
+    ).scalar_one_or_none()
+
+    if vs is None:
+        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "llm_cost": "0"}
+
+    return {
+        "prompt_tokens": vs.prompt_tokens,
+        "completion_tokens": vs.completion_tokens,
+        "total_tokens": vs.total_tokens,
+        "llm_cost": str(vs.llm_cost),
+    }

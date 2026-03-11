@@ -5,7 +5,7 @@ import json
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger("voice.ws")
@@ -13,7 +13,7 @@ logger = logging.getLogger("voice.ws")
 from app.api.host_policy import get_host_policy
 from app.core.errors import AppError
 from app.core.security import decode_access_token
-from app.db.session import get_db
+from app.db.session import get_db_session
 from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
@@ -30,6 +30,7 @@ from app.voice.menu import load_menu_for_store
 from app.core.config import settings
 from app.voice.monitor import ConversationMonitor, MonitorConfig
 from app.voice.transports.websocket import create_websocket_transport
+from app.voice.usage import UsageAccumulator, estimate_monitor_cost
 
 try:
     from pipecat.pipeline.runner import PipelineRunner
@@ -94,48 +95,45 @@ async def voice_ws(
     store_id: uuid.UUID = Query(...),
     order_id: uuid.UUID | None = Query(default=None),
     session_id: uuid.UUID | None = Query(default=None),
-    db: Session = Depends(get_db),
 ) -> None:
-    """WebSocket endpoint for real-time voice interactions. 
+    """WebSocket endpoint for real-time voice interactions.
     Expects query parameters for store_id and optional order_id to establish context."""
     if PipelineRunner is None:
         await websocket.close(code=1011)
         return
 
-    # Validate host and authenticate user using the same logic as HTTP endpoints, but adapted for WebSocket headers.
+    # ── Setup phase: short-lived DB session for auth + config loading ──
     try:
-        _require_user_host(websocket)
-        current_user = _get_current_user_from_ws(websocket, db)
+        with get_db_session() as db:
+            _require_user_host(websocket)
+            current_user = _get_current_user_from_ws(websocket, db)
+            current_user_id = current_user.id
+
+            store = db.get(Store, store_id)
+            store_name = store.name if store else None
+
+            _VOICE_TONE_MAP = {
+                "male": "Puck",
+                "female": "Kore",
+            }
+            voice_id = _VOICE_TONE_MAP.get(store.voice_tone, "Puck") if store else "Puck"
+            menu = load_menu_for_store(db, store_id)
+        # db is now closed — connection returned to pool
     except AppError:
         await websocket.close(code=1008)
         return
 
-    # Accept the WebSocket connection after successful authentication. 
-    # From this point on, we can send/receive messages.
     await websocket.accept()
 
-    # Load voice runtime config, system prompt, 
-    # and initialize tool handlers with the current context (store_id, user_id, order_id).
-    store = db.get(Store, store_id)
-    store_name = store.name if store else None
-
-    # Map store voice tone preference to Gemini voice ID
-    _VOICE_TONE_MAP = {
-        "male": "Puck",
-        "female": "Kore",
-    }
-    voice_id = _VOICE_TONE_MAP.get(store.voice_tone, "Puck") if store else "Puck"
-    menu = load_menu_for_store(db, store_id)
     runtime = load_voice_runtime_config()
     google_config = load_google_voice_config()
     system_prompt = build_system_prompt(menu_lines=menu, store_name=store_name)
 
-    # The tool context provides necessary information for the tool handlers to operate,
-    # such as database access and user/store/order context.
+    # Tool context uses db_factory so each tool call gets its own short-lived session.
     tool_context = VoiceToolContext(
-        db=db,
+        db_factory=get_db_session,
         store_id=store_id,
-        user_id=current_user.id,
+        user_id=current_user_id,
         order_id=order_id,
         session_id=session_id,
         channel="voice",
@@ -151,13 +149,7 @@ async def voice_ws(
         ),
     )
 
-    # Create a WebSocket transport that the voice pipeline can use to send/receive messages,
-    # and run the pipeline in a background task.
     transport = create_websocket_transport(websocket)
-    # TODO: We may want to implement some form of cancellation or timeout handling, 
-    # especially for long-running pipelines, to avoid orphaned tasks if the client disconnects.
-    # Lock to prevent concurrent WebSocket text sends (pipecat transport
-    # may be sending binary audio at the same time).
     ws_send_lock = asyncio.Lock()
 
     async def send_transcript(role: str, content: str) -> None:
@@ -178,7 +170,16 @@ async def voice_ws(
         except Exception:
             logger.debug("send_order_update failed", exc_info=True)
 
+    async def send_interruption() -> None:
+        try:
+            async with ws_send_lock:
+                await websocket.send_text(json.dumps({"type": "interruption"}))
+        except Exception:
+            logger.debug("send_interruption failed", exc_info=True)
+
     tool_handlers = create_voice_tool_handlers(tool_context, monitor=monitor, on_order_update=send_order_update)
+
+    usage = UsageAccumulator()
 
     task = create_voice_pipeline_task(
         transport=transport,
@@ -188,30 +189,59 @@ async def voice_ws(
         tool_schema=GEMINI_VOICE_TOOLS_SCHEMA,
         tool_handlers=tool_handlers,
         on_transcript=send_transcript,
+        on_interruption=send_interruption,
         monitor=monitor,
+        usage=usage,
         voice_id=voice_id,
     )
+
+    # Cancel pipeline when WebSocket disconnects so runner.run() returns promptly.
+    @transport.event_handler("on_client_disconnected")
+    async def _on_disconnect(transport_ref, ws):
+        logger.info("Client disconnected, cancelling pipeline task")
+        await task.cancel(reason="client_disconnected")
 
     runner = PipelineRunner()
     try:
         await runner.run(task)
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected: store=%s user=%s", store_id, current_user.id)
+        logger.info("WebSocket disconnected: store=%s user=%s", store_id, current_user_id)
     except Exception:
-        logger.exception("Pipeline error: store=%s user=%s", store_id, current_user.id)
+        logger.exception("Pipeline error: store=%s user=%s", store_id, current_user_id)
         try:
             await websocket.close(code=1011)
         except Exception:
             pass
     finally:
-        # Persist the order_id created during the pipeline back to the voice session.
-        if session_id is not None and tool_context.order_id is not None:
+        # Persist order_id and token usage with a fresh short-lived session.
+        if session_id is not None:
             try:
                 from app.models.voice_session import VoiceSession
 
-                vs = db.get(VoiceSession, session_id)
-                if vs is not None:
-                    vs.order_id = tool_context.order_id
-                    db.commit()
+                with get_db_session() as db:
+                    vs = db.get(VoiceSession, session_id)
+                    if vs is not None:
+                        if tool_context.order_id is not None:
+                            vs.order_id = tool_context.order_id
+                        # Combine pipeline usage + monitor usage
+                        total_prompt = usage.prompt_tokens + monitor.prompt_tokens
+                        total_completion = usage.completion_tokens + monitor.completion_tokens
+                        total_cost = usage.cost + estimate_monitor_cost(
+                            monitor.prompt_tokens, monitor.completion_tokens
+                        )
+                        vs.prompt_tokens = total_prompt
+                        vs.completion_tokens = total_completion
+                        vs.total_tokens = total_prompt + total_completion
+                        vs.llm_cost = total_cost
+                        db.commit()
+                        logger.warning(
+                            "Session %s usage: pipeline=%d/%d, monitor=%d/%d, "
+                            "total=%d prompt + %d completion = %d tokens, cost=$%s",
+                            session_id,
+                            usage.prompt_tokens, usage.completion_tokens,
+                            monitor.prompt_tokens, monitor.completion_tokens,
+                            total_prompt, total_completion,
+                            total_prompt + total_completion, total_cost,
+                        )
             except Exception:
-                logger.exception("Failed to persist order_id to session %s", session_id)
+                logger.exception("Failed to persist session data for %s", session_id)

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 logger = logging.getLogger(__name__)
 
 from app.voice.config import GoogleVoiceConfig, VoiceRuntimeConfig
+from app.voice.usage import UsageAccumulator
 
 if TYPE_CHECKING:
     from app.voice.monitor import ConversationMonitor
@@ -21,8 +22,12 @@ try:
     from pipecat.processors.aggregators.llm_response_universal import (
         AssistantTurnStoppedMessage,
         LLMContextAggregatorPair,
+        LLMUserAggregatorParams,
         UserTurnStoppedMessage,
     )
+    from pipecat.turns.user_mute import FunctionCallUserMuteStrategy
+    from pipecat.turns.user_start import TranscriptionUserTurnStartStrategy
+    from pipecat.turns.user_turn_strategies import UserTurnStrategies
     from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
 except ImportError:  # pragma: no cover - optional dependency
     AdapterType = None
@@ -35,8 +40,12 @@ except ImportError:  # pragma: no cover - optional dependency
     PipelineTask = None
     LLMContext = None
     LLMContextAggregatorPair = None
+    LLMUserAggregatorParams = None
     AssistantTurnStoppedMessage = None
     UserTurnStoppedMessage = None
+    FunctionCallUserMuteStrategy = None
+    TranscriptionUserTurnStartStrategy = None
+    UserTurnStrategies = None
     GeminiLiveLLMService = None
 
 
@@ -49,7 +58,9 @@ def create_voice_pipeline_task(
     tool_schema: Any,
     tool_handlers: dict[str, Callable[[Any], Awaitable[Any]]] | None = None,
     on_transcript: Callable[[str, str], Awaitable[None]] | None = None,
+    on_interruption: Callable[[], Awaitable[None]] | None = None,
     monitor: "ConversationMonitor | None" = None,
+    usage: UsageAccumulator | None = None,
     enable_metrics: bool = True,
     voice_id: str = "Puck",
 ) -> Any:
@@ -82,16 +93,40 @@ def create_voice_pipeline_task(
         for name, handler in tool_handlers.items():
             llm.register_function(name, handler)
 
+    # Hook into the LLM's internal metrics object to capture token usage.
+    # We patch _metrics.start_llm_usage_metrics because the Gemini Live
+    # service calls self.start_llm_usage_metrics() which delegates to
+    # self._metrics.start_llm_usage_metrics() — patching at the _metrics
+    # level reliably intercepts all token reports.
+    if usage is not None:
+        _metrics = llm._metrics
+        _orig_metrics_llm_usage = _metrics.start_llm_usage_metrics
+
+        async def _patched_metrics_llm_usage(tokens: Any) -> Any:
+            usage.add_tokens(tokens.prompt_tokens, tokens.completion_tokens)
+            return await _orig_metrics_llm_usage(tokens)
+
+        _metrics.start_llm_usage_metrics = _patched_metrics_llm_usage
+
     # Create context with greeting message for the aggregator pair.
     context = LLMContext(
         messages=[{"role": "user", "content": "Greet me and ask what I want to order."}],
     )
 
-    # Use context aggregators for transcript capture.
-    # Do NOT add a local VAD — Gemini Live handles VAD and turn-taking
-    # internally.  Adding SileroVAD causes transcription events to trigger
-    # spurious interruptions that cancel pending tool calls.
-    user_agg, assistant_agg = LLMContextAggregatorPair(context)
+    # Use context aggregators for transcript capture + interruption handling.
+    # - TranscriptionUserTurnStartStrategy: detect user speech from Gemini
+    #   Live's transcription frames (no local VAD needed).
+    # - FunctionCallUserMuteStrategy: suppress interruptions while tool calls
+    #   are in flight, preventing the "second item not added" bug.
+    user_agg, assistant_agg = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(
+            user_turn_strategies=UserTurnStrategies(
+                start=[TranscriptionUserTurnStartStrategy()],
+            ),
+            user_mute_strategies=[FunctionCallUserMuteStrategy()],
+        ),
+    )
 
     pipeline = Pipeline([
         transport.input(),
@@ -139,6 +174,14 @@ def create_voice_pipeline_task(
         nonlocal _nudge_timer
         _cancel_nudge()
         _nudge_timer = asyncio.create_task(_nudge_after_silence())
+
+    # Notify client of interruptions so it can clear its audio buffer.
+    @user_agg.event_handler("on_user_turn_started")
+    async def _on_user_turn_started(agg: Any, strategy: Any) -> None:
+        logger.debug("User turn started (barge-in detected)")
+        _cancel_nudge()
+        if on_interruption is not None:
+            await on_interruption()
 
     # Register transcript event handlers.
     @user_agg.event_handler("on_user_turn_stopped")

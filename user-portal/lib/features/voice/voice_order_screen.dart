@@ -569,7 +569,16 @@ class _LiveOrderPanelState extends State<_LiveOrderPanel> {
                             child: Center(child: Text('${item.quantity}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _kOrangeStart))),
                           ),
                           const SizedBox(width: 10),
-                          Expanded(child: Text(item.name, style: const TextStyle(fontSize: 13, color: _kTextDark))),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.name, style: const TextStyle(fontSize: 13, color: _kTextDark)),
+                                if (item.note != null && item.note!.isNotEmpty)
+                                  Text(item.note!, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: _kTextMuted.withValues(alpha: 0.8))),
+                              ],
+                            ),
+                          ),
                           Text('\$${item.lineTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _kTextDark)),
                         ],
                       ),
@@ -698,7 +707,6 @@ class _PostSessionView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final voice = ref.watch(voiceControllerProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -727,120 +735,8 @@ class _PostSessionView extends ConsumerWidget {
           ),
           const SizedBox(height: 24),
 
-          // Order summary
-          _Card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: _kOrangeEnd.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.receipt_long_rounded, size: 20, color: _kOrangeStart),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(l10n?.orderSummary ?? 'Order Summary', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _kTextDark)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (voice.orderItems != null && voice.orderItems!.isNotEmpty) ...[
-                  ...voice.orderItems!.map((item) {
-                    final lineTotal = item.priceSnapshot * item.quantity;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 6),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 28, height: 28,
-                            decoration: BoxDecoration(color: _kOrangeEnd.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                            child: Center(child: Text('${item.quantity}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _kOrangeStart))),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(child: Text(item.name ?? (l10n?.item ?? 'Item'), style: const TextStyle(fontSize: 15, color: _kTextDark))),
-                          Text('\$${lineTotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _kTextDark)),
-                        ],
-                      ),
-                    );
-                  }),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(color: Colors.grey.withValues(alpha: 0.15), height: 1),
-                  ),
-                  _SummaryRow(label: l10n?.subtotal ?? 'Subtotal', value: voice.orderSummary!.subtotal),
-                  const SizedBox(height: 4),
-                  _SummaryRow(label: l10n?.tax ?? 'Tax', value: voice.orderSummary!.tax),
-                  const SizedBox(height: 8),
-                  _SummaryRow(label: l10n?.total ?? 'Total', value: voice.orderSummary!.total, bold: true),
-                ] else
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    child: Text(l10n?.noItemsOrdered ?? 'No items were ordered.', style: TextStyle(fontSize: 15, color: _kTextMuted.withValues(alpha: 0.7))),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Rating
-          _Card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: _kStarActive.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                      child: const Icon(Icons.star_rounded, size: 20, color: _kStarActive),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(l10n?.howWasExperience ?? 'How was your experience?', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _kTextDark)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (voice.ratingSubmitted)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.check_circle_rounded, color: Color(0xFF66BB6A), size: 20),
-                        const SizedBox(width: 10),
-                        Text(l10n?.thanksForFeedback ?? 'Thanks for your feedback!', style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.w600, fontSize: 14)),
-                      ],
-                    ),
-                  )
-                else
-                  Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: List.generate(5, (i) {
-                        final starValue = i + 1;
-                        // Map 1-5 stars to 2,4,6,8,10 for the API
-                        final apiValue = starValue * 2;
-                        final selected = voice.rating != null && voice.rating! >= apiValue;
-                        return GestureDetector(
-                          onTap: () => ref.read(voiceControllerProvider.notifier).submitRating(apiValue),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: AnimatedScale(
-                              scale: selected ? 1.2 : 1.0,
-                              duration: const Duration(milliseconds: 200),
-                              child: Icon(
-                                selected ? Icons.star_rounded : Icons.star_outline_rounded,
-                                size: 40,
-                                color: selected ? _kStarActive : _kStarInactive,
-                              ),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          // Review & Rating
+          _ReviewCard(storeName: storeName),
           const SizedBox(height: 24),
 
           // New order button
@@ -864,6 +760,155 @@ class _PostSessionView extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Review card (rating + text review)
+// ---------------------------------------------------------------------------
+
+class _ReviewCard extends ConsumerStatefulWidget {
+  final String storeName;
+
+  const _ReviewCard({required this.storeName});
+
+  @override
+  ConsumerState<_ReviewCard> createState() => _ReviewCardState();
+}
+
+class _ReviewCardState extends ConsumerState<_ReviewCard> {
+  final _reviewController = TextEditingController();
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _reviewController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final voice = ref.watch(voiceControllerProvider);
+    final allSubmitted = voice.ratingSubmitted && voice.reviewSubmitted;
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: _kStarActive.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.rate_review_rounded, size: 20, color: _kStarActive),
+              ),
+              const SizedBox(width: 12),
+              Text(l10n?.howWasExperience ?? 'How was your experience?', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _kTextDark)),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Star rating
+          Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(5, (i) {
+                final starValue = i + 1;
+                final apiValue = starValue * 2;
+                final selected = voice.rating != null && voice.rating! >= apiValue;
+                return GestureDetector(
+                  onTap: allSubmitted ? null : () => ref.read(voiceControllerProvider.notifier).submitRating(apiValue),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: AnimatedScale(
+                      scale: selected ? 1.2 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        selected ? Icons.star_rounded : Icons.star_outline_rounded,
+                        size: 40,
+                        color: selected ? _kStarActive : _kStarInactive,
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Review text field
+          if (allSubmitted)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, color: Color(0xFF66BB6A), size: 20),
+                  const SizedBox(width: 10),
+                  Text(l10n?.thanksForFeedback ?? 'Thanks for your feedback!', style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.w600, fontSize: 14)),
+                ],
+              ),
+            )
+          else ...[
+            TextField(
+              controller: _reviewController,
+              maxLines: 3,
+              maxLength: 500,
+              textInputAction: TextInputAction.done,
+              style: const TextStyle(fontSize: 15, color: _kTextDark),
+              decoration: InputDecoration(
+                hintText: 'Tell us about your experience...',
+                hintStyle: TextStyle(color: _kTextMuted.withValues(alpha: 0.5)),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.all(16),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _kOrangeStart, width: 1.5)),
+                counterStyle: TextStyle(fontSize: 11, color: _kTextMuted.withValues(alpha: 0.5)),
+              ),
+            ),
+            const SizedBox(height: 14),
+
+            // Submit button
+            GestureDetector(
+              onTap: _submitting ? null : () async {
+                setState(() => _submitting = true);
+                final notifier = ref.read(voiceControllerProvider.notifier);
+                // Submit review if text is provided
+                if (_reviewController.text.trim().isNotEmpty) {
+                  await notifier.submitReview(_reviewController.text);
+                } else {
+                  // If no text but rating exists, just mark review as submitted
+                  if (voice.ratingSubmitted) {
+                    // Already has rating, mark complete
+                  }
+                }
+                setState(() => _submitting = false);
+              },
+              child: Container(
+                width: double.infinity,
+                height: 48,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: const LinearGradient(colors: [_kOrangeStart, _kOrangeEnd]),
+                  boxShadow: [BoxShadow(color: _kOrangeStart.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4))],
+                ),
+                child: Center(
+                  child: _submitting
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text(
+                          'Submit Review',
+                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -895,21 +940,3 @@ class _Card extends StatelessWidget {
   }
 }
 
-class _SummaryRow extends StatelessWidget {
-  final String label;
-  final double value;
-  final bool bold;
-
-  const _SummaryRow({required this.label, required this.value, this.bold = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontSize: 15, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: bold ? _kTextDark : _kTextMuted)),
-        Text('\$${value.toStringAsFixed(2)}', style: TextStyle(fontSize: 15, fontWeight: bold ? FontWeight.w700 : FontWeight.w600, color: _kTextDark)),
-      ],
-    );
-  }
-}

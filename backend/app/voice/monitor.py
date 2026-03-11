@@ -74,6 +74,9 @@ class ConversationMonitor:
     _pipeline_task: Any = field(default=None, init=False, repr=False)
     _pending_task: asyncio.Task | None = field(default=None, init=False, repr=False)
     _conversation: list[dict[str, str]] = field(default_factory=list, init=False)
+    # Accumulated token usage from monitor LLM calls
+    prompt_tokens: int = field(default=0, init=False)
+    completion_tokens: int = field(default=0, init=False)
 
     def attach(self, pipeline_task: Any) -> None:
         """Attach to a pipeline task so corrections can be injected."""
@@ -142,6 +145,19 @@ class ConversationMonitor:
                     max_output_tokens=256,
                 ),
             )
+
+            # Accumulate token usage from monitor call
+            um = getattr(response, "usage_metadata", None)
+            if um is not None:
+                self.prompt_tokens += getattr(um, "prompt_token_count", 0) or 0
+                self.completion_tokens += getattr(um, "candidates_token_count", 0) or 0
+                logger.debug(
+                    "Monitor usage: +%d/%d (cumulative: %d/%d)",
+                    getattr(um, "prompt_token_count", 0) or 0,
+                    getattr(um, "candidates_token_count", 0) or 0,
+                    self.prompt_tokens,
+                    self.completion_tokens,
+                )
 
             result_text = (response.text or "").strip()
             logger.debug("Monitor result: %s", result_text)

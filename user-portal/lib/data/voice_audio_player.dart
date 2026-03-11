@@ -12,8 +12,8 @@ class VoiceAudioPlayer {
   static const int numChannels = 1;
 
   /// How long the buffer must stay empty before we declare playback stopped.
-  /// This prevents premature mic-unmute between WebSocket chunks.
-  static const Duration _drainDebounce = Duration(milliseconds: 500);
+  /// Keep short so the mic unmutes quickly after bot finishes speaking.
+  static const Duration _drainDebounce = Duration(milliseconds: 150);
 
   bool _playing = false;
   bool _setup = false;
@@ -28,7 +28,7 @@ class VoiceAudioPlayer {
   Future<void> setup() async {
     if (_setup) return;
     _setup = true;
-    FlutterPcmSound.setFeedThreshold(4000);
+    FlutterPcmSound.setFeedThreshold(2000);
     FlutterPcmSound.setFeedCallback(_onFeed);
     await FlutterPcmSound.setLogLevel(LogLevel.none);
     await FlutterPcmSound.setup(
@@ -76,6 +76,22 @@ class VoiceAudioPlayer {
   }
 
   bool get isPlaying => _playing;
+
+  /// Flush any buffered audio immediately (used for barge-in / interruption).
+  /// Tears down and re-creates the native audio track.
+  Future<void> clearBuffer() async {
+    if (!_setup || _disposed) return;
+    _drainTimer?.cancel();
+    _drainTimer = null;
+    final wasPlaying = _playing;
+    _playing = false;
+    await FlutterPcmSound.release();
+    _setup = false;
+    await setup();
+    if (wasPlaying) {
+      onPlayingChanged?.call(false);
+    }
+  }
 
   Future<void> stop() async {
     if (!_setup) return;

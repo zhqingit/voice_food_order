@@ -23,14 +23,16 @@ class LiveOrderItem {
   final String name;
   final int quantity;
   final double lineTotal;
+  final String? note;
 
-  const LiveOrderItem({required this.name, required this.quantity, required this.lineTotal});
+  const LiveOrderItem({required this.name, required this.quantity, required this.lineTotal, this.note});
 
   factory LiveOrderItem.fromJson(Map<String, dynamic> json) {
     return LiveOrderItem(
       name: json['name'] as String? ?? 'Item',
       quantity: json['quantity'] as int? ?? 1,
       lineTotal: (json['line_total'] as num?)?.toDouble() ?? 0,
+      note: json['note'] as String?,
     );
   }
 }
@@ -76,6 +78,7 @@ class VoiceUiState {
   final List<OrderItemOut>? orderItems;
   final int? rating;
   final bool ratingSubmitted;
+  final bool reviewSubmitted;
 
   const VoiceUiState({
     required this.connecting,
@@ -90,6 +93,7 @@ class VoiceUiState {
     required this.orderItems,
     required this.rating,
     required this.ratingSubmitted,
+    required this.reviewSubmitted,
   });
 
   factory VoiceUiState.initial() => const VoiceUiState(
@@ -105,6 +109,7 @@ class VoiceUiState {
         orderItems: null,
         rating: null,
         ratingSubmitted: false,
+        reviewSubmitted: false,
       );
 
   VoiceUiState copyWith({
@@ -121,6 +126,7 @@ class VoiceUiState {
     List<OrderItemOut>? orderItems,
     int? rating,
     bool? ratingSubmitted,
+    bool? reviewSubmitted,
   }) {
     return VoiceUiState(
       connecting: connecting ?? this.connecting,
@@ -135,6 +141,7 @@ class VoiceUiState {
       orderItems: orderItems ?? this.orderItems,
       rating: rating ?? this.rating,
       ratingSubmitted: ratingSubmitted ?? this.ratingSubmitted,
+      reviewSubmitted: reviewSubmitted ?? this.reviewSubmitted,
     );
   }
 }
@@ -218,7 +225,8 @@ class VoiceController extends Notifier<VoiceUiState> {
         return;
       }
 
-      // 4. Wire mic muting: pause mic while bot is speaking to prevent echo.
+      // 4. Mute mic while bot speaks to prevent echo feedback.
+      //    Barge-in is handled via the interrupt() method (tap-to-interrupt).
       audioPlayer.onPlayingChanged = (playing) {
         if (playing) {
           recorder.pause();
@@ -237,6 +245,8 @@ class VoiceController extends Notifier<VoiceUiState> {
           _addTranscript('user', evt['text'] as String? ?? '');
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
+        } else if (type == 'interruption') {
+          ref.read(voiceAudioPlayerProvider).clearBuffer();
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
@@ -332,6 +342,18 @@ class VoiceController extends Notifier<VoiceUiState> {
       state = state.copyWith(ratingSubmitted: true);
     } catch (e) {
       _append('submit rating failed: $e');
+    }
+  }
+
+  Future<void> submitReview(String review) async {
+    final sessionId = state.sessionId;
+    if (sessionId == null || review.trim().isEmpty) return;
+
+    try {
+      await ref.read(voiceSessionRepositoryProvider).submitReview(sessionId: sessionId, review: review.trim());
+      state = state.copyWith(reviewSubmitted: true);
+    } catch (e) {
+      _append('submit review failed: $e');
     }
   }
 

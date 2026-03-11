@@ -11,6 +11,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/auth_template"
 
+    # Database connection pool
+    db_pool_size: int = 20
+    db_max_overflow: int = 30
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
+
     jwt_secret: str = "change-me"
     jwt_algorithm: str = "HS256"
     access_token_ttl_minutes: int = 10

@@ -79,4 +79,16 @@ class VoiceSessionRepository {
     }
     return VoiceSessionOut.fromJson(json);
   }
+
+  Future<VoiceSessionOut> submitReview({required String sessionId, required String review}) async {
+    final res = await _dio.patch<Map<String, dynamic>>(
+      '/voice/sessions/$sessionId/review',
+      data: {'review': review},
+    );
+    final json = res.data;
+    if (json == null) {
+      throw Exception('Empty response');
+    }
+    return VoiceSessionOut.fromJson(json);
+  }
 }

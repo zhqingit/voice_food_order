@@ -10,6 +10,7 @@ export type OrderOut = {
   subtotal: Money
   tax: Money
   total: Money
+  customer_name: string | null
   notes: string | null
   created_at: string
 }
@@ -21,6 +22,7 @@ export type OrderItemOut = {
   name: string | null
   quantity: number
   price_snapshot: Money
+  note: string | null
 }
 
 export async function listOrders(): Promise<OrderOut[]> {
@@ -41,4 +43,16 @@ export async function listOrderItems(orderId: UUID): Promise<OrderItemOut[]> {
 export async function updateOrderStatus(orderId: UUID, status: string): Promise<OrderOut> {
   const res = await apiClient.patch(`/store/orders/${orderId}`, { status })
   return res.data as OrderOut
+}
+
+export type OrderUsage = {
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  llm_cost: string
+}
+
+export async function getOrderUsage(orderId: UUID): Promise<OrderUsage> {
+  const res = await apiClient.get(`/store/orders/${orderId}/usage`)
+  return res.data as OrderUsage
 }

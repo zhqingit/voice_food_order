@@ -33,6 +33,10 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                             "enum": ["small", "medium", "large"],
                             "description": "Size of the item (small, medium, or large). Only use when the item has size-based pricing.",
                         },
+                        "note": {
+                            "type": "string",
+                            "description": "Special instructions or preferences for this item (e.g. 'extra spicy', 'no onions', 'well done').",
+                        },
                     },
                     "required": ["quantity"],
                 },
@@ -65,9 +69,32 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                 "parameters": {"type": "object", "properties": {}},
             },
             {
+                "name": "set_order_note",
+                "description": "Set a note on the entire order (e.g. 'no utensils', 'leave at door', 'allergic to peanuts').",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "note": {
+                            "type": "string",
+                            "description": "The note to attach to the order.",
+                        },
+                    },
+                    "required": ["note"],
+                },
+            },
+            {
                 "name": "checkout",
-                "description": "Finalize the order.",
-                "parameters": {"type": "object", "properties": {}},
+                "description": "Finalize the order. Must include the customer's name for pickup/delivery identification.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "customer_name": {
+                            "type": "string",
+                            "description": "The customer's name for the order.",
+                        },
+                    },
+                    "required": ["customer_name"],
+                },
             },
         ]
     }
@@ -111,6 +138,7 @@ def create_voice_tool_handlers(
             item_name=(args.get("item_name") or None),
             quantity=int(args.get("quantity", 1) or 1),
             size=(args.get("size") or None),
+            note=(args.get("note") or None),
         )
         if monitor is not None:
             monitor.record_tool_result("add_item", result)
@@ -155,11 +183,25 @@ def create_voice_tool_handlers(
     # The checkout handler would typically finalize the order and may involve additional steps such as confirming the order details with the user, handling payment, etc.
     # For simplicity, this example just calls the checkout method on the router and supports a result callback.
     async def checkout(params: Any):
+        args = _extract_args(params)
         if monitor is not None:
-            monitor.record_tool_call("checkout", {})
-        result = router.checkout()
+            monitor.record_tool_call("checkout", args)
+        result = router.checkout(customer_name=args.get("customer_name") or None)
         if monitor is not None:
             monitor.record_tool_result("checkout", result)
+        await _notify_order(result)
+        callback = _result_callback(params)
+        if callback:
+            await callback(result)
+        return result
+
+    async def set_order_note(params: Any):
+        args = _extract_args(params)
+        if monitor is not None:
+            monitor.record_tool_call("set_order_note", args)
+        result = router.set_order_note(note=args.get("note", ""))
+        if monitor is not None:
+            monitor.record_tool_result("set_order_note", result)
         await _notify_order(result)
         callback = _result_callback(params)
         if callback:
@@ -170,6 +212,7 @@ def create_voice_tool_handlers(
         "add_item": add_item,
         "remove_item": remove_item,
         "get_summary": get_summary,
+        "set_order_note": set_order_note,
         "checkout": checkout,
     }
 

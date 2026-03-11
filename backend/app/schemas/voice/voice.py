@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
@@ -19,12 +20,21 @@ class VoiceSessionOut(BaseModel):
     channel: str
     status: str
     rating: int | None
+    review: str | None = None
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    llm_cost: Decimal = Decimal("0")
     started_at: datetime
     ended_at: datetime | None
 
 
 class VoiceSessionRating(BaseModel):
     rating: int = Field(ge=1, le=10)
+
+
+class VoiceSessionReview(BaseModel):
+    review: str = Field(min_length=1, max_length=2000)
 
 
 class VoiceEventIn(BaseModel):

@@ -3,12 +3,11 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import Session
 
 from app.core.errors import AppError
-from app.db.session import get_db
+from app.db.session import get_db_session
 from app.models.user import User
 from app.voice import (
     GEMINI_VOICE_TOOLS_SCHEMA,
@@ -38,24 +37,27 @@ class DailyStartRequest(BaseModel):
 
 
 @router.post("/daily/start")
-async def start_daily_call(payload: DailyStartRequest, db: Session = Depends(get_db)) -> dict:
+async def start_daily_call(payload: DailyStartRequest) -> dict:
     if PipelineRunner is None:
         raise AppError(status_code=501, code="voice_unavailable", detail="Voice pipeline not available")
 
-    user: User | None = None
-    if payload.user_id is not None:
-        user = db.get(User, payload.user_id)
-        if user is None or not user.is_active:
-            raise AppError(status_code=404, code="user_not_found", detail="User not found")
+    # Short-lived session for setup queries only.
+    user_id: uuid.UUID | None = None
+    with get_db_session() as db:
+        if payload.user_id is not None:
+            user: User | None = db.get(User, payload.user_id)
+            if user is None or not user.is_active:
+                raise AppError(status_code=404, code="user_not_found", detail="User not found")
+            user_id = user.id
 
     runtime = load_voice_runtime_config()
     google_config = load_google_voice_config()
     system_prompt = build_system_prompt()
 
     tool_context = VoiceToolContext(
-        db=db,
+        db_factory=get_db_session,
         store_id=payload.store_id,
-        user_id=user.id if user else None,
+        user_id=user_id,
         order_id=payload.order_id,
         channel="phone",
     )

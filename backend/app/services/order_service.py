@@ -45,12 +45,13 @@ def create_draft_order(db: Session, *, payload: OrderCreate) -> Order:
     return order
 
 
-def create_order_item(db: Session, *, order: Order, menu_item: MenuItem, quantity: int, price_override: Decimal | None = None) -> OrderItem:
+def create_order_item(db: Session, *, order: Order, menu_item: MenuItem, quantity: int, price_override: Decimal | None = None, note: str | None = None) -> OrderItem:
     item = OrderItem(
         order_id=order.id,
         menu_item_id=menu_item.id,
         quantity=quantity,
         price_snapshot=price_override if price_override is not None else menu_item.price,
+        note=note,
     )
     db.add(item)
     return item

@@ -35,6 +35,7 @@ def _order_out(order: Order) -> OrderOut:
         subtotal=order.subtotal,
         tax=order.tax,
         total=order.total,
+        customer_name=order.customer_name,
         notes=order.notes,
         created_at=order.created_at,
     )
