@@ -207,12 +207,13 @@ class VoiceController extends Notifier<VoiceUiState> {
       //    through the speaker (not earpiece).
       if (Platform.isIOS) {
         final audioSession = await AudioSession.instance;
-        await audioSession.setCategory(
-          AVAudioSessionCategory.playAndRecord,
-          AVAudioSessionCategoryOptions.defaultToSpeaker |
+        await audioSession.configure(AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions:
+              AVAudioSessionCategoryOptions.defaultToSpeaker |
               AVAudioSessionCategoryOptions.allowBluetooth,
-          AVAudioSessionMode.voiceChat,
-        );
+          avAudioSessionMode: AVAudioSessionMode.voiceChat,
+        ));
         await audioSession.setActive(true);
       }
 
