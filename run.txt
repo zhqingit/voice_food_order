@@ -33,3 +33,170 @@ docker compose exec db psql -U postgres -d auth_template -c "SELECT vs.id::text,
 docker compose exec db psql -U postgres -d auth_template -c "SELECT id::text, rating, review, started_at FROM voice_sessions WHERE review IS NOT NULL ORDER BY started_at DESC;"
 
 
+# run gcp server
+1. 
+
+# Enable required APIs
+gcloud services enable compute.googleapis.com
+
+#Step 2: Create a VM
+  gcloud compute instances create voxeats-server \
+    --zone=us-central1-a \
+    --machine-type=e2-micro\
+    --boot-disk-size=30GB \
+    --image-family=ubuntu-2404-lts-amd64 \
+    --image-project=ubuntu-os-cloud \
+    --tags=http-server,https-server
+
+ Step 3: Open Firewall Ports
+
+  # API (8000) and store portal (5174)
+  gcloud compute firewall-rules create allow-voxeats \
+    --allow=tcp:8000,tcp:5174 \
+    --target-tags=http-server \
+    --description="VoxEats API and store portal"
+
+
+  Step 4: SSH into the VM and Install Docker
+
+  gcloud compute ssh voxeats-server --zone=us-central1-a
+
+  Then on the VM:
+
+  # Install Docker
+  sudo apt-get update
+  sudo apt-get install -y docker.io docker-compose-v2 git
+  sudo usermod -aG docker $USER
+
+  # Logout and SSH back in for group change to take effect
+  exit
+
+  gcloud compute ssh voxeats-server --zone=us-central1-a
+
+
+ Step 5: Upload Your Code
+
+  Option A — From your local machine (in a new terminal):
+
+  # From your project root
+  cd /data/data0/myproject/apps/Resto_AI/src/voice_food_order
+
+  # Compress and upload
+  tar czf /tmp/voxeats.tar.gz --exclude='node_modules' --exclude='.venv' --exclude='__pycache__' --exclude='.dart_tool' --exclude='build' .
+
+  gcloud compute scp /tmp/voxeats.tar.gz voxeats-server:~ --zone=us-central1-a
+
+  Then on the VM:
+
+  mkdir -p ~/voxeats && cd ~/voxeats
+  tar xzf ~/voxeats.tar.gz
+
+  Option B — Git clone (if your repo is on GitHub):
+
+  cd ~ && git clone <your-repo-url> voxeats && cd voxeats
+
+Step 6: Configure Environment
+
+  On the VM, create the production .env:
+
+  cd ~/voxeats/backend
+  VM_IP=$(curl -s http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/access-configs/0/external-ip -H "Metadata-Flavor: Google")
+  JWT_SECRET=$(openssl rand -hex 32)
+  REFRESH_TOKEN_PEPPER=$(openssl rand -hex 32)
+ 
+  cat > .env << EOF
+  DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/auth_template
+  JWT_SECRET=${JWT_SECRET}
+  REFRESH_TOKEN_PEPPER=${REFRESH_TOKEN_PEPPER}
+  CORS_ORIGINS=*
+  GEMINI_API_KEY=YOUR_GEMINI_KEY_HERE
+  USER_API_HOSTS=user-api.local,${VM_IP}
+  STORE_API_HOSTS=store-api.local,${VM_IP}
+  WEB_RELOAD=false
+  WEB_WORKERS=1
+
+  EOF
+ 
+  Then manually edit the GEMINI_API_KEY line:
+  vi .env
+  Note: removed the ' quotes around EOF so that the ${} variables get expanded. The Gemini key is left as a plain placeholder string (no <>) so it won't break — just replace it with your real key.
+
+
+ Step 7: Update docker-compose for Production
+
+  On the VM, edit backend/docker-compose.yml:
+
+  cd ~/voxeats/backend
+
+  Change the api command line to use the production entrypoint:
+
+      # Remove or comment out the dev command:
+      # command: ["bash", "-lc", "alembic upgrade head && ...uvicorn...--reload"]
+      # Use instead:
+      command: ["./entrypoint.sh"]
+
+  Also update the store portal's Vite config to use the VM's IP for the API target, or configure the store portal to accept connections from any host.
+
+  Step 8: Start Everything
+
+  cd ~/voxeats/backend
+  docker compose up --build -d
+
+  Check logs:
+
+  docker compose logs -f api    # Should show gunicorn with 4 workers
+  docker compose logs -f db     # Postgres healthy
+
+  Step 9: Configure Flutter App
+
+  Update the API base URL in your Flutter app to point to the VM:
+
+  # Find the config file
+  # In user-portal/lib/core/app_config.dart or similar
+  # Change the API URL to:
+  http://<YOUR_VM_IP>:8000
+
+  The host header needs to match USER_API_HOSTS. The simplest approach: add the VM's IP to USER_API_HOSTS in the .env (done in Step 6).
+
+  Step 10: Verify
+
+  From your local machine:
+
+  # Health check
+  curl http://<VM_IP>:8000/health
+
+  # Store portal
+  # Open http://<VM_IP>:5174 in browser
+
+  # Test store API
+  curl -H "Host: store-api.local" http://<VM_IP>:8000/store/auth/login \
+    -H "Content-Type: application/json" \
+    -d '{"email":"test@example.com","password":"password123"}'
+
+
+###### --------use e2-micro-------#####
+ Problems with 1GB RAM:
+  - Docker build alone can OOM (pip install + pipecat dependencies)
+  - 4 gunicorn workers × ~150MB each = 600MB, plus Postgres = won't fit
+  - Store portal Vite build also needs RAM
+
+  Make it work:
+
+  1. Reduce workers to 1-2 in your .env:
+  WEB_WORKERS=1
+  2. Add swap (run this on the VM before docker compose):
+  sudo fallocate -l 2G /swapfile
+  sudo chmod 600 /swapfile
+  sudo mkswap /swapfile
+  sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  3. Skip store portal container — build it locally and serve as static files instead, or just test the API + Flutter app:
+  # Only start db + api
+  #docker compose up --build -d db api
+
+  Realistic expectation on e2-micro:
+  - 1-3 concurrent voice calls: OK
+  - API + store portal browsing: OK
+  - Any real load testing: No
+
+  My recommendation: Use e2-small (0.5 vCPU, 2GB RAM) — it's ~$13/month (vs $8 for micro) and avoids all the RAM headaches. It'll handle 2 workers + Postgres + store portal without swap tricks.
