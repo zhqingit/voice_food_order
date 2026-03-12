@@ -206,16 +206,14 @@ class VoiceController extends Notifier<VoiceUiState> {
       // 2. Configure iOS audio session for simultaneous playback + recording
       //    through the speaker (not earpiece).
       if (Platform.isIOS) {
-        final session = await AudioSession.instance;
-        await session.configure(const AudioSessionConfiguration(
-          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-          avAudioSessionCategoryOptions: {
-            AVAudioSessionCategoryOptions.defaultToSpeaker,
-            AVAudioSessionCategoryOptions.allowBluetooth,
-          },
-          avAudioSessionMode: AVAudioSessionMode.voiceChat,
-        ));
-        await session.setActive(true);
+        final audioSession = await AudioSession.instance;
+        await audioSession.setCategory(
+          AVAudioSessionCategory.playAndRecord,
+          AVAudioSessionCategoryOptions.defaultToSpeaker |
+              AVAudioSessionCategoryOptions.allowBluetooth,
+          AVAudioSessionMode.voiceChat,
+        );
+        await audioSession.setActive(true);
       }
 
       // 3. Set up audio player (native AudioTrack).
