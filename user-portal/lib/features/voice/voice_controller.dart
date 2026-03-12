@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
@@ -201,11 +203,26 @@ class VoiceController extends Notifier<VoiceUiState> {
       final session = await repo.create(storeId: storeId, channel: 'voice');
       _append('created session ${session.id}');
 
-      // 2. Set up audio player (native AudioTrack) FIRST.
+      // 2. Configure iOS audio session for simultaneous playback + recording
+      //    through the speaker (not earpiece).
+      if (Platform.isIOS) {
+        final session = await AudioSession.instance;
+        await session.configure(const AudioSessionConfiguration(
+          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+          avAudioSessionCategoryOptions: {
+            AVAudioSessionCategoryOptions.defaultToSpeaker,
+            AVAudioSessionCategoryOptions.allowBluetooth,
+          },
+          avAudioSessionMode: AVAudioSessionMode.voiceChat,
+        ));
+        await session.setActive(true);
+      }
+
+      // 3. Set up audio player (native AudioTrack).
       final audioPlayer = ref.read(voiceAudioPlayerProvider);
       await audioPlayer.setup();
 
-      // 3. Start mic recorder BEFORE WebSocket so it holds audio focus first.
+      // 4. Start mic recorder BEFORE WebSocket so it holds audio focus first.
       final recorder = ref.read(voiceAudioRecorderProvider);
       final ws = ref.read(voiceWsClientProvider);
 
@@ -225,7 +242,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         return;
       }
 
-      // 4. Mute mic while bot speaks to prevent echo feedback.
+      // 5. Mute mic while bot speaks to prevent echo feedback.
       //    Barge-in is handled via the interrupt() method (tap-to-interrupt).
       audioPlayer.onPlayingChanged = (playing) {
         if (playing) {
@@ -235,7 +252,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         }
       };
 
-      // 5. Connect WebSocket with sessionId so backend can link order.
+      // 6. Connect WebSocket with sessionId so backend can link order.
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
 
       _wsSub = ws.events.listen((evt) {
@@ -257,7 +274,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         }
       });
 
-      // 6. Subscribe to audio stream and feed to player.
+      // 7. Subscribe to audio stream and feed to player.
       _audioSub = ws.audioStream.listen((bytes) {
         audioPlayer.enqueue(bytes);
       });
