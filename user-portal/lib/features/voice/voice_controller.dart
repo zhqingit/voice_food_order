@@ -239,9 +239,15 @@ class VoiceController extends Notifier<VoiceUiState> {
       // 5. On iOS, restart the recorder after the bot finishes speaking.
       //    flutter_pcm_sound's AudioUnit playback can kill the record package's
       //    AVAudioEngine input stream. Restarting creates a fresh stream.
+      //    Guard with _botWasPlaying to avoid restart loops (restart itself can
+      //    trigger transient playing→stopped transitions).
       if (Platform.isIOS) {
+        bool botWasPlaying = false;
         audioPlayer.onPlayingChanged = (playing) {
-          if (!playing) {
+          if (playing) {
+            botWasPlaying = true;
+          } else if (botWasPlaying) {
+            botWasPlaying = false;
             recorder.restart();
           }
         };
