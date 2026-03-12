@@ -203,23 +203,18 @@ class VoiceController extends Notifier<VoiceUiState> {
       final session = await repo.create(storeId: storeId, channel: 'voice');
       _append('created session ${session.id}');
 
-      // 2. Configure iOS audio session for simultaneous playback + recording
-      //    through the speaker (not earpiece).
-      if (Platform.isIOS) {
-        final audioSession = await AudioSession.instance;
-        await audioSession.configure(AudioSessionConfiguration(
-          avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-          avAudioSessionCategoryOptions:
-              AVAudioSessionCategoryOptions.defaultToSpeaker |
-              AVAudioSessionCategoryOptions.allowBluetooth,
-          avAudioSessionMode: AVAudioSessionMode.voiceChat,
-        ));
-        await audioSession.setActive(true);
-      }
-
-      // 3. Set up audio player (native AudioTrack).
+      // 2. Set up audio player (native AudioTrack).
+      //    flutter_pcm_sound.setup() sets iOS audio session to playAndRecord
+      //    without defaultToSpeaker — we override it below.
       final audioPlayer = ref.read(voiceAudioPlayerProvider);
       await audioPlayer.setup();
+
+      // 3. Configure iOS audio session AFTER flutter_pcm_sound.setup() so our
+      //    config takes precedence. voiceChat mode enables hardware echo
+      //    cancellation, so the mic can stay active while the bot speaks.
+      if (Platform.isIOS) {
+        await _configureIosAudioSession();
+      }
 
       // 4. Start mic recorder BEFORE WebSocket so it holds audio focus first.
       final recorder = ref.read(voiceAudioRecorderProvider);
@@ -241,17 +236,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         return;
       }
 
-      // 5. Mute mic while bot speaks to prevent echo feedback.
-      //    Barge-in is handled via the interrupt() method (tap-to-interrupt).
-      audioPlayer.onPlayingChanged = (playing) {
-        if (playing) {
-          recorder.pause();
-        } else {
-          recorder.resume();
-        }
-      };
-
-      // 6. Connect WebSocket with sessionId so backend can link order.
+      // 5. Connect WebSocket with sessionId so backend can link order.
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
 
       _wsSub = ws.events.listen((evt) {
@@ -262,7 +247,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
         } else if (type == 'interruption') {
-          ref.read(voiceAudioPlayerProvider).clearBuffer();
+          _handleInterruption();
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
@@ -302,9 +287,7 @@ class VoiceController extends Notifier<VoiceUiState> {
     _audioSub = null;
 
     try {
-      final player = ref.read(voiceAudioPlayerProvider);
-      player.onPlayingChanged = null;
-      await player.stop();
+      await ref.read(voiceAudioPlayerProvider).stop();
     } catch (_) {}
 
     try {
@@ -390,6 +373,31 @@ class VoiceController extends Notifier<VoiceUiState> {
       list.add(TranscriptEntry(speaker: speaker, text: text));
     }
     state = state.copyWith(transcripts: list);
+  }
+
+  /// Configure iOS audio session for playback + recording through the speaker
+  /// with hardware echo cancellation (voiceChat mode).
+  /// Must be called AFTER flutter_pcm_sound.setup() to override its config.
+  Future<void> _configureIosAudioSession() async {
+    final audioSession = await AudioSession.instance;
+    await audioSession.configure(AudioSessionConfiguration(
+      avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+      avAudioSessionCategoryOptions:
+          AVAudioSessionCategoryOptions.defaultToSpeaker |
+          AVAudioSessionCategoryOptions.allowBluetooth,
+      avAudioSessionMode: AVAudioSessionMode.voiceChat,
+    ));
+    await audioSession.setActive(true);
+  }
+
+  /// Handle barge-in interruption: clear audio buffer and re-apply iOS audio
+  /// session config since clearBuffer() calls flutter_pcm_sound.release()+setup().
+  Future<void> _handleInterruption() async {
+    final player = ref.read(voiceAudioPlayerProvider);
+    await player.clearBuffer();
+    if (Platform.isIOS) {
+      await _configureIosAudioSession();
+    }
   }
 
   void _append(String line) {
