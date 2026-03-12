@@ -8,6 +8,10 @@ class VoiceAudioRecorder {
   StreamSubscription<Uint8List>? _sub;
   bool _paused = false;
 
+  // Stored callbacks for restart().
+  void Function(Uint8List chunk)? _onChunk;
+  void Function(Object error)? _onError;
+
   bool get isRecording => _sub != null;
   bool get isPaused => _paused;
 
@@ -29,6 +33,8 @@ class VoiceAudioRecorder {
   }) async {
     if (_sub != null) return true;
     _paused = false;
+    _onChunk = onChunk;
+    _onError = onError;
 
     final ok = await _recorder.hasPermission();
     if (!ok) return false;
@@ -54,6 +60,17 @@ class VoiceAudioRecorder {
     );
 
     return true;
+  }
+
+  /// Stop and re-start the recorder with the same callbacks.
+  /// Used on iOS to recover from audio session reconfiguration that kills the
+  /// underlying AVAudioEngine input stream.
+  Future<void> restart() async {
+    final chunk = _onChunk;
+    if (chunk == null) return;
+    final error = _onError;
+    await stop();
+    await start(onChunk: chunk, onError: error);
   }
 
   Future<void> stop() async {

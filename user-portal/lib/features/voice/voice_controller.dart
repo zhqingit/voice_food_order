@@ -236,7 +236,18 @@ class VoiceController extends Notifier<VoiceUiState> {
         return;
       }
 
-      // 5. Connect WebSocket with sessionId so backend can link order.
+      // 5. On iOS, restart the recorder after the bot finishes speaking.
+      //    flutter_pcm_sound's AudioUnit playback can kill the record package's
+      //    AVAudioEngine input stream. Restarting creates a fresh stream.
+      if (Platform.isIOS) {
+        audioPlayer.onPlayingChanged = (playing) {
+          if (!playing) {
+            recorder.restart();
+          }
+        };
+      }
+
+      // 6. Connect WebSocket with sessionId so backend can link order.
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
 
       _wsSub = ws.events.listen((evt) {
@@ -287,7 +298,9 @@ class VoiceController extends Notifier<VoiceUiState> {
     _audioSub = null;
 
     try {
-      await ref.read(voiceAudioPlayerProvider).stop();
+      final player = ref.read(voiceAudioPlayerProvider);
+      player.onPlayingChanged = null;
+      await player.stop();
     } catch (_) {}
 
     try {
@@ -390,13 +403,15 @@ class VoiceController extends Notifier<VoiceUiState> {
     await audioSession.setActive(true);
   }
 
-  /// Handle barge-in interruption: clear audio buffer and re-apply iOS audio
-  /// session config since clearBuffer() calls flutter_pcm_sound.release()+setup().
+  /// Handle barge-in interruption: clear audio buffer, re-apply iOS audio
+  /// session config (clearBuffer() calls flutter_pcm_sound.release()+setup()),
+  /// and restart the recorder since the audio session change kills it on iOS.
   Future<void> _handleInterruption() async {
     final player = ref.read(voiceAudioPlayerProvider);
     await player.clearBuffer();
     if (Platform.isIOS) {
       await _configureIosAudioSession();
+      await ref.read(voiceAudioRecorderProvider).restart();
     }
   }
 
