@@ -235,13 +235,19 @@ class VoiceController extends Notifier<VoiceUiState> {
       }
 
       // 5. Mute mic while bot speaks to prevent echo feedback.
-      audioPlayer.onPlayingChanged = (playing) {
-        if (playing) {
-          recorder.pause();
-        } else {
-          recorder.resume();
-        }
-      };
+      //    On iOS, skip pause/resume — voiceChat mode provides hardware echo
+      //    cancellation. Keeping the mic stream alive avoids the iOS issue
+      //    where AVAudioEngine silently dies after an audio session change
+      //    and resume() can't revive it.
+      if (!Platform.isIOS) {
+        audioPlayer.onPlayingChanged = (playing) {
+          if (playing) {
+            recorder.pause();
+          } else {
+            recorder.resume();
+          }
+        };
+      }
 
       // 6. Connect WebSocket with sessionId so backend can link order.
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
@@ -253,16 +259,14 @@ class VoiceController extends Notifier<VoiceUiState> {
           _addTranscript('user', evt['text'] as String? ?? '');
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
-          // iOS only: restart recorder to recover from dead AVAudioEngine
-          // stream caused by flutter_pcm_sound's AudioUnit playback.
-          // Re-apply audio session config since record package reconfigures it.
-          if (Platform.isIOS) {
-            ref.read(voiceAudioRecorderProvider).restart().then((_) {
-              _configureIosAudioSession();
-            });
-          }
         } else if (type == 'interruption') {
-          ref.read(voiceAudioPlayerProvider).clearBuffer();
+          // clearBuffer() calls flutter_pcm_sound.release()+setup() which
+          // overrides the iOS audio session config. Re-apply afterward.
+          ref.read(voiceAudioPlayerProvider).clearBuffer().then((_) {
+            if (Platform.isIOS) {
+              _configureIosAudioSession();
+            }
+          });
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
