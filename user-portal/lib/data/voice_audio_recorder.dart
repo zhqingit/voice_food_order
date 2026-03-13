@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:record/record.dart';
@@ -40,10 +41,20 @@ class VoiceAudioRecorder {
     if (!ok) return false;
 
     final stream = await _recorder.startStream(
-      const RecordConfig(
+      RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: 16000,
         numChannels: 1,
+        // On iOS, prevent the record package from pausing/stopping AVAudioEngine
+        // when flutter_pcm_sound's AudioUnit starts/stops (which sends
+        // iOS audio session interruption notifications).
+        // On Android, keep the default (pause) since it works correctly.
+        audioInterruption: Platform.isIOS
+            ? AudioInterruptionMode.none
+            : AudioInterruptionMode.pause,
+        // We manage the audio session ourselves via audio_session package
+        // so the record package must not override our config.
+        iosConfig: const IosRecordConfig(manageAudioSession: false),
       ),
     );
 
