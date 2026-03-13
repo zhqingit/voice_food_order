@@ -235,19 +235,13 @@ class VoiceController extends Notifier<VoiceUiState> {
       }
 
       // 5. Mute mic while bot speaks to prevent echo feedback.
-      //    On iOS, skip pause/resume — voiceChat mode provides hardware echo
-      //    cancellation. Keeping the mic stream alive avoids the iOS issue
-      //    where AVAudioEngine silently dies after an audio session change
-      //    and resume() can't revive it.
-      if (!Platform.isIOS) {
-        audioPlayer.onPlayingChanged = (playing) {
-          if (playing) {
-            recorder.pause();
-          } else {
-            recorder.resume();
-          }
-        };
-      }
+      audioPlayer.onPlayingChanged = (playing) {
+        if (playing) {
+          recorder.pause();
+        } else {
+          recorder.resume();
+        }
+      };
 
       // 6. Connect WebSocket with sessionId so backend can link order.
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
@@ -259,12 +253,18 @@ class VoiceController extends Notifier<VoiceUiState> {
           _addTranscript('user', evt['text'] as String? ?? '');
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
+          // iOS: restart recorder to revive dead AVAudioEngine stream,
+          // then re-apply audio session config.
+          if (Platform.isIOS) {
+            _recoverIosAudio();
+          }
         } else if (type == 'interruption') {
-          // clearBuffer() calls flutter_pcm_sound.release()+setup() which
-          // overrides the iOS audio session config. Re-apply afterward.
+          // iOS: clearBuffer() re-runs flutter_pcm_sound.setup() which
+          // overrides audio session AND may kill the recorder stream.
+          // Recover both after clearBuffer completes.
           ref.read(voiceAudioPlayerProvider).clearBuffer().then((_) {
             if (Platform.isIOS) {
-              _configureIosAudioSession();
+              _recoverIosAudio();
             }
           });
         } else if (type == 'order_update') {
@@ -409,6 +409,13 @@ class VoiceController extends Notifier<VoiceUiState> {
       avAudioSessionMode: AVAudioSessionMode.voiceChat,
     ));
     await audioSession.setActive(true);
+  }
+
+  /// iOS only: restart the recorder (to revive a dead AVAudioEngine stream)
+  /// and re-apply the audio session config (to restore defaultToSpeaker).
+  Future<void> _recoverIosAudio() async {
+    await ref.read(voiceAudioRecorderProvider).restart();
+    await _configureIosAudioSession();
   }
 
   void _append(String line) {
