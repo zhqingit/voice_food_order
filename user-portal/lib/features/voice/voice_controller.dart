@@ -203,18 +203,15 @@ class VoiceController extends Notifier<VoiceUiState> {
       final session = await repo.create(storeId: storeId, channel: 'voice');
       _append('created session ${session.id}');
 
-      // 2. Set up audio player (native AudioTrack).
-      //    flutter_pcm_sound.setup() sets iOS audio session to playAndRecord
-      //    without defaultToSpeaker — we override it below.
-      final audioPlayer = ref.read(voiceAudioPlayerProvider);
-      await audioPlayer.setup();
-
-      // 3. Configure iOS audio session AFTER flutter_pcm_sound.setup() so our
-      //    config takes precedence. voiceChat mode enables hardware echo
-      //    cancellation, so the mic can stay active while the bot speaks.
+      // 2. Configure iOS audio session for playback + recording through the
+      //    speaker (not earpiece) with hardware echo cancellation.
       if (Platform.isIOS) {
         await _configureIosAudioSession();
       }
+
+      // 3. Set up audio player (native AudioTrack).
+      final audioPlayer = ref.read(voiceAudioPlayerProvider);
+      await audioPlayer.setup();
 
       // 4. Start mic recorder BEFORE WebSocket so it holds audio focus first.
       final recorder = ref.read(voiceAudioRecorderProvider);
@@ -236,22 +233,14 @@ class VoiceController extends Notifier<VoiceUiState> {
         return;
       }
 
-      // 5. On iOS, restart the recorder after the bot finishes speaking.
-      //    flutter_pcm_sound's AudioUnit playback can kill the record package's
-      //    AVAudioEngine input stream. Restarting creates a fresh stream.
-      //    Guard with _botWasPlaying to avoid restart loops (restart itself can
-      //    trigger transient playing→stopped transitions).
-      if (Platform.isIOS) {
-        bool botWasPlaying = false;
-        audioPlayer.onPlayingChanged = (playing) {
-          if (playing) {
-            botWasPlaying = true;
-          } else if (botWasPlaying) {
-            botWasPlaying = false;
-            recorder.restart();
-          }
-        };
-      }
+      // 5. Mute mic while bot speaks to prevent echo feedback.
+      audioPlayer.onPlayingChanged = (playing) {
+        if (playing) {
+          recorder.pause();
+        } else {
+          recorder.resume();
+        }
+      };
 
       // 6. Connect WebSocket with sessionId so backend can link order.
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
@@ -264,7 +253,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
         } else if (type == 'interruption') {
-          _handleInterruption();
+          ref.read(voiceAudioPlayerProvider).clearBuffer();
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
@@ -407,18 +396,6 @@ class VoiceController extends Notifier<VoiceUiState> {
       avAudioSessionMode: AVAudioSessionMode.voiceChat,
     ));
     await audioSession.setActive(true);
-  }
-
-  /// Handle barge-in interruption: clear audio buffer, re-apply iOS audio
-  /// session config (clearBuffer() calls flutter_pcm_sound.release()+setup()),
-  /// and restart the recorder since the audio session change kills it on iOS.
-  Future<void> _handleInterruption() async {
-    final player = ref.read(voiceAudioPlayerProvider);
-    await player.clearBuffer();
-    if (Platform.isIOS) {
-      await _configureIosAudioSession();
-      await ref.read(voiceAudioRecorderProvider).restart();
-    }
   }
 
   void _append(String line) {
