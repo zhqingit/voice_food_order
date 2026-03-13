@@ -8,8 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers.dart';
 import '../../data/order_models.dart';
 import '../../data/order_repository.dart';
-import '../../data/voice_audio_player.dart';
-import '../../data/voice_audio_recorder.dart';
+import '../../data/voice_audio_bridge.dart';
 import '../../data/voice_session_repository.dart';
 import '../../data/voice_ws_client.dart';
 
@@ -162,16 +161,10 @@ final voiceWsClientProvider = Provider<VoiceWsClient>((ref) {
   return client;
 });
 
-final voiceAudioPlayerProvider = Provider<VoiceAudioPlayer>((ref) {
-  final player = VoiceAudioPlayer();
-  ref.onDispose(() => player.dispose());
-  return player;
-});
-
-final voiceAudioRecorderProvider = Provider<VoiceAudioRecorder>((ref) {
-  final r = VoiceAudioRecorder();
-  ref.onDispose(() => r.dispose());
-  return r;
+final voiceAudioBridgeProvider = Provider<VoiceAudioBridge>((ref) {
+  final bridge = VoiceAudioBridge();
+  ref.onDispose(() => bridge.dispose());
+  return bridge;
 });
 
 final voiceControllerProvider = NotifierProvider<VoiceController, VoiceUiState>(VoiceController.new);
@@ -203,49 +196,34 @@ class VoiceController extends Notifier<VoiceUiState> {
       final session = await repo.create(storeId: storeId, channel: 'voice');
       _append('created session ${session.id}');
 
-      // 2. Set up audio player (native AudioTrack).
-      final audioPlayer = ref.read(voiceAudioPlayerProvider);
-      await audioPlayer.setup();
-
-      // 3. Configure iOS audio session AFTER flutter_pcm_sound.setup() (which
-      //    sets playAndRecord without defaultToSpeaker) but BEFORE
-      //    recorder.start(), so the AVAudioEngine captures the correct
-      //    input format with voiceChat mode already active.
-      //    With manageAudioSession: false the recorder won't override this.
+      // 2. Configure iOS audio session BEFORE starting the audio bridge so
+      //    the single AVAudioEngine starts with voiceChat mode + defaultToSpeaker.
       if (Platform.isIOS) {
         await _configureIosAudioSession();
       }
 
-      // 4. Start mic recorder BEFORE WebSocket so it holds audio focus first.
-      final recorder = ref.read(voiceAudioRecorderProvider);
+      // 3. Start the unified audio bridge (recording + playback).
+      //    On iOS this creates one AVAudioEngine; on Android it delegates to
+      //    the existing VoiceAudioPlayer + VoiceAudioRecorder.
+      final bridge = ref.read(voiceAudioBridgeProvider);
       final ws = ref.read(voiceWsClientProvider);
 
-      final granted = await recorder.start(
-        onChunk: (Uint8List chunk) {
-          ws.sendBytes(chunk);
-        },
-        onError: (e) {
-          _append('mic error: $e');
-          state = state.copyWith(error: 'Microphone stopped unexpectedly.');
-          stop();
-        },
-      );
+      bridge.onRecordedChunk = (Uint8List chunk) {
+        ws.sendBytes(chunk);
+      };
+      bridge.onRecordError = (e) {
+        _append('mic error: $e');
+        state = state.copyWith(error: 'Microphone stopped unexpectedly.');
+        stop();
+      };
 
+      final granted = await bridge.startSession();
       if (!granted) {
         state = state.copyWith(connecting: false, error: 'Microphone permission not granted.');
         return;
       }
 
-      // 5. Mute mic while bot speaks to prevent echo feedback.
-      audioPlayer.onPlayingChanged = (playing) {
-        if (playing) {
-          recorder.pause();
-        } else {
-          recorder.resume();
-        }
-      };
-
-      // 6. Connect WebSocket with sessionId so backend can link order.
+      // 4. Connect WebSocket with sessionId so backend can link order.
       await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
 
       _wsSub = ws.events.listen((evt) {
@@ -256,7 +234,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
         } else if (type == 'interruption') {
-          ref.read(voiceAudioPlayerProvider).clearBuffer();
+          ref.read(voiceAudioBridgeProvider).clearPlayback();
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
@@ -267,9 +245,9 @@ class VoiceController extends Notifier<VoiceUiState> {
         }
       });
 
-      // 7. Subscribe to audio stream and feed to player.
+      // 5. Subscribe to audio stream and feed to bridge for playback.
       _audioSub = ws.audioStream.listen((bytes) {
-        audioPlayer.enqueue(bytes);
+        bridge.feedAudio(bytes);
       });
 
       state = state.copyWith(
@@ -296,13 +274,11 @@ class VoiceController extends Notifier<VoiceUiState> {
     _audioSub = null;
 
     try {
-      final player = ref.read(voiceAudioPlayerProvider);
-      player.onPlayingChanged = null;
-      await player.stop();
-    } catch (_) {}
-
-    try {
-      await ref.read(voiceAudioRecorderProvider).stop();
+      final bridge = ref.read(voiceAudioBridgeProvider);
+      bridge.onRecordedChunk = null;
+      bridge.onRecordError = null;
+      bridge.onPlayingChanged = null;
+      await bridge.stopSession();
     } catch (_) {}
 
     try {
