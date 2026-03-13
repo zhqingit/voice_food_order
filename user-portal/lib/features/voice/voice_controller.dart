@@ -207,7 +207,16 @@ class VoiceController extends Notifier<VoiceUiState> {
       final audioPlayer = ref.read(voiceAudioPlayerProvider);
       await audioPlayer.setup();
 
-      // 3. Start mic recorder BEFORE WebSocket so it holds audio focus first.
+      // 3. Configure iOS audio session AFTER flutter_pcm_sound.setup() (which
+      //    sets playAndRecord without defaultToSpeaker) but BEFORE
+      //    recorder.start(), so the AVAudioEngine captures the correct
+      //    input format with voiceChat mode already active.
+      //    With manageAudioSession: false the recorder won't override this.
+      if (Platform.isIOS) {
+        await _configureIosAudioSession();
+      }
+
+      // 4. Start mic recorder BEFORE WebSocket so it holds audio focus first.
       final recorder = ref.read(voiceAudioRecorderProvider);
       final ws = ref.read(voiceWsClientProvider);
 
@@ -225,13 +234,6 @@ class VoiceController extends Notifier<VoiceUiState> {
       if (!granted) {
         state = state.copyWith(connecting: false, error: 'Microphone permission not granted.');
         return;
-      }
-
-      // 4. Configure iOS audio session AFTER both flutter_pcm_sound.setup()
-      //    and recorder.start(), since both may set the audio session category
-      //    without defaultToSpeaker. Our config must be applied last.
-      if (Platform.isIOS) {
-        await _configureIosAudioSession();
       }
 
       // 5. Mute mic while bot speaks to prevent echo feedback.
