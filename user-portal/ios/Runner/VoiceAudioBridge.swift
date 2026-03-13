@@ -5,6 +5,12 @@ import AVFoundation
 /// and playback (24kHz PCM16 mono).  Does NOT manage AVAudioSession — the Dart
 /// side must configure it (via the audio_session package) before calling
 /// startSession.
+///
+/// Echo prevention uses two layers:
+///   1. Hardware AEC via `setVoiceProcessingEnabled(true)` on the input node
+///      (switches the I/O unit from RemoteIO to VoiceProcessingIO).
+///   2. Mic muting during playback using AVAudioPlayerNode completion callbacks
+///      as a safety net in case AEC alone is insufficient at high volume.
 class VoiceAudioBridge: NSObject, FlutterStreamHandler {
 
     // MARK: – Flutter channels
@@ -19,6 +25,13 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
     // Desired output formats (actual hardware rate may differ; we convert).
     private let recordSampleRate: Double = 16000
     private let playbackSampleRate: Double = 24000
+
+    // MARK: – Mic muting state
+    /// Number of playback buffers currently scheduled / playing.
+    /// When > 0 the mic tap drops audio. Accessed from multiple threads.
+    private let pendingBuffers = AtomicCounter()
+    /// True while the mic should be muted (bot is speaking).
+    private var micMuted: Bool { pendingBuffers.value > 0 }
 
     // MARK: – Init
 
@@ -79,9 +92,6 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
         let playerNode = AVAudioPlayerNode()
 
         // --- Playback graph ---
-        // We connect the player node to the main mixer using Float32 at the
-        // playback sample rate.  feedAudio() converts incoming Int16 → Float32
-        // before scheduling buffers.
         guard let playerFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: playbackSampleRate,
@@ -95,8 +105,23 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
         engine.attach(playerNode)
         engine.connect(playerNode, to: engine.mainMixerNode, format: playerFormat)
 
-        // --- Recording tap ---
+        // --- Recording setup ---
         let inputNode = engine.inputNode
+
+        // Enable hardware echo cancellation (AEC) + automatic gain control.
+        // This switches the I/O unit from RemoteIO to VoiceProcessingIO.
+        // Must be done BEFORE reading inputFormat because it changes the
+        // hardware format.
+        if #available(iOS 13.0, *) {
+            do {
+                try inputNode.setVoiceProcessingEnabled(true)
+                inputNode.isVoiceProcessingAGCEnabled = true
+            } catch {
+                // Non-fatal — continue without hardware AEC.
+                // Mic muting (layer 2) will still prevent echo.
+            }
+        }
+
         let hwFormat = inputNode.outputFormat(forBus: 0)
 
         guard hwFormat.sampleRate > 0 else {
@@ -123,10 +148,14 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
 
         let ratio = hwFormat.sampleRate / recordSampleRate
         let sink = eventSink  // capture for closure
+        let pending = pendingBuffers  // capture for closure
 
         inputNode.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) {
             [weak self] buffer, _ in
             guard self != nil, let sink = sink else { return }
+
+            // Layer 2: drop mic audio while bot is speaking.
+            if pending.value > 0 { return }
 
             let frameCapacity = AVAudioFrameCount(Double(buffer.frameLength) / ratio)
             guard frameCapacity > 0,
@@ -141,8 +170,7 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
             converter.convert(to: converted, error: &error, withInputFrom: inputBlock)
             if error != nil { return }
 
-            // Copy Int16 samples to Data.
-            let byteCount = Int(converted.frameLength) * 2  // 16-bit = 2 bytes
+            let byteCount = Int(converted.frameLength) * 2
             guard let channelData = converted.int16ChannelData else { return }
             let data = Data(bytes: channelData[0], count: byteCount)
 
@@ -172,18 +200,17 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
     private func feedAudio(_ typedData: FlutterStandardTypedData,
                            result: @escaping FlutterResult) {
         guard let playerNode = playerNode else {
-            result(true)  // silently ignore if not running
+            result(true)
             return
         }
 
         let bytes = typedData.data
-        let sampleCount = bytes.count / 2  // 16-bit samples
+        let sampleCount = bytes.count / 2
         guard sampleCount > 0 else {
             result(true)
             return
         }
 
-        // Create a Float32 buffer at the playback sample rate.
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: playbackSampleRate,
@@ -197,7 +224,6 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
 
         buffer.frameLength = AVAudioFrameCount(sampleCount)
 
-        // Convert Int16 → Float32.
         guard let floatData = buffer.floatChannelData else {
             result(true)
             return
@@ -209,7 +235,16 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
             }
         }
 
-        playerNode.scheduleBuffer(buffer)
+        // Increment pending count BEFORE scheduling so the mic tap sees it
+        // immediately.  The completion fires on an internal AVAudioEngine
+        // thread after the buffer has been consumed — no method channel
+        // round-trip needed.
+        pendingBuffers.increment()
+        playerNode.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) {
+            [weak self] _ in
+            self?.pendingBuffers.decrement()
+        }
+
         result(true)
     }
 
@@ -218,7 +253,10 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
             result(true)
             return
         }
-        // stop() flushes all scheduled buffers; play() re-arms the node.
+        // stop() flushes all scheduled buffers (completion callbacks fire
+        // with .interrupted); play() re-arms the node.
+        // Reset pending count to 0 so the mic unmutes immediately.
+        pendingBuffers.reset()
         playerNode.stop()
         playerNode.play()
         result(true)
@@ -230,6 +268,7 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
     }
 
     private func tearDown() {
+        pendingBuffers.reset()
         if let engine = engine {
             engine.inputNode.removeTap(onBus: 0)
             playerNode?.stop()
@@ -237,5 +276,29 @@ class VoiceAudioBridge: NSObject, FlutterStreamHandler {
         }
         playerNode = nil
         engine = nil
+    }
+}
+
+// MARK: – Thread-safe counter
+
+/// A simple atomic counter for cross-thread access between the audio render
+/// thread (input tap) and the main / AVAudioEngine callback threads.
+private final class AtomicCounter {
+    private var _value: Int32 = 0
+
+    var value: Int32 {
+        OSAtomicAdd32(0, &_value)
+    }
+
+    func increment() {
+        OSAtomicIncrement32(&_value)
+    }
+
+    func decrement() {
+        OSAtomicDecrement32(&_value)
+    }
+
+    func reset() {
+        while !OSAtomicCompareAndSwap32(_value, 0, &_value) {}
     }
 }
