@@ -203,17 +203,11 @@ class VoiceController extends Notifier<VoiceUiState> {
       final session = await repo.create(storeId: storeId, channel: 'voice');
       _append('created session ${session.id}');
 
-      // 2. Configure iOS audio session for playback + recording through the
-      //    speaker (not earpiece) with hardware echo cancellation.
-      if (Platform.isIOS) {
-        await _configureIosAudioSession();
-      }
-
-      // 3. Set up audio player (native AudioTrack).
+      // 2. Set up audio player (native AudioTrack).
       final audioPlayer = ref.read(voiceAudioPlayerProvider);
       await audioPlayer.setup();
 
-      // 4. Start mic recorder BEFORE WebSocket so it holds audio focus first.
+      // 3. Start mic recorder BEFORE WebSocket so it holds audio focus first.
       final recorder = ref.read(voiceAudioRecorderProvider);
       final ws = ref.read(voiceWsClientProvider);
 
@@ -231,6 +225,13 @@ class VoiceController extends Notifier<VoiceUiState> {
       if (!granted) {
         state = state.copyWith(connecting: false, error: 'Microphone permission not granted.');
         return;
+      }
+
+      // 4. Configure iOS audio session AFTER both flutter_pcm_sound.setup()
+      //    and recorder.start(), since both may set the audio session category
+      //    without defaultToSpeaker. Our config must be applied last.
+      if (Platform.isIOS) {
+        await _configureIosAudioSession();
       }
 
       // 5. Mute mic while bot speaks to prevent echo feedback.
@@ -252,6 +253,14 @@ class VoiceController extends Notifier<VoiceUiState> {
           _addTranscript('user', evt['text'] as String? ?? '');
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
+          // iOS only: restart recorder to recover from dead AVAudioEngine
+          // stream caused by flutter_pcm_sound's AudioUnit playback.
+          // Re-apply audio session config since record package reconfigures it.
+          if (Platform.isIOS) {
+            ref.read(voiceAudioRecorderProvider).restart().then((_) {
+              _configureIosAudioSession();
+            });
+          }
         } else if (type == 'interruption') {
           ref.read(voiceAudioPlayerProvider).clearBuffer();
         } else if (type == 'order_update') {
