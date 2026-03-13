@@ -253,20 +253,8 @@ class VoiceController extends Notifier<VoiceUiState> {
           _addTranscript('user', evt['text'] as String? ?? '');
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
-          // iOS: restart recorder to revive dead AVAudioEngine stream,
-          // then re-apply audio session config.
-          if (Platform.isIOS) {
-            _recoverIosAudio();
-          }
         } else if (type == 'interruption') {
-          // iOS: clearBuffer() re-runs flutter_pcm_sound.setup() which
-          // overrides audio session AND may kill the recorder stream.
-          // Recover both after clearBuffer completes.
-          ref.read(voiceAudioPlayerProvider).clearBuffer().then((_) {
-            if (Platform.isIOS) {
-              _recoverIosAudio();
-            }
-          });
+          ref.read(voiceAudioPlayerProvider).clearBuffer();
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
@@ -409,13 +397,6 @@ class VoiceController extends Notifier<VoiceUiState> {
       avAudioSessionMode: AVAudioSessionMode.voiceChat,
     ));
     await audioSession.setActive(true);
-  }
-
-  /// iOS only: restart the recorder (to revive a dead AVAudioEngine stream)
-  /// and re-apply the audio session config (to restore defaultToSpeaker).
-  Future<void> _recoverIosAudio() async {
-    await ref.read(voiceAudioRecorderProvider).restart();
-    await _configureIosAudioSession();
   }
 
   void _append(String line) {
