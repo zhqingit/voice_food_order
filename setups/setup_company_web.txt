@@ -26,8 +26,23 @@
       }
   }
 
+  4. sudo vi /etc/nginx/sites-available/restoai-www
+  server {
+      listen 80;
+      server_name www.rest-oai.com rest-oai.com;
+
+      root /var/www/restoai;
+      index index.html;
+
+      location / {
+          try_files $uri $uri/ /index.html;
+      }
+  }
+
+
   # Create the directory and drop your site files there
   sudo mkdir -p /var/www/restoai
+  sudo cp company-web/index.html /var/www/restoai/
 
   # Enable config + SSL
   sudo ln -s /etc/nginx/sites-available/restoai-www /etc/nginx/sites-enabled/

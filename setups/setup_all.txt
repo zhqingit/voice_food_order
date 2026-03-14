@@ -1,0 +1,86 @@
+sudo vim /etc/nginx/sites-available/restoai
+# Voxeats — store portal + API
+  server {
+      listen 443 ssl;
+      server_name voxeats.rest-oai.com;
+
+      ssl_certificate /etc/letsencrypt/live/voxeats.rest-oai.com/fullchain.pem;
+      ssl_certificate_key /etc/letsencrypt/live/voxeats.rest-oai.com/privkey.pem;
+      include /etc/letsencrypt/options-ssl-nginx.conf;
+      ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+      # Store portal — static SPA at root
+      root /var/www/store-portal;
+      index index.html;
+
+      location / {
+          try_files $uri $uri/ /index.html;
+      }
+
+      # Store API
+      location /store/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host store-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # User API (mobile app)
+      location /user/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host user-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # Voice WebSocket
+      location /voice/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host user-api.local;
+          proxy_read_timeout 3600s;
+      }
+  }
+
+  # HTTP → HTTPS redirect for voxeats
+  server {
+      listen 80;
+      server_name voxeats.rest-oai.com;
+      return 301 https://$host$request_uri;
+  }
+
+  # Company website
+  server {
+      server_name www.rest-oai.com rest-oai.com;
+
+      root /var/www/restoai;
+      index index.html;
+
+      location / {
+          try_files $uri $uri/ /index.html;
+      }
+
+    listen 443 ssl; # managed by Certbot
+    ssl_certificate /etc/letsencrypt/live/www.rest-oai.com/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/www.rest-oai.com/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+
+}
+
+  server {
+    if ($host = rest-oai.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+    if ($host = www.rest-oai.com) {
+        return 301 https://$host$request_uri;
+    } # managed by Certbot
+
+
+      listen 80;
+      server_name www.rest-oai.com rest-oai.com;
+    return 404; # managed by Certbot
+  }

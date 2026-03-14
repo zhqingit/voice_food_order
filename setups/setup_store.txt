@@ -1,0 +1,47 @@
+#local
+cd store-portal
+npm run build
+
+# on vm
+sudo mkdir -p /var/www/store-portal
+sudo cp -r store-portal/dist/* /var/www/store-portal/
+
+sudo vi /etc/nginx/sites-available/restoai
+server {
+      listen 80;
+      server_name voxeats.rest-oai.com;
+
+      # Store portal — static SPA at root
+      root /var/www/store-portal;
+      index index.html;
+
+      location / {
+          try_files $uri $uri/ /index.html;
+      }
+
+      # Store API
+      location /store/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host store-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # User API (mobile app)
+      location /user/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host user-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # Voice API
+      location /voice/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host user-api.local;
+          proxy_read_timeout 3600s;
+      }
+  }
+
+  sudo nginx -t && sudo systemctl reload nginx
