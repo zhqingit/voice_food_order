@@ -1,0 +1,35 @@
+1. Add DNS record in Google Domains:
+
+  ┌──────┬──────┬────────────────┐
+  │ Type │ Name │     Value      │
+  ├──────┼──────┼────────────────┤
+  │ A    │ www  │ 136.112.211.46 │
+  ├──────┼──────┼────────────────┤
+  │ A    │ @    │ 136.112.211.46 │
+  └──────┴──────┴────────────────┘
+
+  2. Build a simple static site — use any framework you like:
+    - Plain HTML/CSS — fastest, no build step
+    - Next.js / Astro / Hugo — if you want a template-based approach
+  3. Add Nginx config on your VM:
+  sudo vi /etc/nginx/sites-available/restoai
+
+  server {
+      listen 80;
+      server_name www.rest-oai.com rest-oai.com;
+
+      root /var/www/restoai;
+      index index.html;
+
+      location / {
+          try_files $uri $uri/ /index.html;
+      }
+  }
+
+  # Create the directory and drop your site files there
+  sudo mkdir -p /var/www/restoai
+
+  # Enable config + SSL
+  sudo ln -s /etc/nginx/sites-available/restoai-www /etc/nginx/sites-enabled/
+  sudo nginx -t && sudo systemctl reload nginx
+  sudo certbot --nginx -d www.rest-oai.com -d rest-oai.com

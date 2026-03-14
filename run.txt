@@ -95,6 +95,13 @@ gcloud services enable compute.googleapis.com
 
   cd ~ && git clone <your-repo-url> voxeats && cd voxeats
 
+  ## update server
+  On your GCP VM:
+  cd /path/to/voice_food_order/backend
+  git pull origin with_supervisor
+  docker compose up --build -d
+  
+
 Step 6: Configure Environment
 
   On the VM, create the production .env:
