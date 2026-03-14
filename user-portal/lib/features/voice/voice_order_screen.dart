@@ -3,9 +3,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/providers.dart';
+import '../../data/menu_models.dart';
+import '../../data/menu_repository.dart';
 import '../../gen_l10n/app_localizations.dart';
 import '../../ui/style/app_background.dart';
 import 'voice_controller.dart';
+
+final menuRepositoryProvider = Provider<MenuRepository>((ref) {
+  return MenuRepository(ref.watch(apiClientProvider).dio);
+});
 
 const _kOrangeStart = Color(0xFFFF8A2A);
 const _kOrangeEnd = Color(0xFFFFB15A);
@@ -55,6 +62,21 @@ class VoiceOrderScreen extends ConsumerWidget {
             _ConnectionDot(connected: voice.connected, connecting: voice.connecting),
           ],
         ),
+        actions: [
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.9),
+                shape: BoxShape.circle,
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 8, offset: const Offset(0, 2))],
+              ),
+              child: const Icon(Icons.restaurant_menu_rounded, size: 18, color: _kOrangeStart),
+            ),
+            onPressed: () => _showMenuSheet(context, storeId),
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: Container(
         decoration: AppBackground.decoration(),
@@ -911,6 +933,260 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
           ],
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Menu bottom sheet
+// ---------------------------------------------------------------------------
+
+void _showMenuSheet(BuildContext context, String storeId) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      builder: (context, scrollController) => _MenuSheet(
+        storeId: storeId,
+        scrollController: scrollController,
+      ),
+    ),
+  );
+}
+
+class _MenuSheet extends ConsumerStatefulWidget {
+  final String storeId;
+  final ScrollController scrollController;
+
+  const _MenuSheet({required this.storeId, required this.scrollController});
+
+  @override
+  ConsumerState<_MenuSheet> createState() => _MenuSheetState();
+}
+
+class _MenuSheetState extends ConsumerState<_MenuSheet> {
+  List<MenuItemOut>? _items;
+  String? _error;
+  String? _selectedCategory;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMenu();
+  }
+
+  Future<void> _loadMenu() async {
+    try {
+      final repo = ref.read(menuRepositoryProvider);
+      final items = await repo.getStoreMenu(widget.storeId);
+      if (mounted) setState(() => _items = items);
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Failed to load menu');
+    }
+  }
+
+  List<String> get _categories {
+    if (_items == null) return [];
+    final cats = _items!
+        .where((i) => i.category != null && i.category!.isNotEmpty)
+        .map((i) => i.category!)
+        .toSet()
+        .toList()
+      ..sort();
+    return cats;
+  }
+
+  List<MenuItemOut> get _filteredItems {
+    if (_items == null) return [];
+    if (_selectedCategory == null) return _items!.where((i) => i.availability).toList();
+    return _items!.where((i) => i.availability && i.category == _selectedCategory).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: _kCardBg,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Drag handle
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            child: Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+
+          // Title
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: _kOrangeEnd.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                  child: const Icon(Icons.restaurant_menu_rounded, size: 20, color: _kOrangeStart),
+                ),
+                const SizedBox(width: 12),
+                const Text('Menu', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: _kTextDark)),
+              ],
+            ),
+          ),
+
+          // Category chips
+          if (_categories.isNotEmpty)
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                children: [
+                  _CategoryChip(
+                    label: 'All',
+                    selected: _selectedCategory == null,
+                    onTap: () => setState(() => _selectedCategory = null),
+                  ),
+                  ..._categories.map((cat) => _CategoryChip(
+                    label: cat,
+                    selected: _selectedCategory == cat,
+                    onTap: () => setState(() => _selectedCategory = cat),
+                  )),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 4),
+          Divider(height: 1, color: Colors.grey.withValues(alpha: 0.12)),
+
+          // Content
+          Expanded(
+            child: _items == null
+                ? (_error != null
+                    ? Center(child: Text(_error!, style: const TextStyle(color: _kTextMuted)))
+                    : const Center(child: CircularProgressIndicator(color: _kOrangeStart)))
+                : _filteredItems.isEmpty
+                    ? Center(child: Text('No items available', style: TextStyle(color: _kTextMuted.withValues(alpha: 0.6))))
+                    : ListView.separated(
+                        controller: widget.scrollController,
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                        itemCount: _filteredItems.length,
+                        separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.withValues(alpha: 0.08), indent: 12, endIndent: 12),
+                        itemBuilder: (_, i) => _MenuItemTile(item: _filteredItems[i]),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CategoryChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CategoryChip({required this.label, required this.selected, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? _kOrangeStart : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: selected ? _kOrangeStart : Colors.grey.withValues(alpha: 0.2)),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : _kTextMuted,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuItemTile extends StatelessWidget {
+  final MenuItemOut item;
+
+  const _MenuItemTile({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSizes = item.priceSmall != null || item.priceMedium != null || item.priceLarge != null;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _kTextDark)),
+                if (item.description != null && item.description!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 3),
+                    child: Text(
+                      item.description!,
+                      style: TextStyle(fontSize: 12, color: _kTextMuted.withValues(alpha: 0.7), height: 1.3),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (hasSizes)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      spacing: 8,
+                      children: [
+                        if (item.priceSmall != null) _SizePrice(size: 'S', price: item.priceSmall!),
+                        if (item.priceMedium != null) _SizePrice(size: 'M', price: item.priceMedium!),
+                        if (item.priceLarge != null) _SizePrice(size: 'L', price: item.priceLarge!),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '\$${item.price.toStringAsFixed(2)}',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _kOrangeStart),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SizePrice extends StatelessWidget {
+  final String size;
+  final double price;
+
+  const _SizePrice({required this.size, required this.price});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '$size: \$${price.toStringAsFixed(2)}',
+      style: TextStyle(fontSize: 11, color: _kTextMuted.withValues(alpha: 0.7), fontWeight: FontWeight.w500),
     );
   }
 }

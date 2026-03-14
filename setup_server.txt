@@ -1,0 +1,113 @@
+● Step 1: Reserve a static IP
+
+Option A
+# 1. Find your current external IP
+  gcloud compute instances list
+
+  # 2. Promote it to static (it stays the same IP, just becomes permanent)
+  gcloud compute addresses create resto-ai-ip \
+    --region=YOUR_REGION \
+    --addresses=YOUR_CURRENT_EXTERNAL_IP
+
+  That's it. Your VM keeps using the same IP, it just won't change anymore. No need to reassign anything.
+
+  Option B — Get a new IP (causes brief downtime):
+
+  # 1. Reserve a new static IP
+  gcloud compute addresses create resto-ai-ip --region=YOUR_REGION
+
+  # 2. See what IP you got
+  gcloud compute addresses list
+  # This shows the new STATIC_IP
+
+  # 3. Swap it onto your VM
+  gcloud compute instances delete-access-config YOUR_VM_NAME \
+    --access-config-name="External NAT" --zone=YOUR_ZONE
+
+  gcloud compute instances add-access-config YOUR_VM_NAME \
+    --access-config-name="External NAT" \
+    --address=NEW_STATIC_IP --zone=YOUR_ZONE
+
+
+  Step 2: Point your domain
+
+  Log into Squarespace, add DNS records:
+
+  ┌──────┬──────────────────────┬────────────────┐
+  │ Type │         Name         │     Value      │
+  ├──────┼──────────────────────┼────────────────┤
+  │ A    │ voxeats.rest-oai.com │ 136.112.211.46 │
+  ├──────┼──────────────────────┼────────────────┤
+  │ A    │ store.yourdomain.com │ 136.112.211.46 │
+  ├──────┼──────────────────────┼────────────────┤
+  │ A    │ yourdomain.com       │ 136.112.211.46 │
+  └──────┴──────────────────────┴────────────────┘
+
+  DNS propagation takes 5-30 minutes.
+
+  Step 3: Set up Nginx + HTTPS
+
+  On your VM:
+
+  # Install Nginx and Certbot
+  sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
+
+  # Create Nginx config
+  sudo vi /etc/nginx/sites-available/restoai
+
+  Nginx config:
+   server {
+      listen 80;
+      server_name voxeats.rest-oai.com;
+
+      # User API (mobile app)
+      location / {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host user-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # WebSocket for voice
+      location /voice/ws {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host user-api.local;
+          proxy_read_timeout 3600s;
+      }
+
+      # Store API — use path prefix instead of separate subdomain
+      location /store/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host store-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+  }
+
+  # Enable the config
+  sudo ln -s /etc/nginx/sites-available/restoai /etc/nginx/sites-enabled/
+  sudo nginx -t && sudo systemctl reload nginx
+
+  # update google cloud firewall
+   gcloud compute firewall-rules create allow-http \
+    --allow tcp:80 --target-tags=http-server
+
+   gcloud compute firewall-rules create allow-https \
+    --allow tcp:443 --target-tags=https-server
+
+  # Add the tags to your VM:
+    gcloud compute instances add-tags voxeats-server \
+    --zone=us-central1-a --tags=http-server,https-server
+
+  # Get free SSL certificates (auto-configures Nginx)
+   sudo certbot --nginx -d voxeats.rest-oai.com
+
+  # Auto-renewal is enabled by default, verify:
+  sudo certbot renew --dry-run
+
+   Result
+
+  - https://voxeats.rest-oai.com/user/... → user API (mobile app)
+  - https://voxeats.rest-oai.com/store/... → store portal API
+  - https://voxeats.rest-oai.com/voice/ws → voice WebSocket

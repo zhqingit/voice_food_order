@@ -12,8 +12,10 @@ from app.db.session import get_db
 from app.models.store import Store
 from app.models.store_hours import StoreHours
 from app.schemas.common import Audience, PrincipalType
+from app.schemas.menu.menu import MenuItemOut
 from app.schemas.store.hours import DayHours
 from app.schemas.store.store import StorePublicOut
+from app.services import menu_service
 
 router = APIRouter(
     prefix="/user/stores",
@@ -81,3 +83,16 @@ def get_store(store_id: uuid.UUID, db: Session = Depends(get_db)) -> StorePublic
     if not store.is_published:
         raise AppError(status_code=410, code="store_unpublished", detail="This store is no longer available")
     return _store_public_out(store, _hours_for_store(db, store.id))
+
+
+@router.get("/{store_id}/menu", response_model=list[MenuItemOut])
+def get_store_menu(store_id: uuid.UUID, db: Session = Depends(get_db)) -> list[MenuItemOut]:
+    """Return the active menu items for a store (public, no auth required)."""
+    store = db.get(Store, store_id)
+    if store is None or not store.is_active or not store.is_published:
+        raise AppError(status_code=404, code="store_not_found", detail="Store not found")
+    menu = menu_service.get_menu_by_version(db, store_id=store.id, version=None)
+    if menu is None:
+        return []
+    items = menu_service.list_menu_items(db, menu_id=menu.id)
+    return [MenuItemOut.model_validate(item, from_attributes=True) for item in items]
