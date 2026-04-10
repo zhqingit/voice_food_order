@@ -48,7 +48,7 @@
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
-		<true/>
+		<false/>
 	</dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app needs microphone access for voice ordering.</string>

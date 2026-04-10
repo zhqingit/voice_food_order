@@ -1,0 +1,106 @@
+ Android — Google Play Store
+
+  1. Build the release APK/AAB:
+  cd user-portal
+
+  # Create a signing key (one time)
+  keytool -genkey -v -keystore /home/qzhang/mydata/myproject/apps/Resto_AI/src/VoxEats/voxeats-release.jks \
+    -keyalg RSA -keysize 2048 -validity 10000 \
+    -alias voxeats
+
+  # Create android/key.properties
+  cat > android/key.properties <<EOF
+  storePassword=YOUR_PASSWORD
+  keyPassword=YOUR_PASSWORD
+  keyAlias=voxeats
+  storeFile=/home/qzhang/mydata/myproject/apps/Resto_AI/src/VoxEats/voxeats-release.jks
+  EOF
+
+  2. Configure signing in android/app/build.gradle — add above buildTypes: (let AI do this)
+  def keystoreProperties = new Properties()
+  def keystorePropertiesFile = rootProject.file('key.properties')
+  if (keystorePropertiesFile.exists()) {
+      keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+  }
+
+  signingConfigs {
+      release {
+          keyAlias keystoreProperties['keyAlias']
+          keyPassword keystoreProperties['keyPassword']
+          storeFile keystoreProperties['storeFile'] ? file(keystoreProperties['storeFile']) : null
+          storePassword keystoreProperties['storePassword']
+      }
+  }
+
+  Update buildTypes:
+  buildTypes {
+      release {
+          signingConfig signingConfigs.release
+      }
+  }
+
+  3. Build and upload:
+  flutter build appbundle  # Produces build/app/outputs/bundle/release/app-release.aab
+
+  4. Upload to Google Play Console:
+  - Go to play.google.com/console
+  - Pay $25 one-time developer fee
+  - Create app → Upload the .aab file
+  - Fill in store listing (description, screenshots, icon)
+  - Submit for review (~1-3 days)
+
+  ---
+  iOS — Apple App Store
+
+  1. Apple Developer Program:
+  - Enroll at developer.apple.com — $99/year
+  - Wait for approval (~24-48 hours)
+
+  2. Configure in Xcode:
+  cd user-portal/ios
+  open Runner.xcworkspace
+
+  In Xcode:
+  - Set Bundle Identifier to something unique (e.g., com.restoai.voxeats)
+  - Set Team to your Apple Developer account
+  - Set Version to 1.0.0 and Build to 1
+  - Under Signing & Capabilities, enable Automatic Signing
+
+  3. Build the archive:
+  flutter build ipa
+
+  Or in Xcode: Product → Archive → Distribute App → App Store Connect
+
+  4. Upload to App Store Connect:
+  - Go to appstoreconnect.apple.com
+  - Create a new app
+  - Upload via Xcode or Transporter
+  - Fill in app details, screenshots, privacy policy URL
+  - Submit for review (~1-7 days, stricter than Google)
+
+  ---
+  Before submitting both, you'll need:
+
+  ┌─────────────────┬─────────────────────────────────────────────────────┐
+  │      Item       │                       Details                       │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ App icon        │ 1024x1024 PNG (no transparency for iOS)             │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ Screenshots     │ Phone + tablet sizes for each store                 │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ Privacy policy  │ Hosted URL (e.g., https://www.rest-oai.com/privacy) │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ App description │ Short + full description                            │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ Category        │ Food & Drink                                        │
+  ├─────────────────┼─────────────────────────────────────────────────────┤
+  │ Age rating      │ Fill out content questionnaire                      │
+  └─────────────────┴─────────────────────────────────────────────────────┘
+
+  ---
+  Important notes:
+
+  - Keep voxeats-release.jks safe — if you lose it, you can never update the Android app
+  - Add key.properties and *.jks to .gitignore
+  - Apple requires a privacy policy URL — you can add a /privacy page to your company site
+  - Apple may ask about microphone usage — your Info.plist already has NSMicrophoneUsageDescription

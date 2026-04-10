@@ -1,4 +1,4 @@
-package com.example.frontend
+package com.restoai.voxeats
 
 import io.flutter.embedding.android.FlutterActivity
 
