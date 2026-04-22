@@ -1,12 +1,20 @@
 from __future__ import annotations
 
+import base64
 import csv
 import io
+import json
+import logging
+import os
 import uuid
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, UploadFile, File
 from sqlalchemy.orm import Session
+
+from google import genai
+
+logger = logging.getLogger(__name__)
 
 from app.api.deps.store import get_current_store_web
 from app.api.host_policy import require_host_policy
@@ -308,6 +316,166 @@ async def upload_items_csv(
             )
             db.add(item)
             by_name[name.lower()] = item
+            created += 1
+
+    db.commit()
+    return {"created": created, "updated": updated, "errors": errors}
+
+
+@router.post("/items/upload-image")
+async def upload_items_image(
+    files: list[UploadFile] = File(...),
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Upload menu screenshots/images/PDFs and use Gemini to extract menu items.
+
+    Accepts multiple JPEG, PNG, WebP, or PDF files. Returns created/updated item counts.
+    """
+    allowed_types = {
+        "image/jpeg", "image/png", "image/webp", "image/jpg",
+        "application/pdf",
+    }
+
+    api_key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
+    if not api_key:
+        raise AppError(status_code=500, code="missing_api_key", detail="Gemini API key not configured")
+
+    # Read and validate all files
+    file_parts: list[genai.types.Part] = []
+    for f in files:
+        content_type = f.content_type or "image/jpeg"
+        if content_type not in allowed_types:
+            raise AppError(
+                status_code=400,
+                code="invalid_file",
+                detail=f"File must be JPEG, PNG, WebP, or PDF (got {content_type} for {f.filename})",
+            )
+        file_bytes = await f.read()
+        logger.info("Menu file upload: %s, %d bytes, type=%s", f.filename, len(file_bytes), content_type)
+        if len(file_bytes) > 20 * 1024 * 1024:
+            raise AppError(status_code=400, code="file_too_large", detail=f"File {f.filename} must be under 20MB")
+
+        # Normalize MIME type
+        mime_type = "image/jpeg" if content_type == "image/jpg" else content_type
+        file_parts.append(genai.types.Part.from_bytes(data=file_bytes, mime_type=mime_type))
+
+    client = genai.Client(api_key=api_key)
+
+    prompt = """Analyze the restaurant menu image(s)/document(s) and extract all menu items.
+Return a JSON array where each element has these fields:
+- "name": string (required) — the item name
+- "category": string or null — category/section (e.g. "Appetizers", "Entrees", "Drinks")
+- "price": number or null — the base/default price
+- "price_small": number or null — small size price if listed
+- "price_medium": number or null — medium size price if listed
+- "price_large": number or null — large size price if listed
+- "description": string or null — item description if visible
+
+Rules:
+- Extract ALL items visible across all images/pages
+- Deduplicate items that appear in multiple images
+- If a price has a size indicator (S/M/L, Small/Medium/Large, Pt/Qt), use the size-specific fields
+- If only one price is shown, put it in "price"
+- Use null for missing fields, not empty strings
+- Return ONLY the JSON array, no markdown formatting, no explanation"""
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-lite-preview",
+            contents=[*file_parts, prompt],
+        )
+
+        text = response.text.strip()
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3].strip()
+        if text.startswith("json"):
+            text = text[4:].strip()
+
+        items_data = json.loads(text)
+        if not isinstance(items_data, list):
+            raise AppError(status_code=500, code="parse_error", detail="Gemini did not return a JSON array")
+
+    except json.JSONDecodeError:
+        raw = response.text[:500] if response and response.text else "(empty)"
+        logger.error("Gemini returned non-JSON: %s", raw)
+        raise AppError(status_code=500, code="parse_error", detail=f"Failed to parse Gemini response as JSON: {raw[:200]}")
+    except Exception as e:
+        if isinstance(e, AppError):
+            raise
+        logger.error("Gemini API error: %s", e, exc_info=True)
+        raise AppError(status_code=500, code="gemini_error", detail=f"Gemini API error: {e}")
+
+    # Match existing items by name to avoid duplicates
+    existing = menu_service.list_store_items(db, store_id=current_store.id)
+    by_name: dict[str, MenuItem] = {item.name.lower(): item for item in existing}
+
+    created = 0
+    updated = 0
+    errors: list[str] = []
+
+    for i, item_data in enumerate(items_data):
+        if not isinstance(item_data, dict):
+            errors.append(f"Item {i + 1}: not a valid object, skipped")
+            continue
+
+        name = (item_data.get("name") or "").strip()
+        if not name:
+            errors.append(f"Item {i + 1}: missing name, skipped")
+            continue
+
+        def _to_decimal(val: object) -> Decimal | None:
+            if val is None:
+                return None
+            try:
+                return Decimal(str(val))
+            except (InvalidOperation, ValueError):
+                return None
+
+        price = _to_decimal(item_data.get("price"))
+        price_small = _to_decimal(item_data.get("price_small"))
+        price_medium = _to_decimal(item_data.get("price_medium"))
+        price_large = _to_decimal(item_data.get("price_large"))
+
+        # Resolve a base price from available prices
+        base_price = price or price_medium or price_small or price_large
+        if base_price is None:
+            errors.append(f"Item {i + 1} '{name}': no price found, skipped")
+            continue
+
+        category = (item_data.get("category") or "").strip() or None
+        description = (item_data.get("description") or "").strip() or None
+
+        existing_item = by_name.get(name.lower())
+        if existing_item:
+            existing_item.price = base_price
+            if price_small is not None:
+                existing_item.price_small = price_small
+            if price_medium is not None:
+                existing_item.price_medium = price_medium
+            if price_large is not None:
+                existing_item.price_large = price_large
+            if category:
+                existing_item.category = category
+            if description:
+                existing_item.description = description
+            updated += 1
+        else:
+            new_item = MenuItem(
+                store_id=current_store.id,
+                name=name,
+                price=base_price,
+                price_small=price_small,
+                price_medium=price_medium,
+                price_large=price_large,
+                category=category,
+                description=description,
+            )
+            db.add(new_item)
+            by_name[name.lower()] = new_item
             created += 1
 
     db.commit()

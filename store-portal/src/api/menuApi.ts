@@ -104,6 +104,18 @@ export async function uploadItemsCsv(file: File): Promise<CsvUploadResult> {
   return res.data as CsvUploadResult
 }
 
+export async function uploadItemsImage(files: FileList | File[]): Promise<CsvUploadResult> {
+  const form = new FormData()
+  for (const file of files) {
+    form.append('files', file)
+  }
+  const res = await apiClient.post('/store/items/upload-image', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 120000, // Gemini processing can take a while with multiple files
+  })
+  return res.data as CsvUploadResult
+}
+
 export async function createStoreItem(payload: MenuItemCreate): Promise<MenuItemOut> {
   const res = await apiClient.post('/store/items', payload)
   return res.data as MenuItemOut
