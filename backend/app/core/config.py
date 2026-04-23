@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     voice_provider_stt: str = "google"
     voice_provider_tts: str = "google"
     voice_provider_llm: str = "google"
-    voice_llm_model: str = "models/gemini-2.5-flash-native-audio-preview-12-2025"
+    voice_llm_model: str = "gemini-3.1-flash-live-preview"
 
     voice_monitor_model: str = "gemini-3.1-flash-lite-preview"
     voice_monitor_enabled: bool = True

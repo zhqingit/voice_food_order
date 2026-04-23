@@ -58,7 +58,7 @@ Only flag clear, factual errors. Do NOT flag tone, style, or minor wording issue
 @dataclass
 class MonitorConfig:
     """Configuration for the conversation monitor."""
-    model: str = "gemini-3.1-flash-lite-preview"
+    model: str = "gemini-3-flash-preview"
     enabled: bool = True
     # Only check turns that involve tool calls or prices (skip casual chat)
     check_all_turns: bool = True

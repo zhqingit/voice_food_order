@@ -40,6 +40,7 @@
   "nav": {
     "menu": "Menú",
     "orders": "Pedidos",
+    "ai": "IA",
     "profile": "Perfil",
     "logout": "Cerrar sesión"
   },
@@ -117,6 +118,9 @@
     "lineTotal": "Total línea",
     "note": "Nota",
     "orderNote": "Nota del pedido",
+    "fulfillment": "Entrega",
+    "deliveryAddress": "Dirección de entrega",
+    "deliveryAddressMissing": "(no capturada)",
     "noItems": "Sin artículos.",
     "noOrders": "Aún no hay pedidos.",
     "selectOrder": "Selecciona un pedido para ver los detalles.",

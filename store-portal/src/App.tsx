@@ -10,6 +10,7 @@ import { Shell } from './components/shell/Shell'
 import { MenuRoute } from './routes/MenuRoute'
 import { OrdersRoute } from './routes/OrdersRoute'
 import { ProfileRoute } from './routes/ProfileRoute'
+import { AIRoute } from './routes/AIRoute'
 import { changeLanguage, SUPPORTED_LANGUAGES } from './i18n'
 
 export function App(): React.JSX.Element {
@@ -47,6 +48,7 @@ export function App(): React.JSX.Element {
           <Route path="/" element={<Navigate to="/menu" replace />} />
           <Route path="/menu" element={<MenuRoute />} />
           <Route path="/orders" element={<OrdersRoute />} />
+          <Route path="/ai" element={<AIRoute />} />
           <Route path="/profile" element={<ProfileRoute />} />
           <Route path="*" element={<Navigate to="/menu" replace />} />
         </Routes>

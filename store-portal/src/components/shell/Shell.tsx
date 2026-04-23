@@ -9,6 +9,7 @@ import { changeLanguage, SUPPORTED_LANGUAGES } from '../../i18n'
 const navKeys = [
   { to: '/menu', labelKey: 'nav.menu', icon: menuIcon },
   { to: '/orders', labelKey: 'nav.orders', icon: ordersIcon },
+  { to: '/ai', labelKey: 'nav.ai', icon: aiIcon },
   { to: '/profile', labelKey: 'nav.profile', icon: profileIcon },
 ]
 
@@ -156,6 +157,22 @@ function profileIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="8" r="4" />
       <path d="M5.5 21a7.5 7.5 0 0 1 13 0" />
+    </svg>
+  )
+}
+
+function aiIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="M4.93 4.93l1.41 1.41" />
+      <path d="M17.66 17.66l1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="M4.93 19.07l1.41-1.41" />
+      <path d="M17.66 6.34l1.41-1.41" />
+      <circle cx="12" cy="12" r="4" />
     </svg>
   )
 }

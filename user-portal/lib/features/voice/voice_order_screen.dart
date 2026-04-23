@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -507,17 +508,84 @@ class _WaveformPainter extends CustomPainter {
 // Live order panel (shown during active session)
 // ---------------------------------------------------------------------------
 
-class _LiveOrderPanel extends StatefulWidget {
+class _LiveOrderPanel extends ConsumerStatefulWidget {
   final LiveOrderSummary order;
 
   const _LiveOrderPanel({required this.order});
 
   @override
-  State<_LiveOrderPanel> createState() => _LiveOrderPanelState();
+  ConsumerState<_LiveOrderPanel> createState() => _LiveOrderPanelState();
 }
 
-class _LiveOrderPanelState extends State<_LiveOrderPanel> {
+class _LiveOrderPanelState extends ConsumerState<_LiveOrderPanel> {
   bool _expanded = false;
+
+  final TextEditingController _addressController = TextEditingController();
+  final FocusNode _addressFocus = FocusNode();
+  String _lastSyncedAddress = '';
+  bool _isEditing = false;
+  bool _saving = false;
+  Timer? _debounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _addressController.text = widget.order.deliveryAddress ?? '';
+    _lastSyncedAddress = _addressController.text;
+    _addressFocus.addListener(_onFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveOrderPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sync remote updates into the field only when the user isn't actively
+    // editing — otherwise we'd clobber keystrokes arriving between debounces.
+    final remote = widget.order.deliveryAddress ?? '';
+    if (remote != _lastSyncedAddress && !_isEditing) {
+      _addressController.text = remote;
+      _lastSyncedAddress = remote;
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    _addressFocus.removeListener(_onFocusChange);
+    _addressFocus.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_addressFocus.hasFocus) {
+      // Blur: commit immediately, regardless of any pending debounce.
+      _debounceTimer?.cancel();
+      _commitAddress();
+    }
+  }
+
+  void _onAddressChanged(String value) {
+    _isEditing = true;
+    // Debounced save so the user doesn't need to blur to persist the edit.
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 800), _commitAddress);
+  }
+
+  Future<void> _commitAddress() async {
+    final value = _addressController.text.trim();
+    if (value == _lastSyncedAddress) {
+      _isEditing = false;
+      return;
+    }
+    if (mounted) setState(() => _saving = true);
+    try {
+      await ref.read(voiceControllerProvider.notifier).updateDeliveryAddress(value);
+      _lastSyncedAddress = value;
+    } finally {
+      _isEditing = false;
+      if (mounted) setState(() => _saving = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -635,9 +703,137 @@ class _LiveOrderPanelState extends State<_LiveOrderPanel> {
                 ),
               ),
             ],
+
+            // Fulfillment section — always visible (not gated by expand) so the
+            // user sees the delivery-address field as soon as the bot sets it.
+            if (order.fulfillmentType != null) ...[
+              Divider(height: 1, color: Colors.grey.withValues(alpha: 0.12), indent: 16, endIndent: 16),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                child: _FulfillmentBlock(
+                  fulfillmentType: order.fulfillmentType!,
+                  controller: _addressController,
+                  focusNode: _addressFocus,
+                  onChanged: _onAddressChanged,
+                  onCommit: _commitAddress,
+                  saving: _saving,
+                  readOnly: order.status != 'draft',
+                ),
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+}
+
+class _FulfillmentBlock extends StatelessWidget {
+  final String fulfillmentType;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final ValueChanged<String> onChanged;
+  final Future<void> Function() onCommit;
+  final bool saving;
+  final bool readOnly;
+
+  const _FulfillmentBlock({
+    required this.fulfillmentType,
+    required this.controller,
+    required this.focusNode,
+    required this.onChanged,
+    required this.onCommit,
+    required this.saving,
+    required this.readOnly,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isPickup = fulfillmentType == 'pickup';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              isPickup ? Icons.storefront_rounded : Icons.delivery_dining_rounded,
+              size: 16,
+              color: _kOrangeStart,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isPickup ? 'Pickup' : 'Delivery',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _kTextDark),
+            ),
+            const Spacer(),
+            if (saving)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 10,
+                    height: 10,
+                    child: CircularProgressIndicator(strokeWidth: 1.4, color: _kTextMuted.withValues(alpha: 0.7)),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Saving…',
+                    style: TextStyle(fontSize: 10, color: _kTextMuted.withValues(alpha: 0.8)),
+                  ),
+                ],
+              )
+            else if (readOnly)
+              Text(
+                'Submitted — address locked',
+                style: TextStyle(fontSize: 10, color: _kTextMuted.withValues(alpha: 0.7)),
+              ),
+          ],
+        ),
+        if (!isPickup) ...[
+          const SizedBox(height: 6),
+          TextField(
+            controller: controller,
+            focusNode: focusNode,
+            onChanged: onChanged,
+            onSubmitted: (_) => onCommit(),
+            readOnly: readOnly,
+            maxLines: 2,
+            minLines: 1,
+            textInputAction: TextInputAction.done,
+            style: TextStyle(
+              fontSize: 13,
+              color: readOnly ? _kTextMuted : _kTextDark,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Delivery address',
+              hintStyle: TextStyle(color: _kTextMuted.withValues(alpha: 0.6), fontSize: 13),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              filled: true,
+              fillColor: readOnly ? const Color(0xFFF5F0E8) : Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: _kTextMuted.withValues(alpha: 0.2)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide(color: _kTextMuted.withValues(alpha: 0.2)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: const BorderSide(color: _kOrangeStart, width: 1.5),
+              ),
+            ),
+          ),
+          if (!readOnly) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Edit to correct — saves automatically.',
+              style: TextStyle(fontSize: 10, color: _kTextMuted.withValues(alpha: 0.7)),
+            ),
+          ],
+        ],
+      ],
     );
   }
 }
@@ -989,21 +1185,30 @@ class _MenuSheetState extends ConsumerState<_MenuSheet> {
     }
   }
 
+  // Dedupe categories case-insensitively (treat "Beverages" and "beverages"
+  // as one bucket). Keep first-seen casing as the display label.
   List<String> get _categories {
     if (_items == null) return [];
-    final cats = _items!
-        .where((i) => i.category != null && i.category!.isNotEmpty)
-        .map((i) => i.category!)
-        .toSet()
-        .toList()
-      ..sort();
+    final byKey = <String, String>{};
+    for (final i in _items!) {
+      final raw = (i.category ?? '').trim();
+      if (raw.isEmpty) continue;
+      final key = raw.toLowerCase();
+      byKey.putIfAbsent(key, () => raw);
+    }
+    final cats = byKey.values.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return cats;
   }
 
   List<MenuItemOut> get _filteredItems {
     if (_items == null) return [];
-    if (_selectedCategory == null) return _items!.where((i) => i.availability).toList();
-    return _items!.where((i) => i.availability && i.category == _selectedCategory).toList();
+    if (_selectedCategory == null) {
+      return _items!.where((i) => i.availability).toList();
+    }
+    final want = _selectedCategory!.trim().toLowerCase();
+    return _items!
+        .where((i) => i.availability && (i.category ?? '').trim().toLowerCase() == want)
+        .toList();
   }
 
   @override

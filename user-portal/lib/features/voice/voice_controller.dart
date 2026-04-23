@@ -40,24 +40,52 @@ class LiveOrderItem {
 
 /// Live order summary received via WebSocket during an active session.
 class LiveOrderSummary {
+  final String? orderId;
   final String status;
   final double subtotal;
   final double tax;
   final double total;
   final List<LiveOrderItem> items;
+  final String? fulfillmentType;
+  final String? deliveryAddress;
 
-  const LiveOrderSummary({required this.status, required this.subtotal, required this.tax, required this.total, required this.items});
+  const LiveOrderSummary({
+    required this.orderId,
+    required this.status,
+    required this.subtotal,
+    required this.tax,
+    required this.total,
+    required this.items,
+    required this.fulfillmentType,
+    required this.deliveryAddress,
+  });
 
   factory LiveOrderSummary.fromJson(Map<String, dynamic> json) {
     final itemsList = (json['items'] as List<dynamic>?)
         ?.map((e) => LiveOrderItem.fromJson(e as Map<String, dynamic>))
         .toList() ?? [];
     return LiveOrderSummary(
+      orderId: json['order_id'] as String?,
       status: json['status'] as String? ?? 'draft',
       subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
       tax: (json['tax'] as num?)?.toDouble() ?? 0,
       total: (json['total'] as num?)?.toDouble() ?? 0,
       items: itemsList,
+      fulfillmentType: json['fulfillment_type'] as String?,
+      deliveryAddress: json['delivery_address'] as String?,
+    );
+  }
+
+  LiveOrderSummary copyWith({String? deliveryAddress}) {
+    return LiveOrderSummary(
+      orderId: orderId,
+      status: status,
+      subtotal: subtotal,
+      tax: tax,
+      total: total,
+      items: items,
+      fulfillmentType: fulfillmentType,
+      deliveryAddress: deliveryAddress ?? this.deliveryAddress,
     );
   }
 }
@@ -314,6 +342,24 @@ class VoiceController extends Notifier<VoiceUiState> {
       }
     } else {
       state = state.copyWith(sessionEnded: true);
+    }
+  }
+
+  /// Persist an edited delivery address to the server. Updates local state
+  /// optimistically so the field reflects the edit immediately; the next
+  /// `order_update` from the bot will overwrite with server state.
+  Future<void> updateDeliveryAddress(String address) async {
+    final live = state.liveOrder;
+    if (live == null || live.orderId == null) return;
+    // Optimistic: reflect the edit locally so the TextField stays stable.
+    state = state.copyWith(liveOrder: live.copyWith(deliveryAddress: address));
+    try {
+      await ref.read(orderRepositoryProvider).patchOrder(
+            live.orderId!,
+            deliveryAddress: address,
+          );
+    } catch (e) {
+      _append('update delivery address failed: $e');
     }
   }
 

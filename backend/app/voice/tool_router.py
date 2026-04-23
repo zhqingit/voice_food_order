@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import contextlib
+import logging
+import time
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
@@ -16,6 +18,8 @@ from app.models.voice_session import VoiceSession
 from app.services import order_service
 from app.schemas.order.order import OrderCreate
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class VoiceToolContext:
@@ -30,8 +34,40 @@ class VoiceToolContext:
 class VoiceToolRouter:
     """Router for handling voice tool calls related to food ordering."""
 
+    # Window during which an identical add_item (same menu item + size + note +
+    # quantity) is treated as a duplicate retry rather than a new line item.
+    # Guards against the pipecat race where a function call is cancelled
+    # mid-flight (DB write completes but result never reaches Gemini), and
+    # Gemini retries the same tool call several seconds later.
+    _DEDUP_WINDOW_SECONDS = 30.0
+
     def __init__(self, context: VoiceToolContext) -> None:
         self._context = context
+        self._recent_adds: dict[tuple, float] = {}
+
+    def _is_duplicate_add(
+        self,
+        menu_item_id: uuid.UUID,
+        size: str | None,
+        note: str | None,
+        quantity: int,
+    ) -> bool:
+        now = time.monotonic()
+        for k in list(self._recent_adds):
+            if now - self._recent_adds[k] > self._DEDUP_WINDOW_SECONDS:
+                del self._recent_adds[k]
+        key = (str(menu_item_id), size or "", note or "", int(quantity))
+        return key in self._recent_adds
+
+    def _record_add(
+        self,
+        menu_item_id: uuid.UUID,
+        size: str | None,
+        note: str | None,
+        quantity: int,
+    ) -> None:
+        key = (str(menu_item_id), size or "", note or "", int(quantity))
+        self._recent_adds[key] = time.monotonic()
 
     # ── private helpers (receive db as argument) ──────────────────────
 
@@ -118,6 +154,10 @@ class VoiceToolRouter:
             result["customer_name"] = order.customer_name
         if order.notes:
             result["notes"] = order.notes
+        if order.fulfillment_type:
+            result["fulfillment_type"] = order.fulfillment_type
+        if order.delivery_address:
+            result["delivery_address"] = order.delivery_address
         return result
 
     # ── public methods (each opens its own short-lived session) ───────
@@ -139,11 +179,33 @@ class VoiceToolRouter:
             if menu_item is None:
                 return {"ok": False, "message": "Menu item not found."}
 
+            if not menu_item.availability:
+                return {
+                    "ok": False,
+                    "message": f"Sorry, {menu_item.name} is currently unavailable.",
+                }
+
+            if self._is_duplicate_add(menu_item.id, size, note, quantity):
+                logger.warning(
+                    "Duplicate add_item within %ss window: %s size=%s qty=%d note=%s — skipping insert",
+                    self._DEDUP_WINDOW_SECONDS,
+                    menu_item.name,
+                    size or "-",
+                    quantity,
+                    note or "-",
+                )
+                return {
+                    "ok": True,
+                    "message": f"{menu_item.name} is already in the order.",
+                    "order": self._build_summary(db, order),
+                }
+
             price = menu_item.price_for_size(size)
             order_service.create_order_item(db, order=order, menu_item=menu_item, quantity=quantity, price_override=price, note=note)
             db.flush()
             order_service.recalc_totals(db, order=order)
             db.commit()
+            self._record_add(menu_item.id, size, note, quantity)
 
             size_label = f" ({size})" if size else ""
             note_label = f" (note: {note})" if note else ""
@@ -221,6 +283,64 @@ class VoiceToolRouter:
 
             return {"ok": True, "message": "Order submitted.", "order": self._build_summary(db, order)}
 
+    def update_item(
+        self,
+        *,
+        order_item_id: uuid.UUID | None = None,
+        item_name: str | None = None,
+        note: str | None = None,
+        quantity: int | None = None,
+        size: str | None = None,
+    ) -> dict[str, Any]:
+        """Update an existing order item's note, quantity, or size."""
+        with self._context.db_factory() as db:
+            order = self._get_order(db)
+            if order is None:
+                return {"ok": False, "message": "No active order."}
+
+            # Find the order item
+            oi = None
+            if order_item_id is not None:
+                oi = db.execute(
+                    select(OrderItem).where(OrderItem.order_id == order.id, OrderItem.id == order_item_id)
+                ).scalar_one_or_none()
+            if oi is None and item_name:
+                menu_item = self._find_menu_item_by_name(db, item_name)
+                if menu_item is not None:
+                    oi = db.execute(
+                        select(OrderItem).where(OrderItem.order_id == order.id, OrderItem.menu_item_id == menu_item.id).limit(1)
+                    ).scalar_one_or_none()
+            if oi is None:
+                return {"ok": False, "message": "Item not found in the order."}
+
+            changes: list[str] = []
+            if note is not None:
+                oi.note = note
+                changes.append(f"note: {note}")
+            if quantity is not None and quantity > 0:
+                oi.quantity = quantity
+                changes.append(f"quantity: {quantity}")
+            if size is not None:
+                menu_item = db.get(MenuItem, oi.menu_item_id)
+                if menu_item:
+                    oi.price_snapshot = menu_item.price_for_size(size)
+                    changes.append(f"size: {size}")
+
+            order_service.recalc_totals(db, order=order)
+            db.commit()
+
+            menu_item = db.get(MenuItem, oi.menu_item_id)
+            name = menu_item.name if menu_item else "item"
+            return {
+                "ok": True,
+                "message": f"Updated {name}: {', '.join(changes)}.",
+                "order": self._build_summary(db, order),
+            }
+
+    def update_item_note(self, *, order_item_id: uuid.UUID, note: str) -> dict[str, Any]:
+        """Update the note on a specific order item (used by background note verification)."""
+        return self.update_item(order_item_id=order_item_id, note=note)
+
     def set_order_note(self, *, note: str) -> dict[str, Any]:
         with self._context.db_factory() as db:
             order = self._get_order(db)
@@ -233,3 +353,29 @@ class VoiceToolRouter:
             db.commit()
 
             return {"ok": True, "message": f"Order note set: {note}", "order": self._build_summary(db, order)}
+
+    def set_fulfillment(self, *, type: str, delivery_address: str | None = None) -> dict[str, Any]:
+        t = (type or "").strip().lower()
+        if t not in ("pickup", "delivery"):
+            return {"ok": False, "message": "type must be 'pickup' or 'delivery'."}
+        if t == "delivery":
+            addr = (delivery_address or "").strip()
+            if not addr:
+                return {"ok": False, "message": "Delivery address is required for delivery orders."}
+        else:
+            addr = None
+
+        with self._context.db_factory() as db:
+            order = self._ensure_order(db)
+            if order.status != "draft":
+                return {"ok": False, "message": "Order is not editable."}
+
+            order.fulfillment_type = t
+            order.delivery_address = addr
+            db.commit()
+
+            if t == "pickup":
+                msg = "Fulfillment set to pickup."
+            else:
+                msg = f"Fulfillment set to delivery to {addr}."
+            return {"ok": True, "message": msg, "order": self._build_summary(db, order)}

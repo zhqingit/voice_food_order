@@ -37,6 +37,8 @@ def _order_out(order: Order) -> OrderOut:
         total=order.total,
         customer_name=order.customer_name,
         notes=order.notes,
+        fulfillment_type=order.fulfillment_type,
+        delivery_address=order.delivery_address,
         created_at=order.created_at,
     )
 

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import logging
 import os
 
 from fastapi import FastAPI
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+for _noisy in ("voice.tools", "voice.monitor", "voice.ws", "voice.events", "app.voice.tool_router"):
+    logging.getLogger(_noisy).setLevel(logging.INFO)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -14,6 +22,7 @@ from app.api.routers.store.auth import router as store_auth_router
 from app.api.routers.store.me import router as store_router
 from app.api.routers.store.menu import router as store_menu_router
 from app.api.routers.store.orders import router as store_orders_router
+from app.api.routers.store.ai import router as store_ai_router
 from app.api.routers.voice.sessions import router as voice_sessions_router
 from app.api.routers.voice.orders import router as voice_orders_router
 from app.api.routers.voice.ws import router as voice_ws_router
@@ -42,6 +51,7 @@ app.include_router(store_auth_router)
 app.include_router(store_router)
 app.include_router(store_menu_router)
 app.include_router(store_orders_router)
+app.include_router(store_ai_router)
 app.include_router(voice_sessions_router)
 app.include_router(voice_orders_router)
 app.include_router(voice_ws_router)

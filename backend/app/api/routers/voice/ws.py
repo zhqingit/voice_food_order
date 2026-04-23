@@ -98,6 +98,7 @@ async def voice_ws(
 ) -> None:
     """WebSocket endpoint for real-time voice interactions.
     Expects query parameters for store_id and optional order_id to establish context."""
+    # Guard against missing PipelineRunner dependency (e.g. during Phase 2.3).
     if PipelineRunner is None:
         await websocket.close(code=1011)
         return
@@ -111,6 +112,32 @@ async def voice_ws(
 
             store = db.get(Store, store_id)
             store_name = store.name if store else None
+            custom_prompt = None
+            if store and store.custom_prompts:
+                generated_parts = [
+                    (p.get("generated") or "").strip()
+                    for p in store.custom_prompts
+                    if isinstance(p, dict) and (p.get("generated") or "").strip()
+                ]
+                if generated_parts:
+                    custom_prompt = "\n\n".join(generated_parts)
+
+            # Fulfillment context for the voice bot.
+            store_address: str | None = None
+            allow_pickup_flag = True
+            allow_delivery_flag = True
+            if store is not None:
+                allow_pickup_flag = bool(store.allow_pickup)
+                allow_delivery_flag = bool(store.allow_delivery)
+                addr_parts = [
+                    (store.address_line1 or "").strip(),
+                    (store.address_line2 or "").strip(),
+                    (store.city or "").strip(),
+                    (store.state or "").strip(),
+                    (store.postal_code or "").strip(),
+                ]
+                joined = ", ".join(p for p in addr_parts if p)
+                store_address = joined or None
 
             _VOICE_TONE_MAP = {
                 "male": "Puck",
@@ -123,11 +150,19 @@ async def voice_ws(
         await websocket.close(code=1008)
         return
 
+    # ── Main phase: WebSocket accepted, pipeline running, long-lived connections to tools/LLMs ──
     await websocket.accept()
 
     runtime = load_voice_runtime_config()
     google_config = load_google_voice_config()
-    system_prompt = build_system_prompt(menu_lines=menu, store_name=store_name)
+    system_prompt = build_system_prompt(
+        menu_lines=menu,
+        store_name=store_name,
+        custom_prompt=custom_prompt,
+        store_address=store_address,
+        allow_pickup=allow_pickup_flag,
+        allow_delivery=allow_delivery_flag,
+    )
 
     # Tool context uses db_factory so each tool call gets its own short-lived session.
     tool_context = VoiceToolContext(

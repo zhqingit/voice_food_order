@@ -20,7 +20,7 @@ def load_menu_for_store(db: Session, store_id: uuid.UUID) -> list[str]:
     if menu is None:
         return []
 
-    items = list_menu_items(db, menu_id=menu.id)
+    items = [i for i in list_menu_items(db, menu_id=menu.id) if i.availability]
     if not items:
         return []
 

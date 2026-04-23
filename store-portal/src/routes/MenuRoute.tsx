@@ -227,6 +227,9 @@ export function MenuRoute(): React.JSX.Element {
   const [poolItems, setPoolItems] = useState<MenuItemOut[]>([])
   const [poolFilter, setPoolFilter] = useState('')
   const [poolCategoryFilter, setPoolCategoryFilter] = useState<string>('')
+  const [poolAvailabilityFilter, setPoolAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all')
+  const [poolSortKey, setPoolSortKey] = useState<'name' | 'category' | 'price' | 'availability'>('name')
+  const [poolSortDir, setPoolSortDir] = useState<'asc' | 'desc'>('asc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [selectedMenuItemIds, setSelectedMenuItemIds] = useState<Set<string>>(new Set())
 
@@ -257,16 +260,28 @@ export function MenuRoute(): React.JSX.Element {
   const menuItemIds = useMemo(() => new Set(menuItems.map((i) => i.id)), [menuItems])
 
   // ── Filtered pool
+  // Dedupe categories case-insensitively (treat "Beverages" and "beverages" as
+  // one bucket). Keep the first-seen casing as the display label.
   const categories = useMemo(() => {
-    const cats = new Set<string>()
-    poolItems.forEach((i) => { if (i.category) cats.add(i.category) })
-    return Array.from(cats).sort()
+    const byKey = new Map<string, string>()
+    for (const i of poolItems) {
+      const raw = (i.category ?? '').trim()
+      if (!raw) continue
+      const key = raw.toLowerCase()
+      if (!byKey.has(key)) byKey.set(key, raw)
+    }
+    return Array.from(byKey.values()).sort((a, b) => a.localeCompare(b))
   }, [poolItems])
 
   const filteredPool = useMemo(() => {
     let items = poolItems
     if (poolCategoryFilter) {
-      items = items.filter((i) => i.category === poolCategoryFilter)
+      const want = poolCategoryFilter.trim().toLowerCase()
+      items = items.filter((i) => (i.category ?? '').trim().toLowerCase() === want)
+    }
+    if (poolAvailabilityFilter !== 'all') {
+      const want = poolAvailabilityFilter === 'available'
+      items = items.filter((i) => Boolean(i.availability) === want)
     }
     if (poolFilter) {
       const q = poolFilter.toLowerCase()
@@ -276,8 +291,41 @@ export function MenuRoute(): React.JSX.Element {
         (i.category && i.category.toLowerCase().includes(q))
       )
     }
-    return items
-  }, [poolItems, poolFilter, poolCategoryFilter])
+    const dir = poolSortDir === 'asc' ? 1 : -1
+    const sorted = [...items].sort((a, b) => {
+      switch (poolSortKey) {
+        case 'price': {
+          const pa = Number(a.price ?? 0)
+          const pb = Number(b.price ?? 0)
+          return (pa - pb) * dir
+        }
+        case 'category': {
+          const ca = (a.category ?? '').toLowerCase()
+          const cb = (b.category ?? '').toLowerCase()
+          if (ca !== cb) return ca.localeCompare(cb) * dir
+          return a.name.localeCompare(b.name)
+        }
+        case 'availability': {
+          const av = (a.availability ? 1 : 0) - (b.availability ? 1 : 0)
+          if (av !== 0) return av * dir
+          return a.name.localeCompare(b.name)
+        }
+        case 'name':
+        default:
+          return a.name.localeCompare(b.name) * dir
+      }
+    })
+    return sorted
+  }, [poolItems, poolFilter, poolCategoryFilter, poolAvailabilityFilter, poolSortKey, poolSortDir])
+
+  function togglePoolSort(key: 'name' | 'category' | 'price' | 'availability'): void {
+    if (poolSortKey === key) {
+      setPoolSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setPoolSortKey(key)
+      setPoolSortDir('asc')
+    }
+  }
 
   // ── Uploading state
   const [uploading, setUploading] = useState(false)
@@ -627,7 +675,7 @@ export function MenuRoute(): React.JSX.Element {
           onClick={() => setActiveTab('pool')}
           style={{ maxWidth: 160 }}
         >
-          Items Pool ({poolItems.length})
+          Items Pool ({filteredPool.length === poolItems.length ? poolItems.length : `${filteredPool.length} / ${poolItems.length}`})
         </button>
         <button
           className={activeTab === 'menus' ? 'auth-tab active' : 'auth-tab'}
@@ -675,19 +723,46 @@ export function MenuRoute(): React.JSX.Element {
                 className="form-select"
                 value={poolCategoryFilter}
                 onChange={(e) => setPoolCategoryFilter(e.target.value)}
+                title="Filter by category"
               >
                 <option value="">All Categories</option>
                 {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
 
+              {/* Availability filter */}
+              <select
+                className="form-select"
+                value={poolAvailabilityFilter}
+                onChange={(e) => setPoolAvailabilityFilter(e.target.value as 'all' | 'available' | 'unavailable')}
+                title="Filter by availability"
+              >
+                <option value="all">All Items</option>
+                <option value="available">Available</option>
+                <option value="unavailable">Unavailable</option>
+              </select>
+
               {/* Search */}
               <input
                 className="form-input"
-                style={{ width: 200 }}
-                placeholder="Search items..."
+                style={{ width: 220 }}
+                placeholder="Search name, alias, category…"
                 value={poolFilter}
                 onChange={(e) => setPoolFilter(e.target.value)}
               />
+
+              {(poolFilter || poolCategoryFilter || poolAvailabilityFilter !== 'all') && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setPoolFilter('')
+                    setPoolCategoryFilter('')
+                    setPoolAvailabilityFilter('all')
+                  }}
+                  title="Clear all filters"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </div>
 
@@ -720,13 +795,13 @@ export function MenuRoute(): React.JSX.Element {
                         style={{ width: 16, height: 16, accentColor: 'var(--color-primary)', cursor: 'pointer' }}
                       />
                     </th>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Category</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>Price</th>
+                    <SortableTh label="Name" sortKey="name" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} />
+                    <SortableTh label="Category" sortKey="category" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} />
+                    <SortableTh label="Price" sortKey="price" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} align="right" />
                     <th style={{ ...thStyle, textAlign: 'right' }}>S</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>M</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>L</th>
-                    <th style={thStyle}>Status</th>
+                    <SortableTh label="Status" sortKey="availability" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} />
                     <th style={thStyle}>Tags</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
                   </tr>
@@ -1007,6 +1082,43 @@ const thStyle: React.CSSProperties = {
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
   whiteSpace: 'nowrap',
+}
+
+type PoolSortKey = 'name' | 'category' | 'price' | 'availability'
+
+function SortableTh({
+  label,
+  sortKey,
+  active,
+  dir,
+  onToggle,
+  align,
+}: {
+  label: string
+  sortKey: PoolSortKey
+  active: PoolSortKey
+  dir: 'asc' | 'desc'
+  onToggle: (key: PoolSortKey) => void
+  align?: 'left' | 'right'
+}): React.JSX.Element {
+  const isActive = active === sortKey
+  const arrow = isActive ? (dir === 'asc' ? '▲' : '▼') : '↕'
+  return (
+    <th
+      style={{
+        ...thStyle,
+        textAlign: align ?? 'left',
+        cursor: 'pointer',
+        userSelect: 'none',
+        color: isActive ? 'var(--color-primary)' : thStyle.color,
+      }}
+      onClick={() => onToggle(sortKey)}
+      title={`Sort by ${label.toLowerCase()}`}
+    >
+      {label}
+      <span style={{ marginLeft: 4, fontSize: 10, opacity: isActive ? 1 : 0.4 }}>{arrow}</span>
+    </th>
+  )
 }
 
 const tdStyle: React.CSSProperties = {

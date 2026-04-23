@@ -8,6 +8,8 @@ class OrderOut {
   final double tax;
   final double total;
   final String? notes;
+  final String? fulfillmentType;
+  final String? deliveryAddress;
   final DateTime createdAt;
 
   const OrderOut({
@@ -20,6 +22,8 @@ class OrderOut {
     required this.tax,
     required this.total,
     required this.notes,
+    required this.fulfillmentType,
+    required this.deliveryAddress,
     required this.createdAt,
   });
 
@@ -34,6 +38,8 @@ class OrderOut {
       tax: (json['tax'] as num).toDouble(),
       total: (json['total'] as num).toDouble(),
       notes: json['notes'] as String?,
+      fulfillmentType: json['fulfillment_type'] as String?,
+      deliveryAddress: json['delivery_address'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }

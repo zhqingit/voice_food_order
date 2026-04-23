@@ -84,3 +84,25 @@ export async function uploadLogo(file: File): Promise<StoreMe> {
   })
   return res.data as StoreMe
 }
+
+// ── AI custom prompt rules ───────────────────────────────────────────────────
+
+export type AIPromptRule = {
+  raw: string
+  generated: string
+}
+
+export async function listAIPrompts(): Promise<AIPromptRule[]> {
+  const res = await apiClient.get('/store/ai/prompts')
+  return (res.data as { prompts: AIPromptRule[] }).prompts
+}
+
+export async function generateAIPrompt(raw: string): Promise<string> {
+  const res = await apiClient.post('/store/ai/prompts/generate', { raw })
+  return (res.data as { generated: string }).generated
+}
+
+export async function saveAIPrompts(prompts: AIPromptRule[]): Promise<AIPromptRule[]> {
+  const res = await apiClient.put('/store/ai/prompts', { prompts })
+  return (res.data as { prompts: AIPromptRule[] }).prompts
+}

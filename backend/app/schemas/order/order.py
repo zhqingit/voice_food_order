@@ -29,6 +29,8 @@ class OrderOut(BaseModel):
     customer_name: str | None = None
     user_email: str | None = None
     notes: str | None
+    fulfillment_type: str | None = None
+    delivery_address: str | None = None
     created_at: datetime
 
 

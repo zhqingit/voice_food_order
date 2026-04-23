@@ -34,7 +34,6 @@ export function ProfileRoute(): React.JSX.Element {
   const [allowDelivery, setAllowDelivery] = useState<boolean>(true)
   const [minOrder, setMinOrder] = useState('')
   const [taxRate, setTaxRate] = useState('')
-  const [voiceTone, setVoiceTone] = useState<string | null>(null)
   const logoInputRef = useRef<HTMLInputElement>(null)
 
   // Working hours state
@@ -57,10 +56,9 @@ export function ProfileRoute(): React.JSX.Element {
       allowPickup !== Boolean(me.allow_pickup ?? true) ||
       allowDelivery !== Boolean(me.allow_delivery ?? true) ||
       minOrder !== (me.min_order_amount != null ? String(me.min_order_amount) : '') ||
-      taxRate !== String(Number(me.tax_rate ?? 0) * 100) ||
-      voiceTone !== (me.voice_tone ?? null)
+      taxRate !== String(Number(me.tax_rate ?? 0) * 100)
     )
-  }, [me, name, phone, address1, address2, city, state, postal, country, timezone, allowPickup, allowDelivery, minOrder, taxRate, voiceTone])
+  }, [me, name, phone, address1, address2, city, state, postal, country, timezone, allowPickup, allowDelivery, minOrder, taxRate])
 
   useEffect(() => {
     void (async () => {
@@ -82,7 +80,6 @@ export function ProfileRoute(): React.JSX.Element {
         setAllowDelivery(Boolean(data.allow_delivery ?? true))
         setMinOrder(data.min_order_amount != null ? String(data.min_order_amount) : '')
         setTaxRate(String(Number(data.tax_rate ?? 0) * 100))
-        setVoiceTone(data.voice_tone ?? null)
         setHours(hoursData)
       } catch {
         setError(t('profile.failedLoad'))
@@ -124,7 +121,6 @@ export function ProfileRoute(): React.JSX.Element {
         allow_delivery: allowDelivery,
         min_order_amount: minOrderParsed,
         tax_rate: taxRateParsed,
-        voice_tone: voiceTone,
       })
       setMe(updated)
       setMessage(t('profile.saved'))
@@ -328,27 +324,6 @@ export function ProfileRoute(): React.JSX.Element {
                       {me.logo_url ? t('profile.changeLogo') : t('profile.uploadLogo')}
                     </button>
                   </div>
-                </div>
-              </div>
-
-              <div className="form-group grid-full">
-                <label className="form-label">{t('profile.voiceTone')}</label>
-                <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>{t('profile.voiceToneDesc')}</p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[
-                    { value: null, label: t('profile.voiceDefault') },
-                    { value: 'female', label: t('profile.voiceFemale') },
-                    { value: 'male', label: t('profile.voiceMale') },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value ?? 'default'}
-                      type="button"
-                      className={`btn btn-sm ${voiceTone === opt.value ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => setVoiceTone(opt.value)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
                 </div>
               </div>
 

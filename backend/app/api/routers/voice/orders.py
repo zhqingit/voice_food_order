@@ -18,6 +18,14 @@ from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemCreate, OrderItemOut, OrderOut
 from app.services import order_service
 
+from pydantic import BaseModel, Field
+
+
+class OrderPatch(BaseModel):
+    delivery_address: str | None = Field(default=None, max_length=512)
+    fulfillment_type: str | None = Field(default=None, pattern="^(pickup|delivery)$")
+    customer_name: str | None = Field(default=None, max_length=128)
+
 router = APIRouter(
     prefix="/voice/orders",
     tags=["voice-orders"],
@@ -37,6 +45,8 @@ def _order_out(order: Order) -> OrderOut:
         total=order.total,
         customer_name=order.customer_name,
         notes=order.notes,
+        fulfillment_type=order.fulfillment_type,
+        delivery_address=order.delivery_address,
         created_at=order.created_at,
     )
 
@@ -80,6 +90,30 @@ def get_order_summary(
     ).scalar_one_or_none()
     if order is None:
         raise AppError(status_code=404, code="order_not_found", detail="Order not found")
+    return _order_out(order)
+
+
+@router.patch("/{order_id}", response_model=OrderOut)
+def patch_order(
+    order_id: uuid.UUID,
+    payload: OrderPatch,
+    current_user: User = Depends(get_current_user_mobile),
+    db: Session = Depends(get_db),
+) -> OrderOut:
+    """Update editable fields on a draft voice order owned by the current user."""
+    order = db.execute(
+        select(Order).where(Order.user_id == current_user.id).where(Order.id == order_id)
+    ).scalar_one_or_none()
+    if order is None:
+        raise AppError(status_code=404, code="order_not_found", detail="Order not found")
+    if order.status != "draft":
+        raise AppError(status_code=409, code="order_not_editable", detail="Order is not editable")
+
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        setattr(order, key, value)
+    db.commit()
+    db.refresh(order)
     return _order_out(order)
 
 

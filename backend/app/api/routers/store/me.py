@@ -42,6 +42,7 @@ def _store_out(s: Store) -> StoreOut:
         min_order_amount=s.min_order_amount,
         tax_rate=s.tax_rate,
         voice_tone=s.voice_tone,
+        custom_prompts=list(s.custom_prompts or []),
         logo_url=s.logo_url,
         is_published=s.is_published,
         email=s.email,

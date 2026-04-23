@@ -45,6 +45,7 @@ class StoreOut(BaseModel):
     min_order_amount: Decimal | None = None
     tax_rate: Decimal = Decimal("0.0000")
     voice_tone: str | None = None
+    custom_prompts: list[dict] = []
     logo_url: str | None = None
     is_published: bool = False
     email: EmailStr

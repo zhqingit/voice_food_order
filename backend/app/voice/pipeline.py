@@ -14,8 +14,12 @@ if TYPE_CHECKING:
 
 try:
     from pipecat.adapters.schemas.tools_schema import AdapterType, ToolsSchema
-    from pipecat.frames.frames import LLMMessagesAppendFrame, LLMRunFrame
-    from pipecat.processors.frame_processor import FrameDirection
+    from pipecat.frames.frames import (
+        FunctionCallCancelFrame,
+        LLMMessagesAppendFrame,
+        LLMRunFrame,
+    )
+    from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
     from pipecat.pipeline.pipeline import Pipeline
     from pipecat.pipeline.task import PipelineParams, PipelineTask
     from pipecat.processors.aggregators.llm_context import LLMContext
@@ -28,13 +32,16 @@ try:
     from pipecat.turns.user_mute import FunctionCallUserMuteStrategy
     from pipecat.turns.user_start import TranscriptionUserTurnStartStrategy
     from pipecat.turns.user_turn_strategies import UserTurnStrategies
-    from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService
+    from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService, GeminiVADParams
+    from google.genai.types import StartSensitivity, EndSensitivity
 except ImportError:  # pragma: no cover - optional dependency
     AdapterType = None
     ToolsSchema = None
+    FunctionCallCancelFrame = None
     LLMMessagesAppendFrame = None
     LLMRunFrame = None
     FrameDirection = None
+    FrameProcessor = object  # type: ignore[assignment,misc]
     Pipeline = None
     PipelineParams = None
     PipelineTask = None
@@ -47,6 +54,9 @@ except ImportError:  # pragma: no cover - optional dependency
     TranscriptionUserTurnStartStrategy = None
     UserTurnStrategies = None
     GeminiLiveLLMService = None
+    GeminiVADParams = None
+    StartSensitivity = None
+    EndSensitivity = None
 
 
 def create_voice_pipeline_task(
@@ -81,12 +91,28 @@ def create_voice_pipeline_task(
 
     tools = ToolsSchema(standard_tools=[], custom_tools={AdapterType.GEMINI: tool_schema})
 
+    # Use the new Settings API (model/voice_id as direct params are deprecated in pipecat 0.0.105+)
     llm = GeminiLiveLLMService(
         api_key=google_config.api_key,
-        model=runtime.llm_model,
         system_instruction=system_prompt,
         tools=tools,
-        voice_id=voice_id,
+        settings=GeminiLiveLLMService.Settings(
+            model=runtime.llm_model,
+            voice=voice_id,
+            # Noise resistance: tune server-side VAD to be less sensitive to
+            # background noise (kitchen, street, chatter) while still
+            # detecting clear speech directed at the mic.
+            # Noise resistance: LOW start sensitivity reduces false triggers from
+            # background noise. HIGH end sensitivity ensures we don't cut off
+            # the user mid-sentence. 700ms silence is a good balance between
+            # responsiveness and not interrupting natural pauses.
+            vad=GeminiVADParams(
+                start_sensitivity=StartSensitivity.START_SENSITIVITY_LOW,
+                end_sensitivity=EndSensitivity.END_SENSITIVITY_HIGH,
+                silence_duration_ms=700,
+                prefix_padding_ms=300,
+            ),
+        ),
     )
 
     if tool_handlers:
@@ -128,10 +154,29 @@ def create_voice_pipeline_task(
         ),
     )
 
+    # Observe FunctionCallCancelFrame so we can recover when pipecat cancels a
+    # tool call mid-flight (happens when a user utterance races with Gemini's
+    # tool-call dispatch). Without recovery Gemini sits silent, waiting for a
+    # tool result that will never arrive.
+    cancel_events: asyncio.Queue[str] = asyncio.Queue()
+
+    class _FunctionCallCancelObserver(FrameProcessor):
+        async def process_frame(self, frame: Any, direction: Any) -> None:
+            await super().process_frame(frame, direction)
+            if FunctionCallCancelFrame is not None and isinstance(frame, FunctionCallCancelFrame):
+                try:
+                    cancel_events.put_nowait(getattr(frame, "tool_call_id", "") or "unknown")
+                except Exception:
+                    pass
+            await self.push_frame(frame, direction)
+
+    cancel_observer = _FunctionCallCancelObserver()
+
     pipeline = Pipeline([
         transport.input(),
         user_agg,
         llm,
+        cancel_observer,
         transport.output(),
         assistant_agg,
     ])
@@ -202,13 +247,47 @@ def create_voice_pipeline_task(
         if on_transcript is not None:
             await on_transcript("assistant", message.content)
 
+    # ── Recovery loop: drain cancel events and unstick Gemini ─────────────
+    # When a function call is cancelled mid-flight, Gemini's internal state is
+    # "awaiting tool result" — it won't speak. Our shielded handler still
+    # commits the DB write, so the order state is correct; we just need to
+    # prod Gemini so it re-reads context and responds to the customer.
+    _recovery_task: asyncio.Task[None] | None = None
+
+    async def _recovery_loop() -> None:
+        while True:
+            tool_call_id = await cancel_events.get()
+            # Small settle so pipecat finishes its cancel bookkeeping before
+            # we push a new frame.
+            await asyncio.sleep(0.3)
+            logger.info(
+                "Recovery: function call %s cancelled mid-flight; nudging Gemini to resume",
+                tool_call_id,
+            )
+            try:
+                await task.queue_frames([
+                    LLMMessagesAppendFrame(
+                        messages=[{
+                            "role": "user",
+                            "content": "(system: your previous tool call was interrupted. Check the current order state and respond briefly to the customer.)",
+                        }],
+                    ),
+                    LLMRunFrame(),
+                ])
+            except Exception:
+                logger.warning("Recovery: failed to push nudge frames", exc_info=True)
+
     @task.event_handler("on_pipeline_started")
     async def on_pipeline_started(task: PipelineTask, frame: Any):
+        nonlocal _recovery_task
+        _recovery_task = asyncio.create_task(_recovery_loop())
         # Context is already set via the aggregator pair; just trigger the LLM run.
         await task.queue_frames([LLMRunFrame()])
 
     @task.event_handler("on_pipeline_stopped")
     async def on_pipeline_stopped(task: PipelineTask, frame: Any):
         _cancel_nudge()
+        if _recovery_task is not None and not _recovery_task.done():
+            _recovery_task.cancel()
 
     return task

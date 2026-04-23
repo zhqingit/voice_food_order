@@ -13,6 +13,8 @@ export type OrderOut = {
   customer_name: string | null
   user_email: string | null
   notes: string | null
+  fulfillment_type: string | null
+  delivery_address: string | null
   created_at: string
 }
 

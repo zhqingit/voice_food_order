@@ -332,6 +332,22 @@ export function OrdersRoute(): React.JSX.Element {
               </div>
             )}
 
+            {selectedOrder.fulfillment_type && (
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <span className="meta-label">{t('orders.fulfillment')}</span>
+                <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{selectedOrder.fulfillment_type}</span>
+              </div>
+            )}
+
+            {selectedOrder.fulfillment_type === 'delivery' && (
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <span className="meta-label">{t('orders.deliveryAddress')}</span>
+                <span style={{ whiteSpace: 'pre-wrap' }}>
+                  {selectedOrder.delivery_address ? selectedOrder.delivery_address : <em style={{ color: 'var(--color-text-secondary)' }}>{t('orders.deliveryAddressMissing')}</em>}
+                </span>
+              </div>
+            )}
+
             {selectedOrder.notes && (
               <div className="form-group" style={{ marginTop: 12 }}>
                 <span className="meta-label">{t('orders.orderNote')}</span>

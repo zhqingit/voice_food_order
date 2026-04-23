@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,4 +28,7 @@ class Order(Base):
 
     customer_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    # "pickup" | "delivery" | None (not yet chosen)
+    fulfillment_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utcnow_naive)

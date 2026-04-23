@@ -40,6 +40,7 @@
   "nav": {
     "menu": "菜单",
     "orders": "订单",
+    "ai": "AI 设置",
     "profile": "店铺资料",
     "logout": "退出登录"
   },
@@ -117,6 +118,9 @@
     "lineTotal": "小计",
     "note": "备注",
     "orderNote": "订单备注",
+    "fulfillment": "配送方式",
+    "deliveryAddress": "配送地址",
+    "deliveryAddressMissing": "(未提供)",
     "noItems": "暂无菜品。",
     "noOrders": "暂无订单。",
     "selectOrder": "选择一个订单查看详情。",
@@ -188,5 +192,35 @@
     "unpublished": "未发布",
     "publishedOn": "您的店铺现已对顾客可见。",
     "publishedOff": "您的店铺现已对顾客隐藏。"
+  },
+  "ai": {
+    "title": "AI 助手",
+    "subtitle": "自定义语音助手为您的店铺服务的方式。",
+    "voiceTone": "语音音色",
+    "voiceToneDesc": "顾客下单时 AI 助手使用的语音。",
+    "voiceDefault": "默认",
+    "voiceFemale": "女声",
+    "voiceMale": "男声",
+    "customRules": "自定义规则",
+    "customRulesDesc": "每行添加一条规则。用自然语言描述您希望 AI 做什么,点击 生成 转换为指令,然后保存全部。保存的每条规则都会在每次通话时追加到系统提示中。",
+    "columnRaw": "您的要求",
+    "columnGenerated": "生成的规则",
+    "columnActions": "操作",
+    "rawPlaceholder": "例如: 如果顾客还没有选主菜,主动推荐今日特色。",
+    "generatedPlaceholder": "生成的指令会显示在这里,保存前可以编辑。",
+    "emptyRules": "暂无规则。点击 + 添加规则 开始。",
+    "addRule": "添加规则",
+    "generate": "生成",
+    "regenerate": "重新生成",
+    "generating": "生成中…",
+    "delete": "删除",
+    "save": "保存",
+    "saveAll": "保存全部",
+    "saved": "已保存。",
+    "savedAndActive": "已保存 — 下一次通话时 AI 将使用这些规则。",
+    "failedLoad": "加载 AI 设置失败。",
+    "failedSave": "保存 AI 设置失败。",
+    "failedGenerate": "生成规则失败。",
+    "rawRequired": "请先输入您的要求。"
   }
 }

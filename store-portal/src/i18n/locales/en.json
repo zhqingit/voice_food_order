@@ -40,6 +40,7 @@
   "nav": {
     "menu": "Menu",
     "orders": "Orders",
+    "ai": "AI",
     "profile": "Profile",
     "logout": "Logout"
   },
@@ -117,6 +118,9 @@
     "lineTotal": "Line Total",
     "note": "Note",
     "orderNote": "Order Note",
+    "fulfillment": "Fulfillment",
+    "deliveryAddress": "Delivery Address",
+    "deliveryAddressMissing": "(not captured)",
     "noItems": "No items.",
     "noOrders": "No orders yet.",
     "selectOrder": "Select an order to view details.",
@@ -188,5 +192,35 @@
     "unpublished": "Unpublished",
     "publishedOn": "Your store is now visible to customers.",
     "publishedOff": "Your store is now hidden from customers."
+  },
+  "ai": {
+    "title": "AI Assistant",
+    "subtitle": "Customize how the voice assistant behaves for your store.",
+    "voiceTone": "Voice Tone",
+    "voiceToneDesc": "Voice used by the AI assistant when customers place orders.",
+    "voiceDefault": "Default",
+    "voiceFemale": "Female",
+    "voiceMale": "Male",
+    "customRules": "Custom Rules",
+    "customRulesDesc": "Add one rule per row. Type what you want the AI to do, click Generate to turn it into instructions, then Save All. Every saved rule is appended to the system prompt on each call.",
+    "columnRaw": "Your Requirement",
+    "columnGenerated": "Generated Rule",
+    "columnActions": "Actions",
+    "rawPlaceholder": "e.g. Recommend our daily special if the customer hasn't picked a main.",
+    "generatedPlaceholder": "Generated instructions will appear here. You can edit them before saving.",
+    "emptyRules": "No rules yet. Click + Add rule to create one.",
+    "addRule": "Add rule",
+    "generate": "Generate",
+    "regenerate": "Regenerate",
+    "generating": "Generating…",
+    "delete": "Delete",
+    "save": "Save",
+    "saveAll": "Save All",
+    "saved": "Saved.",
+    "savedAndActive": "Saved — the AI will use these rules on the next call.",
+    "failedLoad": "Failed to load AI settings.",
+    "failedSave": "Failed to save AI settings.",
+    "failedGenerate": "Failed to generate rule.",
+    "rawRequired": "Enter your requirement first."
   }
 }
