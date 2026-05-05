@@ -100,6 +100,21 @@ gcloud services enable compute.googleapis.com
   cd /path/to/voice_food_order/backend
   git pull origin with_supervisor
   docker compose up --build -d
+
+  Option C: rsync the whole backend (catches multiple changes at once)
+
+  gcloud compute ssh voxeats-server --zone=us-central1-a -- 'mkdir -p ~/voice_food_order/backend'
+
+  gcloud compute scp --recurse \
+    /data/data0/myproject/apps/Resto_AI/src/voice_food_order/backend/app \
+    voxeats-server:~/voice_food_order/backend/ \
+    --zone=us-central1-a
+
+  Or if you have rsync configured to use gcloud as ssh:
+  rsync -avz --delete \
+    -e "gcloud compute ssh --zone=us-central1-a --tunnel-through-iap" \
+    /data/data0/myproject/apps/Resto_AI/src/voice_food_order/backend/app/ \
+    voxeats-server:~/voice_food_order/backend/app/
   
 
 Step 6: Configure Environment

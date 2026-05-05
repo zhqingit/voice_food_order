@@ -175,6 +175,10 @@ class _ActiveSessionView extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
     final voice = ref.watch(voiceControllerProvider);
+    // Soft keyboard up → hide the mic orb so the order card + delivery
+    // TextField fit without overflow. The user can dismiss the keyboard to
+    // reach the mic again.
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     String statusText;
     if (voice.connected) {
@@ -230,29 +234,30 @@ class _ActiveSessionView extends ConsumerWidget {
             ),
           ),
 
-        // Mic orb + status
-        Padding(
-          padding: const EdgeInsets.only(bottom: 32, top: 16),
-          child: Column(
-            children: [
-              _AnimatedWaveform(active: voice.connected),
-              const SizedBox(height: 16),
-              _AnimatedMicOrb(
-                connected: voice.connected,
-                connecting: voice.connecting,
-                onTap: () async {
-                  if (voice.connected) {
-                    await ref.read(voiceControllerProvider.notifier).stop();
-                  } else if (!voice.connecting) {
-                    await ref.read(voiceControllerProvider.notifier).start(storeId: storeId);
-                  }
-                },
-              ),
-              const SizedBox(height: 14),
-              Text(statusText, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: _kTextMuted.withValues(alpha: 0.8))),
-            ],
+        // Mic orb + status — hidden while the keyboard is up.
+        if (!keyboardOpen)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 32, top: 16),
+            child: Column(
+              children: [
+                _AnimatedWaveform(active: voice.connected),
+                const SizedBox(height: 16),
+                _AnimatedMicOrb(
+                  connected: voice.connected,
+                  connecting: voice.connecting,
+                  onTap: () async {
+                    if (voice.connected) {
+                      await ref.read(voiceControllerProvider.notifier).stop();
+                    } else if (!voice.connecting) {
+                      await ref.read(voiceControllerProvider.notifier).start(storeId: storeId);
+                    }
+                  },
+                ),
+                const SizedBox(height: 14),
+                Text(statusText, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: _kTextMuted.withValues(alpha: 0.8))),
+              ],
+            ),
           ),
-        ),
       ],
     );
   }
