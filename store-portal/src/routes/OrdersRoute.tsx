@@ -395,7 +395,14 @@ export function OrdersRoute(): React.JSX.Element {
                 <tbody>
                   {items.map((it) => (
                     <tr key={it.id} style={{ borderBottom: '1px solid var(--color-border, #f0f0f0)' }}>
-                      <td style={tdStyle}>{it.name ?? 'Unknown item'}</td>
+                      <td style={tdStyle}>
+                        {it.name ?? 'Unknown item'}
+                        {it.variant_name && (
+                          <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                            ({it.variant_name})
+                          </span>
+                        )}
+                      </td>
                       <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)', fontStyle: it.note ? 'italic' : undefined }}>{it.note ?? '—'}</td>
                       <td style={{ ...tdStyle, textAlign: 'center' }}>{it.quantity}</td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>${String(it.price_snapshot)}</td>

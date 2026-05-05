@@ -1,5 +1,6 @@
 from app.models.menu import Menu
 from app.models.menu_item import MenuItem
+from app.models.menu_item_variant import MenuItemVariant
 from app.models.menu_menu_item import MenuMenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
@@ -14,6 +15,7 @@ __all__ = [
 	"Store",
 	"Menu",
 	"MenuItem",
+	"MenuItemVariant",
 	"MenuMenuItem",
 	"Order",
 	"OrderItem",

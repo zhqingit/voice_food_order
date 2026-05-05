@@ -20,3 +20,6 @@ class OrderItem(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     price_snapshot: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     note: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Snapshot of the chosen variant name at order time, e.g. "12 Oz Can".
+    # None for items that have no variants.
+    variant_name: Mapped[str | None] = mapped_column(String(64), nullable=True)

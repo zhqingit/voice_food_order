@@ -19,9 +19,11 @@ logger = logging.getLogger(__name__)
 from app.api.deps.store import get_current_store_web
 from app.api.host_policy import require_host_policy
 from app.core.errors import AppError
+from app.core.gemini_client import make_genai_client
 from app.db.session import get_db
 from app.models.menu import Menu
 from app.models.menu_item import MenuItem
+from app.models.menu_item_variant import MenuItemVariant
 from app.models.store import Store
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.menu.menu import (
@@ -29,6 +31,9 @@ from app.schemas.menu.menu import (
     MenuItemCreate,
     MenuItemOut,
     MenuItemUpdate,
+    MenuItemVariantCreate,
+    MenuItemVariantOut,
+    MenuItemVariantUpdate,
     MenuOut,
     MenuUpdate,
 )
@@ -52,6 +57,18 @@ def _menu_out(menu: Menu) -> MenuOut:
     )
 
 
+def _variant_out(v: "MenuItemVariant") -> MenuItemVariantOut:  # type: ignore[name-defined]  # noqa: F821
+    return MenuItemVariantOut(
+        id=v.id,
+        menu_item_id=v.menu_item_id,
+        name=v.name,
+        price=v.price,
+        availability=v.availability,
+        sort_order=v.sort_order,
+        is_default=v.is_default,
+    )
+
+
 def _menu_item_out(item: MenuItem) -> MenuItemOut:
     return MenuItemOut(
         id=item.id,
@@ -69,6 +86,7 @@ def _menu_item_out(item: MenuItem) -> MenuItemOut:
         tags=item.tags,
         availability=item.availability,
         modifiers=item.modifiers,
+        variants=[_variant_out(v) for v in (item.variants or [])],
     )
 
 
@@ -337,9 +355,10 @@ async def upload_items_image(
         "application/pdf",
     }
 
-    api_key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
-    if not api_key:
-        raise AppError(status_code=500, code="missing_api_key", detail="Gemini API key not configured")
+    try:
+        bundle = make_genai_client()
+    except RuntimeError as exc:
+        raise AppError(status_code=503, code="genai_unavailable", detail=str(exc))
 
     # Read and validate all files
     file_parts: list[genai.types.Part] = []
@@ -360,8 +379,6 @@ async def upload_items_image(
         mime_type = "image/jpeg" if content_type == "image/jpg" else content_type
         file_parts.append(genai.types.Part.from_bytes(data=file_bytes, mime_type=mime_type))
 
-    client = genai.Client(api_key=api_key)
-
     prompt = """Analyze the restaurant menu image(s)/document(s) and extract all menu items.
 Return a JSON array where each element has these fields:
 - "name": string (required) — the item name
@@ -381,8 +398,8 @@ Rules:
 - Return ONLY the JSON array, no markdown formatting, no explanation"""
 
     try:
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+        response = bundle.client.models.generate_content(
+            model=bundle.background_model,
             contents=[*file_parts, prompt],
         )
 
@@ -510,6 +527,100 @@ def delete_store_item(
         raise AppError(status_code=404, code="item_not_found", detail="Item not found")
 
     menu_service.delete_store_item(db, item=item)
+    db.commit()
+    return {"status": "ok"}
+
+
+# ── Item variants (Coke: 12 Oz Can / 2 Liter, Pizza: 10" / 14" / 18") ──
+
+@router.get("/items/{item_id}/variants", response_model=list[MenuItemVariantOut])
+def list_item_variants_endpoint(
+    item_id: uuid.UUID,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> list[MenuItemVariantOut]:
+    item = menu_service.get_store_item(db, store_id=current_store.id, item_id=item_id)
+    if item is None:
+        raise AppError(status_code=404, code="item_not_found", detail="Item not found")
+    rows = menu_service.list_item_variants(db, menu_item_id=item_id)
+    return [_variant_out(v) for v in rows]
+
+
+@router.post("/items/{item_id}/variants", response_model=MenuItemVariantOut)
+def create_item_variant_endpoint(
+    item_id: uuid.UUID,
+    payload: MenuItemVariantCreate,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> MenuItemVariantOut:
+    item = menu_service.get_store_item(db, store_id=current_store.id, item_id=item_id)
+    if item is None:
+        raise AppError(status_code=404, code="item_not_found", detail="Item not found")
+
+    existing = menu_service.find_variant_by_name(
+        db, menu_item_id=item_id, name=payload.name
+    )
+    if existing is not None:
+        raise AppError(
+            status_code=409,
+            code="variant_name_exists",
+            detail=f"A variant named '{payload.name}' already exists on this item.",
+        )
+
+    variant = menu_service.create_item_variant(db, menu_item_id=item_id, payload=payload)
+    db.commit()
+    db.refresh(variant)
+    return _variant_out(variant)
+
+
+@router.patch("/items/{item_id}/variants/{variant_id}", response_model=MenuItemVariantOut)
+def update_item_variant_endpoint(
+    item_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    payload: MenuItemVariantUpdate,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> MenuItemVariantOut:
+    item = menu_service.get_store_item(db, store_id=current_store.id, item_id=item_id)
+    if item is None:
+        raise AppError(status_code=404, code="item_not_found", detail="Item not found")
+    variant = menu_service.get_item_variant(db, menu_item_id=item_id, variant_id=variant_id)
+    if variant is None:
+        raise AppError(status_code=404, code="variant_not_found", detail="Variant not found")
+
+    # Rename collision check.
+    if payload.name is not None:
+        conflicting = menu_service.find_variant_by_name(
+            db, menu_item_id=item_id, name=payload.name
+        )
+        if conflicting is not None and conflicting.id != variant.id:
+            raise AppError(
+                status_code=409,
+                code="variant_name_exists",
+                detail=f"A variant named '{payload.name}' already exists on this item.",
+            )
+
+    menu_service.update_item_variant(db, variant=variant, payload=payload)
+    db.commit()
+    db.refresh(variant)
+    return _variant_out(variant)
+
+
+@router.delete("/items/{item_id}/variants/{variant_id}")
+def delete_item_variant_endpoint(
+    item_id: uuid.UUID,
+    variant_id: uuid.UUID,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> dict:
+    item = menu_service.get_store_item(db, store_id=current_store.id, item_id=item_id)
+    if item is None:
+        raise AppError(status_code=404, code="item_not_found", detail="Item not found")
+    variant = menu_service.get_item_variant(db, menu_item_id=item_id, variant_id=variant_id)
+    if variant is None:
+        raise AppError(status_code=404, code="variant_not_found", detail="Variant not found")
+
+    menu_service.delete_item_variant(db, variant=variant)
     db.commit()
     return {"status": "ok"}
 

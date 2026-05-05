@@ -663,7 +663,22 @@ class _LiveOrderPanelState extends ConsumerState<_LiveOrderPanel> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(item.name, style: const TextStyle(fontSize: 13, color: _kTextDark)),
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
+                                    Flexible(
+                                      child: Text(item.name, style: const TextStyle(fontSize: 13, color: _kTextDark)),
+                                    ),
+                                    if (item.variant != null && item.variant!.isNotEmpty) ...[
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        '(${item.variant})',
+                                        style: TextStyle(fontSize: 11, color: _kTextMuted.withValues(alpha: 0.9)),
+                                      ),
+                                    ],
+                                  ],
+                                ),
                                 if (item.note != null && item.note!.isNotEmpty)
                                   Text(item.note!, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: _kTextMuted.withValues(alpha: 0.8))),
                               ],
@@ -1333,7 +1348,12 @@ class _MenuItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasSizes = item.priceSmall != null || item.priceMedium != null || item.priceLarge != null;
+    // Prefer variants (new model) over the legacy S/M/L fields. Only show
+    // available variants; hide out-of-stock ones from the customer.
+    final availableVariants = item.variants.where((v) => v.availability).toList();
+    final hasVariants = availableVariants.isNotEmpty;
+    final hasLegacySizes = !hasVariants &&
+        (item.priceSmall != null || item.priceMedium != null || item.priceLarge != null);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -1355,7 +1375,19 @@ class _MenuItemTile extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                if (hasSizes)
+                if (hasVariants)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      spacing: 10,
+                      runSpacing: 2,
+                      children: [
+                        for (final v in availableVariants)
+                          _VariantPrice(name: v.name, price: v.price),
+                      ],
+                    ),
+                  ),
+                if (hasLegacySizes)
                   Padding(
                     padding: const EdgeInsets.only(top: 4),
                     child: Wrap(
@@ -1371,12 +1403,44 @@ class _MenuItemTile extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 12),
-          Text(
-            '\$${item.price.toStringAsFixed(2)}',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _kOrangeStart),
-          ),
+          // When variants exist, the base price is misleading (it's not what
+          // the customer will pay). Show a range or "from $X" instead.
+          if (hasVariants)
+            Text(
+              _variantPriceLabel(availableVariants),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _kOrangeStart),
+            )
+          else
+            Text(
+              '\$${item.price.toStringAsFixed(2)}',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: _kOrangeStart),
+            ),
         ],
       ),
+    );
+  }
+
+  String _variantPriceLabel(List<MenuItemVariant> variants) {
+    final prices = variants.map((v) => v.price).toList()..sort();
+    if (prices.isEmpty) return '\$${item.price.toStringAsFixed(2)}';
+    if (prices.first == prices.last) {
+      return '\$${prices.first.toStringAsFixed(2)}';
+    }
+    return 'from \$${prices.first.toStringAsFixed(2)}';
+  }
+}
+
+class _VariantPrice extends StatelessWidget {
+  final String name;
+  final double price;
+
+  const _VariantPrice({required this.name, required this.price});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '$name \$${price.toStringAsFixed(2)}',
+      style: TextStyle(fontSize: 11, color: _kTextMuted.withValues(alpha: 0.8), fontWeight: FontWeight.w500),
     );
   }
 }

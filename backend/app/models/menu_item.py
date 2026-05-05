@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from sqlalchemy import Boolean, ForeignKey, JSON, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -29,6 +29,13 @@ class MenuItem(Base):
     tags: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
     availability: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     modifiers: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+
+    variants: Mapped[list["MenuItemVariant"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        "MenuItemVariant",
+        back_populates="menu_item",
+        cascade="all, delete-orphan",
+        order_by="MenuItemVariant.sort_order",
+    )
 
     def price_for_size(self, size: str | None) -> Decimal:
         """Return the price for a given size, falling back to base price."""

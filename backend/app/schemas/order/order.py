@@ -15,6 +15,7 @@ class OrderItemOut(BaseModel):
     quantity: int
     price_snapshot: Decimal
     note: str | None = None
+    variant_name: str | None = None
 
 
 class OrderOut(BaseModel):

@@ -1,0 +1,73 @@
+
+  2. Authenticate your laptop
+
+  gcloud auth login                                   # logs your user into the CLI
+  gcloud config set project voxeats                    # default project
+  gcloud auth application-default login                # writes ADC credentials
+  gcloud auth application-default set-quota-project voxeats
+
+  Each login command opens a browser tab — sign in with the Google account that owns (or has access to) the voxeats project.
+
+  Important: the account you sign in with needs roles/aiplatform.user on the voxeats project. If you created the project, you already have it. If not, grant it via: IAM page → Grant Access → pick your email → role "Vertex AI User".
+
+  After the ADC login completes, this file will exist:
+  ~/.config/gcloud/application_default_credentials.json
+
+  Check with:
+  ls -l ~/.config/gcloud/application_default_credentials.json
+
+  That's the file Google SDKs automatically discover.
+
+  3. Wire ADC into your local Docker backend
+
+  Edit backend/docker-compose.yml. In the api service, add environment vars and one volume mount:
+
+  Read 1 file (ctrl+o to expand)
+
+● Add these to the api service in docker-compose.yml:
+
+    api:
+      # ... existing build/ports/depends_on/command unchanged ...
+      environment:
+        # ... existing env vars (DATABASE_URL, JWT_SECRET, etc.) unchanged ...
+        # NEW ↓
+        GOOGLE_CLOUD_PROJECT: voxeats
+        GOOGLE_CLOUD_LOCATION: us-central1
+        GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+      volumes:
+        # ... existing volumes unchanged ...
+        # NEW ↓
+        - ${HOME}/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
+
+  Then restart:
+  cd backend
+  docker compose down
+  docker compose up -d
+
+  Want me to apply the edit, or do you prefer to do it yourself?
+
+  4. Verify
+
+  Once the container is up:
+
+  docker compose exec api python -c "
+  from google import genai
+  c = genai.Client(vertexai=True, project='voxeats', location='us-central1')
+  r = c.models.generate_content(model='gemini-2.5-flash', contents='Say: pong')
+  print(r.text)
+  "
+
+  Expected output: pong. or similar.
+
+  Common errors
+
+  - DefaultCredentialsError: Could not automatically determine credentials
+  → The bind-mount didn't land. Double-check the file exists at ~/.config/gcloud/application_default_credentials.json, and the path inside the container is /gcp/adc.json. Run docker compose exec api ls -l /gcp/ to see.
+  - 403 PERMISSION_DENIED: Permission 'aiplatform.endpoints.predict' denied
+  → Your user account lacks the Vertex AI User role on voxeats. Grant it at IAM.
+  - 403 ... Quota project … isn't enabled
+  → You missed gcloud auth application-default set-quota-project voxeats. Run it, then re-log in ADC once more if needed.
+  - 404 Model not found
+  → Model name on Vertex sometimes needs the google/ prefix, sometimes not (SDK version-dependent). Try 'google/gemini-2.5-flash' if 'gemini-2.5-flash' 404s.
+
+  Run steps 1→4 and tell me what you get — an error, or a successful pong. Once it works, we start Phase 1.

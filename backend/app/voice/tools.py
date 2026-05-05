@@ -3,20 +3,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import os
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
+from app.core.gemini_client import make_genai_client
 from app.voice.tool_router import VoiceToolContext, VoiceToolRouter
 
 if TYPE_CHECKING:
     from app.voice.monitor import ConversationMonitor
 
 logger = logging.getLogger("voice.tools")
-
-try:
-    from google import genai
-except ImportError:
-    genai = None  # type: ignore[assignment]
 
 
 _NOTE_VERIFY_PROMPT = """\
@@ -45,7 +40,7 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
         "function_declarations": [
             {
                 "name": "add_item",
-                "description": "Add an item to the current order.",
+                "description": "Add an item to the current order. If the item has options/variants (e.g. Coke: '12 Oz Can' or '2 Liter'), pass the customer's choice via `variant`. If the item has no options, omit `variant`.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -61,10 +56,9 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                             "type": "integer",
                             "description": "Quantity to add",
                         },
-                        "size": {
+                        "variant": {
                             "type": "string",
-                            "enum": ["small", "medium", "large"],
-                            "description": "Size of the item (small, medium, or large). Only use when the item has size-based pricing.",
+                            "description": "The specific option the customer chose (e.g. '12 Oz Can', '2 Liter', '10 inch'). Must match one of the variants listed under the item on the menu. Do not pass this for items that don't show options.",
                         },
                         "note": {
                             "type": "string",
@@ -98,7 +92,7 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
             },
             {
                 "name": "update_item",
-                "description": "Update an existing item in the order. Use this to change the note, quantity, or size of an item already in the order — much faster than remove + re-add.",
+                "description": "Update an existing item in the order. Use to change the note, quantity, or variant/option of an item already in the order — faster than remove + re-add.",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -118,10 +112,9 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                             "type": "integer",
                             "description": "New quantity for this item.",
                         },
-                        "size": {
+                        "variant": {
                             "type": "string",
-                            "enum": ["small", "medium", "large"],
-                            "description": "New size for this item.",
+                            "description": "New option/variant name (e.g. '12 Oz Can', '2 Liter'). Must match one of the variants the item has on the menu.",
                         },
                     },
                     "required": [],
@@ -207,9 +200,6 @@ async def _verify_and_update_note(
 ) -> None:
     """Background task: compare user transcript vs added item, update note if needed."""
     logger.info("Note verify: starting, transcript='%s', has_monitor=%s", user_transcript[:100], monitor is not None)
-    if genai is None:
-        logger.info("Note verify: skipped — genai not installed")
-        return
     if not result.get("ok") or not result.get("order"):
         logger.info("Note verify: skipped — result not ok or no order")
         return
@@ -233,20 +223,21 @@ async def _verify_and_update_note(
     item_name = last_item.get("name", "")
     current_note = last_item.get("note", "")
 
-    api_key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
-    if not api_key:
+    try:
+        bundle = make_genai_client()
+    except RuntimeError as exc:
+        logger.info("Note verify: skipped — %s", exc)
         return
 
     try:
-        client = genai.Client(api_key=api_key)
         prompt = _NOTE_VERIFY_PROMPT.format(
             user_transcript=user_transcript,
             item_name=item_name,
             current_note=current_note or "(none)",
         )
         response = await asyncio.to_thread(
-            client.models.generate_content,
-            model="gemini-3-flash-preview",
+            bundle.client.models.generate_content,
+            model=bundle.background_model,
             contents=prompt,
         )
         answer = response.text.strip()
@@ -327,6 +318,7 @@ def create_voice_tool_handlers(
                 menu_item_id=_parse_uuid(args.get("menu_item_id")),
                 item_name=(args.get("item_name") or None),
                 quantity=int(args.get("quantity", 1) or 1),
+                variant=(args.get("variant") or None),
                 size=(args.get("size") or None),
                 note=(args.get("note") or None),
             )
@@ -379,6 +371,7 @@ def create_voice_tool_handlers(
                 item_name=(args.get("item_name") or None),
                 note=(args.get("note") or None),
                 quantity=int(args["quantity"]) if args.get("quantity") else None,
+                variant=(args.get("variant") or None),
                 size=(args.get("size") or None),
             )
             if monitor is not None:

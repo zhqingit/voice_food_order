@@ -25,8 +25,15 @@ class LiveOrderItem {
   final int quantity;
   final double lineTotal;
   final String? note;
+  final String? variant;
 
-  const LiveOrderItem({required this.name, required this.quantity, required this.lineTotal, this.note});
+  const LiveOrderItem({
+    required this.name,
+    required this.quantity,
+    required this.lineTotal,
+    this.note,
+    this.variant,
+  });
 
   factory LiveOrderItem.fromJson(Map<String, dynamic> json) {
     return LiveOrderItem(
@@ -34,6 +41,7 @@ class LiveOrderItem {
       quantity: json['quantity'] as int? ?? 1,
       lineTotal: (json['line_total'] as num?)?.toDouble() ?? 0,
       note: json['note'] as String?,
+      variant: json['variant'] as String?,
     );
   }
 }

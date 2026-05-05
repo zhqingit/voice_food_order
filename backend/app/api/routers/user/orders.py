@@ -51,6 +51,8 @@ def _order_item_out(item: OrderItem, name: str | None = None) -> OrderItemOut:
         name=name,
         quantity=item.quantity,
         price_snapshot=item.price_snapshot,
+        note=item.note,
+        variant_name=item.variant_name,
     )
 
 

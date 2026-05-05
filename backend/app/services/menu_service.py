@@ -7,8 +7,16 @@ from sqlalchemy.orm import Session
 
 from app.models.menu import Menu
 from app.models.menu_item import MenuItem
+from app.models.menu_item_variant import MenuItemVariant
 from app.models.menu_menu_item import MenuMenuItem
-from app.schemas.menu.menu import MenuCreate, MenuItemCreate, MenuItemUpdate, MenuUpdate
+from app.schemas.menu.menu import (
+    MenuCreate,
+    MenuItemCreate,
+    MenuItemUpdate,
+    MenuItemVariantCreate,
+    MenuItemVariantUpdate,
+    MenuUpdate,
+)
 
 
 # ── Menus ──────────────────────────────────────────────────────
@@ -103,32 +111,17 @@ def create_store_item(db: Session, *, store_id: uuid.UUID, payload: MenuItemCrea
 
 
 def update_store_item(db: Session, *, item: MenuItem, payload: MenuItemUpdate) -> MenuItem:
-    if payload.name is not None:
-        item.name = payload.name
-    if payload.alias_name is not None:
-        item.alias_name = payload.alias_name
-    if payload.category is not None:
-        item.category = payload.category
-    if payload.price is not None:
-        item.price = payload.price
-    if payload.price_small is not None:
-        item.price_small = payload.price_small
-    if payload.price_medium is not None:
-        item.price_medium = payload.price_medium
-    if payload.price_large is not None:
-        item.price_large = payload.price_large
-    if payload.description is not None:
-        item.description = payload.description
-    if payload.ingredient is not None:
-        item.ingredient = payload.ingredient
-    if payload.note is not None:
-        item.note = payload.note
-    if payload.tags is not None:
-        item.tags = payload.tags
-    if payload.availability is not None:
-        item.availability = payload.availability
-    if payload.modifiers is not None:
-        item.modifiers = payload.modifiers
+    # ``model_dump(exclude_unset=True)`` returns only fields the client
+    # explicitly sent, so a null value for a nullable field clears it (previous
+    # ``is not None`` checks silently ignored those). Required NOT-NULL fields
+    # (``name``, ``price``, ``availability``) are skipped if the client sent
+    # null, so a malformed request can't blank them out.
+    non_nullable = {"name", "price", "availability"}
+    updates = payload.model_dump(exclude_unset=True)
+    for key, value in updates.items():
+        if value is None and key in non_nullable:
+            continue
+        setattr(item, key, value)
     return item
 
 
@@ -166,3 +159,89 @@ def remove_item_from_menu(db: Session, *, menu_id: uuid.UUID, item_id: uuid.UUID
 def get_menu_item_ids(db: Session, *, menu_id: uuid.UUID) -> set[uuid.UUID]:
     rows = db.execute(select(MenuMenuItem.menu_item_id).where(MenuMenuItem.menu_id == menu_id)).scalars().all()
     return set(rows)
+
+
+# ── Menu item variants ────────────────────────────────────────
+
+def list_item_variants(db: Session, *, menu_item_id: uuid.UUID) -> list[MenuItemVariant]:
+    return db.execute(
+        select(MenuItemVariant)
+        .where(MenuItemVariant.menu_item_id == menu_item_id)
+        .order_by(MenuItemVariant.sort_order.asc(), MenuItemVariant.name.asc())
+    ).scalars().all()
+
+
+def get_item_variant(
+    db: Session, *, menu_item_id: uuid.UUID, variant_id: uuid.UUID
+) -> MenuItemVariant | None:
+    return db.execute(
+        select(MenuItemVariant).where(
+            MenuItemVariant.menu_item_id == menu_item_id,
+            MenuItemVariant.id == variant_id,
+        )
+    ).scalar_one_or_none()
+
+
+def find_variant_by_name(
+    db: Session, *, menu_item_id: uuid.UUID, name: str
+) -> MenuItemVariant | None:
+    """Case-insensitive exact match, then containment fallback — mirrors the
+    fuzzy style we already use for item lookup so the bot can say '2 liter'
+    and hit the '2 Liter' variant row."""
+    n = (name or "").strip().lower()
+    if not n:
+        return None
+    rows = list_item_variants(db, menu_item_id=menu_item_id)
+    for v in rows:
+        if v.name.lower() == n:
+            return v
+    for v in rows:
+        if n in v.name.lower() or v.name.lower() in n:
+            return v
+    return None
+
+
+def create_item_variant(
+    db: Session, *, menu_item_id: uuid.UUID, payload: MenuItemVariantCreate
+) -> MenuItemVariant:
+    # If marking this one as default, clear any existing default.
+    if payload.is_default:
+        for v in list_item_variants(db, menu_item_id=menu_item_id):
+            if v.is_default:
+                v.is_default = False
+    variant = MenuItemVariant(
+        menu_item_id=menu_item_id,
+        name=payload.name.strip(),
+        price=payload.price,
+        availability=payload.availability,
+        sort_order=payload.sort_order,
+        is_default=payload.is_default,
+    )
+    db.add(variant)
+    return variant
+
+
+def update_item_variant(
+    db: Session, *, variant: MenuItemVariant, payload: MenuItemVariantUpdate
+) -> MenuItemVariant:
+    if payload.name is not None:
+        variant.name = payload.name.strip()
+    if payload.price is not None:
+        variant.price = payload.price
+    if payload.availability is not None:
+        variant.availability = payload.availability
+    if payload.sort_order is not None:
+        variant.sort_order = payload.sort_order
+    if payload.is_default is not None and payload.is_default and not variant.is_default:
+        # Promoting to default: demote any existing default on the same item.
+        for v in list_item_variants(db, menu_item_id=variant.menu_item_id):
+            if v.id != variant.id and v.is_default:
+                v.is_default = False
+        variant.is_default = True
+    elif payload.is_default is False:
+        variant.is_default = False
+    return variant
+
+
+def delete_item_variant(db: Session, *, variant: MenuItemVariant) -> None:
+    db.delete(variant)

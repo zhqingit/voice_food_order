@@ -10,17 +10,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any
+
+from app.core.gemini_client import make_genai_client
 
 logger = logging.getLogger("voice.monitor")
 
 try:
-    from google import genai
     from google.genai import types as genai_types
 except ImportError:
-    genai = None  # type: ignore[assignment]
     genai_types = None  # type: ignore[assignment]
 
 try:
@@ -58,7 +57,10 @@ Only flag clear, factual errors. Do NOT flag tone, style, or minor wording issue
 @dataclass
 class MonitorConfig:
     """Configuration for the conversation monitor."""
-    model: str = "gemini-3-flash-preview"
+    # Model name. Must be valid on whichever surface (Vertex or Gemini API) is
+    # configured via settings.gemini_use_vertex. `gemini-2.5-flash` works on
+    # both without the `google/` prefix.
+    model: str = "gemini-2.5-flash"
     enabled: bool = True
     # Only check turns that involve tool calls or prices (skip casual chat)
     check_all_turns: bool = True
@@ -85,16 +87,13 @@ class ConversationMonitor:
     def _get_client(self) -> Any:
         if self._client is not None:
             return self._client
-        if genai is None:
-            logger.warning("google-genai not installed; monitor disabled")
+        try:
+            bundle = make_genai_client()
+        except RuntimeError as exc:
+            logger.warning("Monitor disabled — %s", exc)
             self.config.enabled = False
             return None
-        api_key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
-        if not api_key:
-            logger.warning("No API key for monitor; disabled")
-            self.config.enabled = False
-            return None
-        self._client = genai.Client(api_key=api_key)
+        self._client = bundle.client
         return self._client
 
     def record_user(self, text: str) -> None:

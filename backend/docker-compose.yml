@@ -26,6 +26,18 @@ services:
       REFRESH_TOKEN_TTL_DAYS: 14
       CORS_ORIGINS: "*"
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_CLOUD_PROJECT: voxeats
+      GOOGLE_CLOUD_LOCATION: us-central1
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+      GEMINI_USE_VERTEX: "true"
+      # Live voice pipeline:
+      #   false → Gemini API + gemini-3.1-flash-live-preview (better voice, occasional 503s)
+      #   true  → Vertex + gemini-live-2.5-flash-native-audio (GA, reliable, flatter voice)
+      VOICE_USE_VERTEX: "true"
+      # Conversation monitor (QA checker that runs after each bot turn).
+      # Paused during testing to reduce Vertex quota pressure. Code stays in
+      # place — flip to "true" to re-enable without a rebuild.
+      VOICE_MONITOR_ENABLED: "false"
       WEB_RELOAD: "true"
       WEB_WORKERS: "4"
     ports:
@@ -38,6 +50,7 @@ services:
       - ./alembic:/app/alembic
       - ./alembic.ini:/app/alembic.ini
       - uploads:/app/uploads
+      - /home/qzhang/mydata/myproject/apps/Resto_AI/src/VoxEats/application_default_credentials.json:/gcp/adc.json:ro
     command: ["bash", "-lc", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
 
   store-portal:

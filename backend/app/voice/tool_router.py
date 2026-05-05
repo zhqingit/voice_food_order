@@ -12,10 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.menu_item import MenuItem
+from app.models.menu_item_variant import MenuItemVariant
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.voice_session import VoiceSession
-from app.services import order_service
+from app.services import menu_service, order_service
 from app.schemas.order.order import OrderCreate
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ class VoiceToolRouter:
     def _is_duplicate_add(
         self,
         menu_item_id: uuid.UUID,
-        size: str | None,
+        variant_key: str,
         note: str | None,
         quantity: int,
     ) -> bool:
@@ -56,20 +57,89 @@ class VoiceToolRouter:
         for k in list(self._recent_adds):
             if now - self._recent_adds[k] > self._DEDUP_WINDOW_SECONDS:
                 del self._recent_adds[k]
-        key = (str(menu_item_id), size or "", note or "", int(quantity))
+        key = (str(menu_item_id), variant_key, note or "", int(quantity))
         return key in self._recent_adds
 
     def _record_add(
         self,
         menu_item_id: uuid.UUID,
-        size: str | None,
+        variant_key: str,
         note: str | None,
         quantity: int,
     ) -> None:
-        key = (str(menu_item_id), size or "", note or "", int(quantity))
+        key = (str(menu_item_id), variant_key, note or "", int(quantity))
         self._recent_adds[key] = time.monotonic()
 
     # ── private helpers (receive db as argument) ──────────────────────
+
+    def _resolve_variant(
+        self,
+        db: Session,
+        menu_item: MenuItem,
+        variant: str | None,
+        size: str | None,
+    ) -> tuple[MenuItemVariant | None, str | None]:
+        """Given a menu_item and an optional ``variant`` (new, free-form name
+        like '2 Liter') or legacy ``size`` ('small'|'medium'|'large'), return
+        either the resolved variant row or an error message string.
+
+        Returns ``(variant_row, None)`` on success, or ``(None, error_msg)`` on
+        failure. When the item has no variants at all, returns ``(None, None)``
+        (not an error — the caller can use legacy size handling).
+        """
+        item_variants = list(menu_item.variants or [])
+
+        if not item_variants:
+            # Item has no variants defined. If the caller specified a variant
+            # string, that's an error — we don't silently ignore it (that was
+            # exactly the doom-loop bug with Coke).
+            if variant and variant.strip():
+                return None, (
+                    f"{menu_item.name} comes in one size only — no '{variant}' option."
+                )
+            return None, None
+
+        # Item HAS variants. Pick one.
+        if variant and variant.strip():
+            match = menu_service.find_variant_by_name(
+                db, menu_item_id=menu_item.id, name=variant
+            )
+            if match is None:
+                available = ", ".join(v.name for v in item_variants if v.availability)
+                return None, (
+                    f"{menu_item.name} doesn't have a '{variant}' option. "
+                    f"Choose one of: {available}."
+                )
+            if not match.availability:
+                return None, (
+                    f"{menu_item.name} {match.name} is currently unavailable."
+                )
+            return match, None
+
+        # No explicit variant — try the legacy size arg (map to variant name).
+        if size and size.strip():
+            size_norm = size.strip().lower()
+            for v in item_variants:
+                if v.name.lower() == size_norm:
+                    if not v.availability:
+                        return None, (
+                            f"{menu_item.name} {v.name} is currently unavailable."
+                        )
+                    return v, None
+
+        # Default: the variant flagged is_default, or the first available one.
+        default = next((v for v in item_variants if v.is_default and v.availability), None)
+        if default is not None:
+            return default, None
+        available_list = [v for v in item_variants if v.availability]
+        if not available_list:
+            return None, f"{menu_item.name} has no available options right now."
+        # Caller provided nothing and no default — ask the bot to pick.
+        names = ", ".join(v.name for v in available_list)
+        return None, (
+            f"{menu_item.name} comes in multiple options ({names}). "
+            f"Please ask the customer which one."
+        )
 
     def _find_menu_item_by_name(self, db: Session, name: str) -> MenuItem | None:
         from sqlalchemy import or_
@@ -141,6 +211,8 @@ class VoiceToolRouter:
             }
             if item.note:
                 item_data["note"] = item.note
+            if item.variant_name:
+                item_data["variant"] = item.variant_name
             summary_items.append(item_data)
         result: dict[str, Any] = {
             "order_id": str(order.id),
@@ -162,7 +234,22 @@ class VoiceToolRouter:
 
     # ── public methods (each opens its own short-lived session) ───────
 
-    def add_item(self, *, menu_item_id: uuid.UUID | None, item_name: str | None, quantity: int, size: str | None = None, note: str | None = None) -> dict[str, Any]:
+    def add_item(
+        self,
+        *,
+        menu_item_id: uuid.UUID | None,
+        item_name: str | None,
+        quantity: int,
+        variant: str | None = None,
+        size: str | None = None,
+        note: str | None = None,
+    ) -> dict[str, Any]:
+        """Add an item to the current order.
+
+        ``variant`` is the new, free-form variant name (e.g. "12 Oz Can",
+        "2 Liter", "10 inch"). ``size`` is the legacy S/M/L arg — kept for
+        back-compat; maps onto a variant row if one matches by name.
+        """
         if quantity <= 0:
             return {"ok": False, "message": "Quantity must be at least 1."}
 
@@ -185,12 +272,28 @@ class VoiceToolRouter:
                     "message": f"Sorry, {menu_item.name} is currently unavailable.",
                 }
 
-            if self._is_duplicate_add(menu_item.id, size, note, quantity):
+            variant_row, variant_err = self._resolve_variant(db, menu_item, variant, size)
+            if variant_err is not None:
+                return {"ok": False, "message": variant_err}
+
+            # Decide price + snapshot of variant name. If the item has variants,
+            # variant_row is guaranteed non-None at this point (helper returned
+            # an error otherwise). If not, fall back to legacy size-based price.
+            if variant_row is not None:
+                price = variant_row.price
+                variant_name_snapshot: str | None = variant_row.name
+                variant_key = variant_row.name.lower()
+            else:
+                price = menu_item.price_for_size(size)
+                variant_name_snapshot = None
+                variant_key = (size or "").lower()
+
+            if self._is_duplicate_add(menu_item.id, variant_key, note, quantity):
                 logger.warning(
-                    "Duplicate add_item within %ss window: %s size=%s qty=%d note=%s — skipping insert",
+                    "Duplicate add_item within %ss window: %s variant=%s qty=%d note=%s — skipping insert",
                     self._DEDUP_WINDOW_SECONDS,
                     menu_item.name,
-                    size or "-",
+                    variant_key or "-",
                     quantity,
                     note or "-",
                 )
@@ -200,18 +303,29 @@ class VoiceToolRouter:
                     "order": self._build_summary(db, order),
                 }
 
-            price = menu_item.price_for_size(size)
-            order_service.create_order_item(db, order=order, menu_item=menu_item, quantity=quantity, price_override=price, note=note)
+            oi = order_service.create_order_item(
+                db,
+                order=order,
+                menu_item=menu_item,
+                quantity=quantity,
+                price_override=price,
+                note=note,
+            )
+            if variant_name_snapshot is not None:
+                oi.variant_name = variant_name_snapshot
             db.flush()
             order_service.recalc_totals(db, order=order)
             db.commit()
-            self._record_add(menu_item.id, size, note, quantity)
+            self._record_add(menu_item.id, variant_key, note, quantity)
 
-            size_label = f" ({size})" if size else ""
+            variant_label = f" ({variant_name_snapshot})" if variant_name_snapshot else ""
             note_label = f" (note: {note})" if note else ""
             return {
                 "ok": True,
-                "message": f"Added {quantity} {menu_item.name}{size_label} at ${float(price):.2f} each.{note_label}",
+                "message": (
+                    f"Added {quantity} {menu_item.name}{variant_label} "
+                    f"at ${float(price):.2f} each.{note_label}"
+                ),
                 "order": self._build_summary(db, order),
             }
 
@@ -290,9 +404,16 @@ class VoiceToolRouter:
         item_name: str | None = None,
         note: str | None = None,
         quantity: int | None = None,
+        variant: str | None = None,
         size: str | None = None,
     ) -> dict[str, Any]:
-        """Update an existing order item's note, quantity, or size."""
+        """Update an existing order item's note, quantity, or variant.
+
+        Honest about no-ops: if ``variant`` is passed but the menu_item has no
+        variants configured, or the variant name doesn't exist, returns
+        ``ok=False`` with an explanation so the bot can tell the customer
+        instead of silently "succeeding" and re-trying in a loop.
+        """
         with self._context.db_factory() as db:
             order = self._get_order(db)
             if order is None:
@@ -320,11 +441,34 @@ class VoiceToolRouter:
             if quantity is not None and quantity > 0:
                 oi.quantity = quantity
                 changes.append(f"quantity: {quantity}")
-            if size is not None:
+
+            # Variant/size change — resolve via the same helper as add_item
+            # so the "single-price item has no sizes" case surfaces as an
+            # honest error, not a silent no-op.
+            if variant is not None or size is not None:
                 menu_item = db.get(MenuItem, oi.menu_item_id)
-                if menu_item:
+                if menu_item is None:
+                    return {"ok": False, "message": "Underlying menu item not found."}
+                variant_row, variant_err = self._resolve_variant(
+                    db, menu_item, variant, size
+                )
+                if variant_err is not None:
+                    return {"ok": False, "message": variant_err}
+                if variant_row is not None:
+                    oi.variant_name = variant_row.name
+                    oi.price_snapshot = variant_row.price
+                    changes.append(f"option: {variant_row.name}")
+                elif size is not None:
+                    # Legacy size path (item has no variants at all)
                     oi.price_snapshot = menu_item.price_for_size(size)
                     changes.append(f"size: {size}")
+
+            if not changes:
+                return {
+                    "ok": True,
+                    "message": "Nothing to update.",
+                    "order": self._build_summary(db, order),
+                }
 
             order_service.recalc_totals(db, order=order)
             db.commit()

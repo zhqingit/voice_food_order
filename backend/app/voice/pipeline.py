@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
 
+from app.core.config import settings
 from app.voice.config import GoogleVoiceConfig, VoiceRuntimeConfig
 from app.voice.usage import UsageAccumulator
 
@@ -33,6 +34,7 @@ try:
     from pipecat.turns.user_start import TranscriptionUserTurnStartStrategy
     from pipecat.turns.user_turn_strategies import UserTurnStrategies
     from pipecat.services.google.gemini_live.llm import GeminiLiveLLMService, GeminiVADParams
+    from pipecat.services.google.gemini_live.vertex.llm import GeminiLiveVertexLLMService
     from google.genai.types import StartSensitivity, EndSensitivity
 except ImportError:  # pragma: no cover - optional dependency
     AdapterType = None
@@ -54,6 +56,7 @@ except ImportError:  # pragma: no cover - optional dependency
     TranscriptionUserTurnStartStrategy = None
     UserTurnStrategies = None
     GeminiLiveLLMService = None
+    GeminiLiveVertexLLMService = None
     GeminiVADParams = None
     StartSensitivity = None
     EndSensitivity = None
@@ -83,37 +86,60 @@ def create_voice_pipeline_task(
     Only a GEMINI_API_KEY is required.
     """
 
-    if not google_config.api_key:
-        raise RuntimeError("Missing GOOGLE_API_KEY/GEMINI_API_KEY for Gemini Live")
-
     if Pipeline is None:
         raise RuntimeError("pipecat is required for voice pipeline")
 
     tools = ToolsSchema(standard_tools=[], custom_tools={AdapterType.GEMINI: tool_schema})
 
-    # Use the new Settings API (model/voice_id as direct params are deprecated in pipecat 0.0.105+)
-    llm = GeminiLiveLLMService(
-        api_key=google_config.api_key,
-        system_instruction=system_prompt,
-        tools=tools,
-        settings=GeminiLiveLLMService.Settings(
-            model=runtime.llm_model,
-            voice=voice_id,
-            # Noise resistance: tune server-side VAD to be less sensitive to
-            # background noise (kitchen, street, chatter) while still
-            # detecting clear speech directed at the mic.
-            # Noise resistance: LOW start sensitivity reduces false triggers from
-            # background noise. HIGH end sensitivity ensures we don't cut off
-            # the user mid-sentence. 700ms silence is a good balance between
-            # responsiveness and not interrupting natural pauses.
-            vad=GeminiVADParams(
-                start_sensitivity=StartSensitivity.START_SENSITIVITY_LOW,
-                end_sensitivity=EndSensitivity.END_SENSITIVITY_HIGH,
-                silence_duration_ms=700,
-                prefix_padding_ms=300,
-            ),
-        ),
+    # Shared VAD tuning — same on both surfaces. LOW start sensitivity reduces
+    # false triggers from kitchen/street noise; HIGH end sensitivity keeps us
+    # from cutting off mid-sentence; 700ms silence is a good responsiveness vs.
+    # natural-pause balance.
+    vad_params = GeminiVADParams(
+        start_sensitivity=StartSensitivity.START_SENSITIVITY_LOW,
+        end_sensitivity=EndSensitivity.END_SENSITIVITY_HIGH,
+        silence_duration_ms=700,
+        prefix_padding_ms=300,
     )
+
+    if settings.voice_use_vertex:
+        project = settings.google_cloud_project.strip()
+        if not project:
+            raise RuntimeError("VOICE_USE_VERTEX is true but GOOGLE_CLOUD_PROJECT is empty")
+        location = settings.google_cloud_location.strip() or "us-central1"
+        logger.info(
+            "Voice LLM: Vertex %s @ %s/%s",
+            settings.voice_llm_model_vertex,
+            project,
+            location,
+        )
+        # Credentials resolve via ADC (attached service account on GCE, or
+        # ~/.config/gcloud on dev machines mounted into the container).
+        llm = GeminiLiveVertexLLMService(
+            project_id=project,
+            location=location,
+            system_instruction=system_prompt,
+            tools=tools,
+            settings=GeminiLiveVertexLLMService.Settings(
+                model=settings.voice_llm_model_vertex,
+                voice=voice_id,
+                vad=vad_params,
+            ),
+        )
+    else:
+        if not google_config.api_key:
+            raise RuntimeError("Missing GOOGLE_API_KEY/GEMINI_API_KEY for Gemini Live (API surface)")
+        logger.info("Voice LLM: Gemini API %s", runtime.llm_model)
+        llm = GeminiLiveLLMService(
+            api_key=google_config.api_key,
+            system_instruction=system_prompt,
+            tools=tools,
+            settings=GeminiLiveLLMService.Settings(
+                model=runtime.llm_model,
+                voice=voice_id,
+                vad=vad_params,
+            ),
+        )
 
     if tool_handlers:
         for name, handler in tool_handlers.items():
@@ -196,7 +222,7 @@ def create_voice_pipeline_task(
 
     # ── Silence nudge: if user doesn't speak within 5s after bot finishes, ──
     # ── prompt the LLM to follow up. ──────────────────────────────────────
-    SILENCE_TIMEOUT = 5.0
+    SILENCE_TIMEOUT = settings.voice_silence_nudge_seconds
     _nudge_timer: asyncio.Task[None] | None = None
 
     async def _nudge_after_silence() -> None:

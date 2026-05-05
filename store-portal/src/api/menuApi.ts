@@ -20,6 +20,26 @@ export type MenuUpdate = {
   active?: boolean
 }
 
+export type MenuItemVariantOut = {
+  id: UUID
+  menu_item_id: UUID
+  name: string
+  price: Money
+  availability: boolean
+  sort_order: number
+  is_default: boolean
+}
+
+export type MenuItemVariantCreate = {
+  name: string
+  price: Money
+  availability?: boolean
+  sort_order?: number
+  is_default?: boolean
+}
+
+export type MenuItemVariantUpdate = Partial<MenuItemVariantCreate>
+
 export type MenuItemOut = {
   id: UUID
   store_id: UUID
@@ -36,6 +56,7 @@ export type MenuItemOut = {
   tags: string[] | null
   availability: boolean
   modifiers: Record<string, unknown> | null
+  variants?: MenuItemVariantOut[]
 }
 
 export type MenuItemCreate = {
@@ -143,4 +164,32 @@ export async function addItemToMenu(menuId: UUID, itemId: UUID): Promise<void> {
 
 export async function removeItemFromMenu(menuId: UUID, itemId: UUID): Promise<void> {
   await apiClient.delete(`/store/menus/${menuId}/items/${itemId}`)
+}
+
+// ── Item variants ─────────────────────────────────────────────
+
+export async function listItemVariants(itemId: UUID): Promise<MenuItemVariantOut[]> {
+  const res = await apiClient.get(`/store/items/${itemId}/variants`)
+  return res.data as MenuItemVariantOut[]
+}
+
+export async function createItemVariant(
+  itemId: UUID,
+  payload: MenuItemVariantCreate,
+): Promise<MenuItemVariantOut> {
+  const res = await apiClient.post(`/store/items/${itemId}/variants`, payload)
+  return res.data as MenuItemVariantOut
+}
+
+export async function updateItemVariant(
+  itemId: UUID,
+  variantId: UUID,
+  payload: MenuItemVariantUpdate,
+): Promise<MenuItemVariantOut> {
+  const res = await apiClient.patch(`/store/items/${itemId}/variants/${variantId}`, payload)
+  return res.data as MenuItemVariantOut
+}
+
+export async function deleteItemVariant(itemId: UUID, variantId: UUID): Promise<void> {
+  await apiClient.delete(`/store/items/${itemId}/variants/${variantId}`)
 }

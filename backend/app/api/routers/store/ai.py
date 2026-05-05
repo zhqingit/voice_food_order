@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
@@ -11,16 +10,12 @@ from sqlalchemy.orm.attributes import flag_modified
 from app.api.deps.store import get_current_store_web
 from app.api.host_policy import require_host_policy
 from app.core.errors import AppError
+from app.core.gemini_client import make_genai_client
 from app.db.session import get_db
 from app.models.store import Store
 from app.schemas.common import Audience, PrincipalType
 
 logger = logging.getLogger(__name__)
-
-try:
-    from google import genai
-except ImportError:  # pragma: no cover
-    genai = None  # type: ignore[assignment]
 
 
 router = APIRouter(
@@ -82,29 +77,27 @@ def generate_prompt(
     payload: PromptGenerateIn,
     _: Store = Depends(get_current_store_web),
 ) -> PromptGenerateOut:
-    if genai is None:
-        raise AppError(status_code=503, code="genai_unavailable", detail="Gemini SDK not installed")
-
-    api_key = (os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY") or "").strip()
-    if not api_key:
-        raise AppError(status_code=503, code="genai_no_key", detail="Gemini API key not configured")
+    try:
+        bundle = make_genai_client()
+    except RuntimeError as exc:
+        raise AppError(status_code=503, code="genai_unavailable", detail=str(exc))
 
     prompt = _GENERATE_INSTRUCTION.format(raw=payload.raw.strip())
 
     try:
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-3-flash-preview",
+        response = bundle.client.models.generate_content(
+            model=bundle.background_model,
             contents=prompt,
         )
         generated = (response.text or "").strip()
     except Exception as exc:
-        logger.warning("Prompt generation failed", exc_info=True)
+        logger.warning("Prompt generation failed (surface=%s)", bundle.surface, exc_info=True)
         raise AppError(status_code=502, code="generation_failed", detail=f"Gemini error: {exc}")
 
     if not generated:
         raise AppError(status_code=502, code="empty_generation", detail="Gemini returned empty text")
 
+    logger.info("Prompt generated via %s (%d chars)", bundle.surface, len(generated))
     return PromptGenerateOut(generated=generated)
 
 

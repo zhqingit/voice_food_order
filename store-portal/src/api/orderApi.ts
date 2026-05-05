@@ -26,6 +26,7 @@ export type OrderItemOut = {
   quantity: number
   price_snapshot: Money
   note: string | null
+  variant_name: string | null
 }
 
 export async function listOrders(): Promise<OrderOut[]> {

@@ -30,9 +30,19 @@ def load_menu_for_store(db: Session, store_id: uuid.UUID) -> list[str]:
         if item.alias_name:
             parts.append(f"({item.alias_name})")
 
-        # Show size prices if available, otherwise base price
-        has_sizes = item.price_small is not None or item.price_medium is not None or item.price_large is not None
-        if has_sizes:
+        # Prefer variants (new general model) if the item has any; fall back
+        # to the legacy S/M/L columns; else the flat base price. Only include
+        # *available* variants — out-of-stock ones are hidden from the bot.
+        variants = [v for v in (item.variants or []) if v.availability]
+        has_legacy_sizes = (
+            item.price_small is not None
+            or item.price_medium is not None
+            or item.price_large is not None
+        )
+        if variants:
+            variant_parts = [f"{v.name} ${v.price}" for v in variants]
+            parts.append(f"— Options: {' / '.join(variant_parts)}")
+        elif has_legacy_sizes:
             size_parts = []
             if item.price_small is not None:
                 size_parts.append(f"S ${item.price_small}")

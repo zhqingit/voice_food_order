@@ -1,17 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   type MenuItemOut,
+  type MenuItemVariantOut,
   type MenuOut,
   addItemToMenu,
+  createItemVariant,
   createMenu,
   createStoreItem,
+  deleteItemVariant,
   deleteMenu,
   deleteStoreItem,
+  listItemVariants,
   listMenuItems,
   listMenus,
   listStoreItems,
   removeItemFromMenu,
   setDefaultMenu,
+  updateItemVariant,
   updateMenu,
   updateStoreItem,
   uploadItemsCsv,
@@ -90,6 +97,7 @@ function ItemModal({
   onClose: () => void
   saving: boolean
 }) {
+  const { t } = useTranslation()
   const set = (key: keyof ItemFormData, value: string | boolean) =>
     onFormChange({ ...form, [key]: value })
 
@@ -105,74 +113,265 @@ function ItemModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="card-header">
-          <h2>{item ? 'Edit Item' : 'New Item'}</h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
+          <h2>{item ? t('menu.editItem') : t('menu.newItem')}</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('menu.close')}</button>
         </div>
         <form className="card-body" onSubmit={(e) => { e.preventDefault(); onSave() }}>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Name *</label>
+              <label className="form-label">{t('menu.name')} *</label>
               <input className="form-input" value={form.name} onChange={(e) => set('name', e.target.value)} required />
             </div>
             <div className="form-group">
-              <label className="form-label">Alias Name</label>
-              <input className="form-input" value={form.alias_name} onChange={(e) => set('alias_name', e.target.value)} placeholder="Alternative name" />
+              <label className="form-label">{t('menu.aliasName')}</label>
+              <input className="form-input" value={form.alias_name} onChange={(e) => set('alias_name', e.target.value)} placeholder={t('menu.aliasPlaceholder')} />
             </div>
             <div className="form-group">
-              <label className="form-label">Category</label>
-              <input className="form-input" value={form.category} onChange={(e) => set('category', e.target.value)} placeholder="e.g. Appetizer" />
+              <label className="form-label">{t('menu.category')}</label>
+              <input className="form-input" value={form.category} onChange={(e) => set('category', e.target.value)} placeholder={t('menu.categoryPlaceholder')} />
             </div>
             <div className="form-group">
-              <label className="form-label">Base Price *</label>
+              <label className="form-label">{t('menu.basePrice')} *</label>
               <input className="form-input" value={form.price} onChange={(e) => set('price', e.target.value)} inputMode="decimal" placeholder="0.00" required />
             </div>
             <div className="form-group">
-              <label className="form-label">Price (Small)</label>
-              <input className="form-input" value={form.price_small} onChange={(e) => set('price_small', e.target.value)} inputMode="decimal" placeholder="Optional" />
+              <label className="form-label">{t('menu.priceSmall')}</label>
+              <input className="form-input" value={form.price_small} onChange={(e) => set('price_small', e.target.value)} inputMode="decimal" placeholder={t('menu.optional')} />
             </div>
             <div className="form-group">
-              <label className="form-label">Price (Medium)</label>
-              <input className="form-input" value={form.price_medium} onChange={(e) => set('price_medium', e.target.value)} inputMode="decimal" placeholder="Optional" />
+              <label className="form-label">{t('menu.priceMedium')}</label>
+              <input className="form-input" value={form.price_medium} onChange={(e) => set('price_medium', e.target.value)} inputMode="decimal" placeholder={t('menu.optional')} />
             </div>
             <div className="form-group">
-              <label className="form-label">Price (Large)</label>
-              <input className="form-input" value={form.price_large} onChange={(e) => set('price_large', e.target.value)} inputMode="decimal" placeholder="Optional" />
+              <label className="form-label">{t('menu.priceLarge')}</label>
+              <input className="form-input" value={form.price_large} onChange={(e) => set('price_large', e.target.value)} inputMode="decimal" placeholder={t('menu.optional')} />
             </div>
             <div className="form-group">
-              <label className="form-label">Tags</label>
-              <input className="form-input" value={form.tags} onChange={(e) => set('tags', e.target.value)} placeholder="Spicy, Popular" />
+              <label className="form-label">{t('menu.tags')}</label>
+              <input className="form-input" value={form.tags} onChange={(e) => set('tags', e.target.value)} placeholder={t('menu.tagsPlaceholder')} />
             </div>
             <div className="form-group grid-full">
-              <label className="form-label">Description</label>
+              <label className="form-label">{t('menu.description')}</label>
               <input className="form-input" value={form.description} onChange={(e) => set('description', e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-label">Ingredient</label>
+              <label className="form-label">{t('menu.ingredient')}</label>
               <input className="form-input" value={form.ingredient} onChange={(e) => set('ingredient', e.target.value)} />
             </div>
             <div className="form-group">
-              <label className="form-label">Note</label>
+              <label className="form-label">{t('menu.note')}</label>
               <input className="form-input" value={form.note} onChange={(e) => set('note', e.target.value)} />
             </div>
             <div className="form-group grid-full">
-              <label className="form-label">Modifiers (JSON)</label>
+              <label className="form-label">{t('menu.modifiersJson')}</label>
               <textarea className="form-input" value={form.modifiers_json} onChange={(e) => set('modifiers_json', e.target.value)} />
             </div>
             <div className="form-group">
               <label className="form-check">
                 <input type="checkbox" checked={form.availability} onChange={(e) => set('availability', e.target.checked)} />
-                Available
+                {t('common.available')}
               </label>
             </div>
+            {item && (
+              <div className="form-group grid-full">
+                <label className="form-label">{t('menu.variants')}</label>
+                <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '0 0 8px' }}>
+                  {t('menu.variantsHint')}
+                </p>
+                <VariantsEditor itemId={item.id} />
+              </div>
+            )}
+            {!item && (
+              <div className="form-group grid-full">
+                <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: 0, fontStyle: 'italic' }}>
+                  {t('menu.variantsHintNew')}
+                </p>
+              </div>
+            )}
             <div className="flex-end">
-              <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+              <button type="button" className="btn btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
               <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? 'Saving...' : (item ? 'Update' : 'Create')}
+                {saving ? t('menu.saving') : (item ? t('menu.update') : t('menu.create'))}
               </button>
             </div>
           </div>
         </form>
       </div>
+    </div>
+  )
+}
+
+// ── Variants editor (sub-panel in the Item modal) ─────────────
+function VariantsEditor({ itemId }: { itemId: string }): React.JSX.Element {
+  const { t } = useTranslation()
+  const [variants, setVariants] = useState<MenuItemVariantOut[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [newName, setNewName] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function load(): Promise<void> {
+    setLoading(true)
+    setError(null)
+    try {
+      setVariants(await listItemVariants(itemId))
+    } catch {
+      setError(t('menu.variantsLoadFailed'))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { void load() }, [itemId])
+
+  async function handleAdd(): Promise<void> {
+    const name = newName.trim()
+    const price = Number(newPrice)
+    if (!name) { setError(t('menu.nameRequired')); return }
+    if (!Number.isFinite(price) || price < 0) { setError(t('menu.priceNonNegative')); return }
+    setBusy(true)
+    setError(null)
+    try {
+      await createItemVariant(itemId, { name, price })
+      setNewName('')
+      setNewPrice('')
+      await load()
+    } catch {
+      setError(t('menu.variantAddFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDelete(id: string): Promise<void> {
+    if (!window.confirm(t('menu.variantDeleteConfirm'))) return
+    setBusy(true)
+    try {
+      await deleteItemVariant(itemId, id)
+      await load()
+    } catch {
+      setError(t('menu.variantDeleteFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleUpdate(id: string, patch: { name?: string; price?: number; availability?: boolean; is_default?: boolean }): Promise<void> {
+    setBusy(true)
+    try {
+      await updateItemVariant(itemId, id, patch)
+      await load()
+    } catch {
+      setError(t('menu.variantUpdateFailed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: 10, background: '#fafafa' }}>
+      {error && <div className="alert alert-error" style={{ marginBottom: 8 }}>{error}</div>}
+
+      {loading ? (
+        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)' }}>{t('common.loading')}</div>
+      ) : (
+        <>
+          {variants.length === 0 && (
+            <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8, fontStyle: 'italic' }}>
+              {t('menu.noVariants')}
+            </div>
+          )}
+
+          {variants.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 70px 70px 60px', gap: 8, fontSize: 12, fontWeight: 600, color: 'var(--color-text-secondary)', marginBottom: 4 }}>
+              <div>{t('menu.colName')}</div>
+              <div style={{ textAlign: 'right' }}>{t('menu.colPrice')}</div>
+              <div style={{ textAlign: 'center' }}>{t('menu.colDefault')}</div>
+              <div style={{ textAlign: 'center' }}>{t('menu.colAvailable')}</div>
+              <div></div>
+            </div>
+          )}
+
+          {variants.map((v) => (
+            <div key={v.id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 70px 70px 60px', gap: 8, alignItems: 'center', paddingBottom: 6 }}>
+              <input
+                className="form-input"
+                defaultValue={v.name}
+                style={{ fontSize: 13 }}
+                onBlur={(e) => {
+                  const next = e.target.value.trim()
+                  if (next && next !== v.name) void handleUpdate(v.id, { name: next })
+                }}
+              />
+              <input
+                className="form-input"
+                defaultValue={String(v.price)}
+                inputMode="decimal"
+                style={{ fontSize: 13, textAlign: 'right' }}
+                onBlur={(e) => {
+                  const next = Number(e.target.value)
+                  if (Number.isFinite(next) && next >= 0 && next !== Number(v.price)) {
+                    void handleUpdate(v.id, { price: next })
+                  }
+                }}
+              />
+              <label style={{ display: 'flex', justifyContent: 'center' }}>
+                <input
+                  type="radio"
+                  name={`default-${itemId}`}
+                  checked={v.is_default}
+                  onChange={() => void handleUpdate(v.id, { is_default: true })}
+                  style={{ cursor: 'pointer' }}
+                />
+              </label>
+              <label style={{ display: 'flex', justifyContent: 'center' }}>
+                <input
+                  type="checkbox"
+                  checked={v.availability}
+                  onChange={(e) => void handleUpdate(v.id, { availability: e.target.checked })}
+                  style={{ cursor: 'pointer' }}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => void handleDelete(v.id)}
+                disabled={busy}
+                title={t('menu.variantDeleteTitle')}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px auto', gap: 8, alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: '1px dashed var(--color-border)' }}>
+            <input
+              className="form-input"
+              placeholder={t('menu.variantNamePlaceholder')}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              style={{ fontSize: 13 }}
+            />
+            <input
+              className="form-input"
+              placeholder="0.00"
+              inputMode="decimal"
+              value={newPrice}
+              onChange={(e) => setNewPrice(e.target.value)}
+              style={{ fontSize: 13, textAlign: 'right' }}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              onClick={() => void handleAdd()}
+              disabled={busy || !newName.trim() || !newPrice}
+            >
+              {t('menu.addBtn')}
+            </button>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -187,6 +386,7 @@ function RenameMenuModal({
   onSave: (name: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [name, setName] = useState(menu.name)
   return (
     <div style={{
@@ -196,17 +396,17 @@ function RenameMenuModal({
     }} onClick={onClose}>
       <div className="card" style={{ width: 400, maxWidth: '90vw' }} onClick={(e) => e.stopPropagation()}>
         <div className="card-header">
-          <h2>Rename Menu</h2>
-          <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
+          <h2>{t('menu.renameMenuTitle')}</h2>
+          <button className="btn btn-ghost btn-sm" onClick={onClose}>{t('menu.close')}</button>
         </div>
         <form className="card-body" onSubmit={(e) => { e.preventDefault(); onSave(name) }}>
           <div className="form-group" style={{ marginBottom: 12 }}>
-            <label className="form-label">Menu Name</label>
+            <label className="form-label">{t('menu.menuName')}</label>
             <input className="form-input" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
           </div>
           <div className="flex-end">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary">Save</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>{t('common.cancel')}</button>
+            <button type="submit" className="btn btn-primary">{t('common.save')}</button>
           </div>
         </form>
       </div>
@@ -216,6 +416,7 @@ function RenameMenuModal({
 
 // ── Main route ─────────────────────────────────────────────
 export function MenuRoute(): React.JSX.Element {
+  const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'pool' | 'menus'>('pool')
@@ -352,7 +553,7 @@ export function MenuRoute(): React.JSX.Element {
       try {
         await Promise.all([reloadPool(), reloadMenus()])
       } catch {
-        setError('Failed to load data')
+        setError(t('menu.failedLoadData'))
       }
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -361,8 +562,9 @@ export function MenuRoute(): React.JSX.Element {
   useEffect(() => {
     if (!selectedMenuId) { setMenuItems([]); return }
     void (async () => {
-      try { await reloadMenuItems(selectedMenuId) } catch { setError('Failed to load menu items') }
+      try { await reloadMenuItems(selectedMenuId) } catch { setError(t('menu.failedLoadMenuItems')) }
     })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMenuId])
 
   // ── Item save
@@ -370,13 +572,13 @@ export function MenuRoute(): React.JSX.Element {
     if (!itemForm.name.trim()) return
     const parsedPrice = Number(itemForm.price)
     if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
-      setError('Invalid price'); return
+      setError(t('menu.invalidPrice')); return
     }
     let modifiers: Record<string, unknown> | null = null
     const trimmed = itemForm.modifiers_json.trim()
     if (trimmed) {
       try { modifiers = JSON.parse(trimmed) } catch {
-        setError('Invalid modifiers JSON'); return
+        setError(t('menu.invalidModifiers')); return
       }
     }
     const tags = itemForm.tags.split(',').map((t) => t.trim()).filter(Boolean)
@@ -416,7 +618,7 @@ export function MenuRoute(): React.JSX.Element {
       setEditingItem(null)
       setItemForm(EMPTY_FORM)
     } catch {
-      setError('Failed to save item')
+      setError(t('menu.failedSaveItem'))
     } finally {
       setSaving(false)
     }
@@ -435,14 +637,14 @@ export function MenuRoute(): React.JSX.Element {
   }
 
   async function handleDeletePoolItem(item: MenuItemOut): Promise<void> {
-    if (!window.confirm(`Delete "${item.name}"? This cannot be undone.`)) return
+    if (!window.confirm(t('menu.deletePoolItemConfirm', { name: item.name }))) return
     setError(null)
     try {
       await deleteStoreItem(item.id)
       setPoolItems((prev) => prev.filter((i) => i.id !== item.id))
       setMenuItems((prev) => prev.filter((i) => i.id !== item.id))
     } catch {
-      setError('Failed to delete item')
+      setError(t('menu.failedDeleteItem'))
     }
   }
 
@@ -466,7 +668,7 @@ export function MenuRoute(): React.JSX.Element {
 
   async function batchDelete(): Promise<void> {
     if (!selectedIds.size) return
-    if (!window.confirm(`Delete ${selectedIds.size} item(s)? This cannot be undone.`)) return
+    if (!window.confirm(t('menu.deleteCountConfirm', { count: selectedIds.size }))) return
     setError(null)
     let failed = 0
     for (const id of selectedIds) {
@@ -475,7 +677,7 @@ export function MenuRoute(): React.JSX.Element {
     setPoolItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
     setMenuItems((prev) => prev.filter((i) => !selectedIds.has(i.id)))
     setSelectedIds(new Set())
-    if (failed) setError(`Failed to delete ${failed} item(s)`)
+    if (failed) setError(t('menu.failedDeleteCount', { count: failed }))
   }
 
   async function batchToggleAvailability(available: boolean): Promise<void> {
@@ -489,7 +691,7 @@ export function MenuRoute(): React.JSX.Element {
       selectedIds.has(i.id) ? { ...i, availability: available } : i
     ))
     setSelectedIds(new Set())
-    if (failed) setError(`Failed to update ${failed} item(s)`)
+    if (failed) setError(t('menu.failedUpdateCount', { count: failed }))
   }
 
   async function batchAddToMenu(): Promise<void> {
@@ -502,7 +704,7 @@ export function MenuRoute(): React.JSX.Element {
     }
     await reloadMenuItems(selectedMenuId)
     setSelectedMenuItemIds(new Set())
-    if (failed) setError(`Failed to add ${failed} item(s) to menu`)
+    if (failed) setError(t('menu.failedAddCount', { count: failed }))
   }
 
   // ── Menu item batch actions
@@ -525,7 +727,7 @@ export function MenuRoute(): React.JSX.Element {
 
   async function batchRemoveFromMenu(): Promise<void> {
     if (!selectedMenuItemIds.size || !selectedMenuId) return
-    if (!window.confirm(`Remove ${selectedMenuItemIds.size} item(s) from this menu?`)) return
+    if (!window.confirm(t('menu.removeCountConfirm', { count: selectedMenuItemIds.size }))) return
     setError(null)
     let failed = 0
     for (const id of selectedMenuItemIds) {
@@ -533,7 +735,7 @@ export function MenuRoute(): React.JSX.Element {
     }
     setMenuItems((prev) => prev.filter((i) => !selectedMenuItemIds.has(i.id)))
     setSelectedMenuItemIds(new Set())
-    if (failed) setError(`Failed to remove ${failed} item(s) from menu`)
+    if (failed) setError(t('menu.failedRemoveCount', { count: failed }))
   }
 
   // Clear menu item selection when switching menus
@@ -552,11 +754,11 @@ export function MenuRoute(): React.JSX.Element {
       const result = await uploadItemsCsv(file)
       await reloadPool()
       if (selectedMenuId) await reloadMenuItems(selectedMenuId)
-      const parts = [`Created: ${result.created}, Updated: ${result.updated}`]
-      if (result.errors.length) parts.push(`Errors: ${result.errors.slice(0, 3).join('; ')}`)
+      const parts = [t('menu.uploadCreatedUpdated', { created: result.created, updated: result.updated })]
+      if (result.errors.length) parts.push(t('menu.uploadErrorList', { details: result.errors.slice(0, 3).join('; ') }))
       setUploadMsg(parts.join('. '))
     } catch {
-      setError('CSV upload failed')
+      setError(t('menu.uploadFailed'))
     } finally {
       setUploading(false)
       if (csvInputRef.current) csvInputRef.current.value = ''
@@ -574,11 +776,11 @@ export function MenuRoute(): React.JSX.Element {
       const result = await uploadItemsImage(files)
       await reloadPool()
       if (selectedMenuId) await reloadMenuItems(selectedMenuId)
-      const parts = [`Created: ${result.created}, Updated: ${result.updated}`]
-      if (result.errors.length) parts.push(`Errors: ${result.errors.slice(0, 3).join('; ')}`)
+      const parts = [t('menu.uploadCreatedUpdated', { created: result.created, updated: result.updated })]
+      if (result.errors.length) parts.push(t('menu.uploadErrorList', { details: result.errors.slice(0, 3).join('; ') }))
       setUploadMsg(parts.join('. '))
     } catch (err: any) {
-      setError('Image upload failed: ' + (err?.response?.data?.detail ?? 'Make sure the image is a clear menu photo.'))
+      setError(t('menu.imageUploadFailed', { detail: err?.response?.data?.detail ?? t('menu.imageUploadHint') }))
     } finally {
       setUploading(false)
       if (imageInputRef.current) imageInputRef.current.value = ''
@@ -595,7 +797,7 @@ export function MenuRoute(): React.JSX.Element {
       setNewMenuName('')
       await reloadMenus(created.id)
     } catch {
-      setError('Failed to create menu')
+      setError(t('menu.failedCreateMenu'))
     }
   }
 
@@ -605,12 +807,12 @@ export function MenuRoute(): React.JSX.Element {
       await setDefaultMenu(menu.id)
       await reloadMenus(menu.id)
     } catch {
-      setError('Failed to set default menu')
+      setError(t('menu.failedSetDefault'))
     }
   }
 
   async function handleDeleteMenu(menu: MenuOut): Promise<void> {
-    if (!window.confirm(`Delete menu "${menu.name}"?`)) return
+    if (!window.confirm(t('menu.deleteMenuConfirm', { name: menu.name }))) return
     setError(null)
     try {
       await deleteMenu(menu.id)
@@ -618,7 +820,7 @@ export function MenuRoute(): React.JSX.Element {
       setMenus(next)
       setSelectedMenuId(next[0]?.id ?? null)
     } catch {
-      setError('Failed to delete menu')
+      setError(t('menu.failedDeleteMenu'))
     }
   }
 
@@ -630,7 +832,7 @@ export function MenuRoute(): React.JSX.Element {
       await reloadMenus(renameMenu.id)
       setRenameMenu(null)
     } catch {
-      setError('Failed to rename menu')
+      setError(t('menu.failedRenameMenu'))
     }
   }
 
@@ -642,7 +844,7 @@ export function MenuRoute(): React.JSX.Element {
       await addItemToMenu(selectedMenuId, item.id)
       await reloadMenuItems(selectedMenuId)
     } catch {
-      setError('Failed to add item to menu')
+      setError(t('menu.failedAddToMenu'))
     }
   }
 
@@ -653,7 +855,7 @@ export function MenuRoute(): React.JSX.Element {
       await removeItemFromMenu(selectedMenuId, item.id)
       setMenuItems((prev) => prev.filter((i) => i.id !== item.id))
     } catch {
-      setError('Failed to remove item from menu')
+      setError(t('menu.failedRemoveFromMenu'))
     }
   }
 
@@ -661,12 +863,12 @@ export function MenuRoute(): React.JSX.Element {
   return (
     <>
       <div className="page-header">
-        <h1>Menu</h1>
-        <p>Manage your items pool and menus</p>
+        <h1>{t('menu.header')}</h1>
+        <p>{t('menu.headerSubtitle')}</p>
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
-      {uploadMsg && <div className="alert alert-success" style={{ marginBottom: 16 }}>{uploadMsg}<button className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setUploadMsg(null)}>dismiss</button></div>}
+      {uploadMsg && <div className="alert alert-success" style={{ marginBottom: 16 }}>{uploadMsg}<button className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setUploadMsg(null)}>{t('menu.dismiss')}</button></div>}
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 20 }}>
@@ -675,14 +877,16 @@ export function MenuRoute(): React.JSX.Element {
           onClick={() => setActiveTab('pool')}
           style={{ maxWidth: 160 }}
         >
-          Items Pool ({filteredPool.length === poolItems.length ? poolItems.length : `${filteredPool.length} / ${poolItems.length}`})
+          {filteredPool.length === poolItems.length
+            ? t('menu.itemsPoolCount', { count: poolItems.length })
+            : t('menu.tabPoolFiltered', { shown: filteredPool.length, total: poolItems.length })}
         </button>
         <button
           className={activeTab === 'menus' ? 'auth-tab active' : 'auth-tab'}
           onClick={() => setActiveTab('menus')}
           style={{ maxWidth: 160 }}
         >
-          Menus ({menus.length})
+          {t('menu.tabMenusCount', { count: menus.length })}
         </button>
       </div>
 
@@ -692,19 +896,19 @@ export function MenuRoute(): React.JSX.Element {
           {/* Toolbar */}
           <div className="card" style={{ marginBottom: 16 }}>
             <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <button className="btn btn-primary" onClick={openCreateModal}>+ New Item</button>
+              <button className="btn btn-primary" onClick={openCreateModal}>{t('menu.newItemBtn')}</button>
 
               <input
                 ref={csvInputRef} type="file" accept=".csv"
                 style={{ display: 'none' }}
                 onChange={(e) => void handleCsvUpload(e)}
               />
-              <button className="btn btn-secondary" onClick={() => csvInputRef.current?.click()} disabled={uploading} title="Bulk import or update items from a CSV file. Items are matched by name — existing items get updated, new ones are created.">
-                {uploading ? 'Uploading...' : 'Upload CSV'}
+              <button className="btn btn-secondary" onClick={() => csvInputRef.current?.click()} disabled={uploading} title={t('menu.uploadCsvTitle')}>
+                {uploading ? t('menu.uploading') : t('menu.uploadCsv')}
               </button>
 
-              <button className="btn btn-secondary" onClick={downloadCsvTemplate} title="Download a sample CSV file with the correct column headers and example data to use as a starting point.">
-                Download CSV Template
+              <button className="btn btn-secondary" onClick={downloadCsvTemplate} title={t('menu.downloadCsvTemplateTitle')}>
+                {t('menu.downloadCsvTemplate')}
               </button>
 
               <input
@@ -712,8 +916,8 @@ export function MenuRoute(): React.JSX.Element {
                 style={{ display: 'none' }}
                 onChange={(e) => void handleImageUpload(e)}
               />
-              <button className="btn btn-secondary" onClick={() => imageInputRef.current?.click()} disabled={uploading} title="Upload photos or PDFs of your restaurant menu. AI will automatically extract item names, prices, and categories.">
-                {uploading ? 'Processing...' : 'Scan Menu (Image/PDF)'}
+              <button className="btn btn-secondary" onClick={() => imageInputRef.current?.click()} disabled={uploading} title={t('menu.scanMenuTitle')}>
+                {uploading ? t('menu.processing') : t('menu.scanMenu')}
               </button>
 
               <div style={{ flex: 1 }} />
@@ -723,9 +927,9 @@ export function MenuRoute(): React.JSX.Element {
                 className="form-select"
                 value={poolCategoryFilter}
                 onChange={(e) => setPoolCategoryFilter(e.target.value)}
-                title="Filter by category"
+                title={t('menu.filterCategoryTitle')}
               >
-                <option value="">All Categories</option>
+                <option value="">{t('menu.allCategories')}</option>
                 {categories.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
 
@@ -734,18 +938,18 @@ export function MenuRoute(): React.JSX.Element {
                 className="form-select"
                 value={poolAvailabilityFilter}
                 onChange={(e) => setPoolAvailabilityFilter(e.target.value as 'all' | 'available' | 'unavailable')}
-                title="Filter by availability"
+                title={t('menu.filterAvailabilityTitle')}
               >
-                <option value="all">All Items</option>
-                <option value="available">Available</option>
-                <option value="unavailable">Unavailable</option>
+                <option value="all">{t('menu.allItems')}</option>
+                <option value="available">{t('common.available')}</option>
+                <option value="unavailable">{t('common.unavailable')}</option>
               </select>
 
               {/* Search */}
               <input
                 className="form-input"
                 style={{ width: 220 }}
-                placeholder="Search name, alias, category…"
+                placeholder={t('menu.searchPlaceholder')}
                 value={poolFilter}
                 onChange={(e) => setPoolFilter(e.target.value)}
               />
@@ -758,9 +962,9 @@ export function MenuRoute(): React.JSX.Element {
                     setPoolCategoryFilter('')
                     setPoolAvailabilityFilter('all')
                   }}
-                  title="Clear all filters"
+                  title={t('menu.clearFiltersTitle')}
                 >
-                  Clear
+                  {t('menu.clearFilters')}
                 </button>
               )}
             </div>
@@ -770,13 +974,13 @@ export function MenuRoute(): React.JSX.Element {
           {selectedIds.size > 0 && (
             <div className="card" style={{ marginBottom: 16 }}>
               <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 600, fontSize: 13 }}>{selectedIds.size} selected</span>
+                <span style={{ fontWeight: 600, fontSize: 13 }}>{t('menu.selectedCount', { count: selectedIds.size })}</span>
                 <div style={{ width: 1, height: 20, background: 'var(--color-border)' }} />
-                <button className="btn btn-secondary btn-sm" onClick={() => void batchToggleAvailability(true)}>Set Available</button>
-                <button className="btn btn-secondary btn-sm" onClick={() => void batchToggleAvailability(false)}>Set Unavailable</button>
-                <button className="btn btn-danger btn-sm" onClick={() => void batchDelete()}>Delete Selected</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => void batchToggleAvailability(true)}>{t('menu.setAvailable')}</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => void batchToggleAvailability(false)}>{t('menu.setUnavailable')}</button>
+                <button className="btn btn-danger btn-sm" onClick={() => void batchDelete()}>{t('menu.deleteSelected')}</button>
                 <div style={{ flex: 1 }} />
-                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedIds(new Set())}>Clear Selection</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedIds(new Set())}>{t('menu.clearSelection')}</button>
               </div>
             </div>
           )}
@@ -795,15 +999,15 @@ export function MenuRoute(): React.JSX.Element {
                         style={{ width: 16, height: 16, accentColor: 'var(--color-primary)', cursor: 'pointer' }}
                       />
                     </th>
-                    <SortableTh label="Name" sortKey="name" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} />
-                    <SortableTh label="Category" sortKey="category" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} />
-                    <SortableTh label="Price" sortKey="price" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} align="right" />
+                    <SortableTh label={t('menu.colName')} sortKey="name" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} t={t} />
+                    <SortableTh label={t('menu.category')} sortKey="category" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} t={t} />
+                    <SortableTh label={t('menu.colPrice')} sortKey="price" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} align="right" t={t} />
                     <th style={{ ...thStyle, textAlign: 'right' }}>S</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>M</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>L</th>
-                    <SortableTh label="Status" sortKey="availability" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} />
-                    <th style={thStyle}>Tags</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                    <SortableTh label={t('menu.colStatus')} sortKey="availability" active={poolSortKey} dir={poolSortDir} onToggle={togglePoolSort} t={t} />
+                    <th style={thStyle}>{t('menu.colTags')}</th>
+                    <th style={{ ...thStyle, textAlign: 'right' }}>{t('menu.colActions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -816,7 +1020,7 @@ export function MenuRoute(): React.JSX.Element {
                         background: selectedIds.has(item.id) ? 'var(--color-primary-light)' : undefined,
                       }}
                       onDoubleClick={() => openEditModal(item)}
-                      title="Double-click to edit"
+                      title={t('menu.doubleClickEdit')}
                     >
                       <td style={tdStyle}>
                         <input
@@ -828,7 +1032,18 @@ export function MenuRoute(): React.JSX.Element {
                         />
                       </td>
                       <td style={tdStyle}>
-                        <div style={{ fontWeight: 600 }}>{item.name}</div>
+                        <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {item.name}
+                          {item.variants && item.variants.length > 0 && (
+                            <span
+                              className="badge badge-draft"
+                              title={item.variants.map((v) => `${v.name}: $${v.price}`).join(' · ')}
+                              style={{ fontSize: 10 }}
+                            >
+                              {t(item.variants.length === 1 ? 'menu.optionsOne' : 'menu.optionsMany', { count: item.variants.length })}
+                            </span>
+                          )}
+                        </div>
                         {item.alias_name && <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{item.alias_name}</div>}
                       </td>
                       <td style={tdStyle}>{item.category && <span className="badge badge-submitted">{item.category}</span>}</td>
@@ -838,7 +1053,7 @@ export function MenuRoute(): React.JSX.Element {
                       <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--color-text-secondary)' }}>{item.price_large != null ? `$${item.price_large}` : '-'}</td>
                       <td style={tdStyle}>
                         <span className={`badge ${item.availability ? 'badge-active' : 'badge-inactive'}`}>
-                          {item.availability ? 'Available' : 'Unavailable'}
+                          {item.availability ? t('common.available') : t('common.unavailable')}
                         </span>
                       </td>
                       <td style={tdStyle}>
@@ -848,15 +1063,15 @@ export function MenuRoute(): React.JSX.Element {
                       </td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>
                         <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
-                          <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openEditModal(item) }}>Edit</button>
-                          <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); void handleDeletePoolItem(item) }}>Delete</button>
+                          <button className="btn btn-secondary btn-sm" onClick={(e) => { e.stopPropagation(); openEditModal(item) }}>{t('common.edit')}</button>
+                          <button className="btn btn-danger btn-sm" onClick={(e) => { e.stopPropagation(); void handleDeletePoolItem(item) }}>{t('common.delete')}</button>
                         </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {!filteredPool.length && <div className="empty-state">No items found. Add items manually, upload a CSV, or scan a menu image.</div>}
+              {!filteredPool.length && <div className="empty-state">{t('menu.noItemsFound')}</div>}
             </div>
           </div>
         </>
@@ -868,7 +1083,7 @@ export function MenuRoute(): React.JSX.Element {
           {/* Left: Menus list */}
           <div className="card">
             <div className="card-header">
-              <h2>Menus</h2>
+              <h2>{t('menu.menus')}</h2>
             </div>
             <div className="card-body">
               <div style={{ display: 'flex', gap: 8 }}>
@@ -877,10 +1092,10 @@ export function MenuRoute(): React.JSX.Element {
                   style={{ flex: 1 }}
                   value={newMenuName}
                   onChange={(e) => setNewMenuName(e.target.value)}
-                  placeholder="New menu name"
+                  placeholder={t('menu.newMenuName')}
                   onKeyDown={(e) => { if (e.key === 'Enter') void handleCreateMenu() }}
                 />
-                <button className="btn btn-primary" onClick={() => void handleCreateMenu()}>Add</button>
+                <button className="btn btn-primary" onClick={() => void handleCreateMenu()}>{t('common.add')}</button>
               </div>
             </div>
             <div>
@@ -894,8 +1109,8 @@ export function MenuRoute(): React.JSX.Element {
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{m.name}</div>
                     <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                       {m.id === defaultMenuId
-                        ? <span className="badge badge-confirmed">Default</span>
-                        : <span className="badge badge-inactive">Inactive</span>
+                        ? <span className="badge badge-confirmed">{t('common.default')}</span>
+                        : <span className="badge badge-inactive">{t('common.inactive')}</span>
                       }
                       <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>v{m.version}</span>
                     </div>
@@ -906,25 +1121,25 @@ export function MenuRoute(): React.JSX.Element {
                         className="btn btn-primary btn-sm"
                         onClick={(e) => { e.stopPropagation(); void handleSetDefault(m) }}
                       >
-                        Set Default
+                        {t('menu.setDefault')}
                       </button>
                     )}
                     <button
                       className="btn btn-secondary btn-sm"
                       onClick={(e) => { e.stopPropagation(); setRenameMenu(m) }}
                     >
-                      Rename
+                      {t('menu.rename')}
                     </button>
                     <button
                       className="btn btn-danger btn-sm"
                       onClick={(e) => { e.stopPropagation(); void handleDeleteMenu(m) }}
                     >
-                      Delete
+                      {t('common.delete')}
                     </button>
                   </div>
                 </div>
               ))}
-              {!menus.length && <div className="empty-state">No menus yet. Create one above.</div>}
+              {!menus.length && <div className="empty-state">{t('menu.noMenusYet')}</div>}
             </div>
           </div>
 
@@ -936,18 +1151,18 @@ export function MenuRoute(): React.JSX.Element {
                 {selectedMenuItemIds.size > 0 && (
                   <div className="card">
                     <div className="card-body" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{selectedMenuItemIds.size} selected</span>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{t('menu.selectedCount', { count: selectedMenuItemIds.size })}</span>
                       <div style={{ width: 1, height: 20, background: 'var(--color-border)' }} />
                       {/* Show Add if any selected items are not in menu */}
                       {poolItems.filter((i) => selectedMenuItemIds.has(i.id) && !menuItemIds.has(i.id)).length > 0 && (
-                        <button className="btn btn-primary btn-sm" onClick={() => void batchAddToMenu()}>Add to Menu</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => void batchAddToMenu()}>{t('menu.addToMenu')}</button>
                       )}
                       {/* Show Remove if any selected items are in menu */}
                       {poolItems.filter((i) => selectedMenuItemIds.has(i.id) && menuItemIds.has(i.id)).length > 0 && (
-                        <button className="btn btn-danger btn-sm" onClick={() => void batchRemoveFromMenu()}>Remove from Menu</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => void batchRemoveFromMenu()}>{t('menu.removeFromMenuBtn')}</button>
                       )}
                       <div style={{ flex: 1 }} />
-                      <button className="btn btn-ghost btn-sm" onClick={() => setSelectedMenuItemIds(new Set())}>Clear Selection</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setSelectedMenuItemIds(new Set())}>{t('menu.clearSelection')}</button>
                     </div>
                   </div>
                 )}
@@ -955,7 +1170,7 @@ export function MenuRoute(): React.JSX.Element {
                 {/* All items table sorted by in-menu status */}
                 <div className="card">
                   <div className="card-header">
-                    <h2>{selectedMenu.name} — {menuItems.length}/{poolItems.length} items in menu</h2>
+                    <h2>{t('menu.menuItemsHeader', { name: selectedMenu.name, count: menuItems.length, total: poolItems.length })}</h2>
                   </div>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -969,14 +1184,14 @@ export function MenuRoute(): React.JSX.Element {
                               style={{ width: 16, height: 16, accentColor: 'var(--color-primary)', cursor: 'pointer' }}
                             />
                           </th>
-                          <th style={thStyle}>Name</th>
-                          <th style={thStyle}>Category</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>Price</th>
+                          <th style={thStyle}>{t('menu.colName')}</th>
+                          <th style={thStyle}>{t('menu.category')}</th>
+                          <th style={{ ...thStyle, textAlign: 'right' }}>{t('menu.colPrice')}</th>
                           <th style={{ ...thStyle, textAlign: 'right' }}>S</th>
                           <th style={{ ...thStyle, textAlign: 'right' }}>M</th>
                           <th style={{ ...thStyle, textAlign: 'right' }}>L</th>
-                          <th style={thStyle}>In Menu</th>
-                          <th style={{ ...thStyle, textAlign: 'right' }}>Actions</th>
+                          <th style={thStyle}>{t('menu.inMenuLabel')}</th>
+                          <th style={{ ...thStyle, textAlign: 'right' }}>{t('menu.colActions')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1019,15 +1234,15 @@ export function MenuRoute(): React.JSX.Element {
                                 <td style={{ ...tdStyle, textAlign: 'right', color: 'var(--color-text-secondary)' }}>{item.price_large != null ? `$${item.price_large}` : '-'}</td>
                                 <td style={tdStyle}>
                                   {inMenu
-                                    ? <span className="badge badge-confirmed">In Menu</span>
-                                    : <span className="badge badge-inactive">Not in Menu</span>
+                                    ? <span className="badge badge-confirmed">{t('menu.inMenuLabel')}</span>
+                                    : <span className="badge badge-inactive">{t('menu.notInMenuLabel')}</span>
                                   }
                                 </td>
                                 <td style={{ ...tdStyle, textAlign: 'right' }}>
                                   {inMenu ? (
-                                    <button className="btn btn-danger btn-sm" onClick={() => void handleRemoveFromMenu(item)}>Remove</button>
+                                    <button className="btn btn-danger btn-sm" onClick={() => void handleRemoveFromMenu(item)}>{t('common.remove')}</button>
                                   ) : (
-                                    <button className="btn btn-primary btn-sm" onClick={() => void handleAddToMenu(item)}>Add</button>
+                                    <button className="btn btn-primary btn-sm" onClick={() => void handleAddToMenu(item)}>{t('common.add')}</button>
                                   )}
                                 </td>
                               </tr>
@@ -1036,13 +1251,13 @@ export function MenuRoute(): React.JSX.Element {
                         }
                       </tbody>
                     </table>
-                    {!poolItems.length && <div className="empty-state">No items in pool. Go to Items Pool tab to add items first.</div>}
+                    {!poolItems.length && <div className="empty-state">{t('menu.noItemsInPool')}</div>}
                   </div>
                 </div>
               </>
             ) : (
               <div className="card">
-                <div className="empty-state">Select a menu from the left to manage its items</div>
+                <div className="empty-state">{t('menu.selectMenuPrompt')}</div>
               </div>
             )}
           </div>
@@ -1093,6 +1308,7 @@ function SortableTh({
   dir,
   onToggle,
   align,
+  t,
 }: {
   label: string
   sortKey: PoolSortKey
@@ -1100,6 +1316,7 @@ function SortableTh({
   dir: 'asc' | 'desc'
   onToggle: (key: PoolSortKey) => void
   align?: 'left' | 'right'
+  t: TFunction
 }): React.JSX.Element {
   const isActive = active === sortKey
   const arrow = isActive ? (dir === 'asc' ? '▲' : '▼') : '↕'
@@ -1113,7 +1330,7 @@ function SortableTh({
         color: isActive ? 'var(--color-primary)' : thStyle.color,
       }}
       onClick={() => onToggle(sortKey)}
-      title={`Sort by ${label.toLowerCase()}`}
+      title={t('menu.sortByTitle', { field: label.toLowerCase() })}
     >
       {label}
       <span style={{ marginLeft: 4, fontSize: 10, opacity: isActive ? 1 : 0.4 }}>{arrow}</span>
