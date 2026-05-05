@@ -1,0 +1,44 @@
+ # 1. Snapshot first (insurance)
+  gcloud compute disks snapshot voxeats-server \
+    --zone=us-central1-a \
+    --snapshot-names=voxeats-server-pre-resize-$(date +%Y%m%d)
+
+  # 2. Stop, resize, start
+  gcloud compute instances stop voxeats-server --zone=us-central1-a
+  
+  gcloud compute instances set-machine-type voxeats-server \
+    --zone=us-central1-a \
+    --machine-type=e2-medium
+
+  gcloud compute instances start voxeats-server --zone=us-central1-a
+
+  Total downtime: ~60–90 s. Your domain keeps resolving the whole time (clients just get connection refused until the VM and Docker come back up).
+
+  After it boots, SSH in and bring services up:
+  gcloud compute ssh voxeats-server --zone=us-central1-a
+  cd <repo>/backend && docker compose up -d
+
+  Two quick sanity checks before you fire it:
+
+  1. Does docker compose auto-start on boot? If not, you'll need to start it manually after each VM start. Check:
+  gcloud compute ssh voxeats-server --zone=us-central1-a --command="systemctl is-enabled docker && docker info | grep 'Restart policy' || echo 'no auto-restart configured'"
+  1. If the containers don't have restart: unless-stopped in compose and there's no systemd unit, plan to SSH in after the upgrade.
+  2. Boot disk size — worth checking now while you're doing maintenance. Run gcloud compute disks describe voxeats-server --zone=us-central1-a --format="value(sizeGb)". Default is 10 GB. If it's still 10, bump to at least 30 GB online (no stop needed) before or after
+  the resize:
+  gcloud compute disks resize voxeats-server --zone=us-central1-a --size=30GB
+
+  Want me to also generate a tiny systemd unit so docker compose comes up automatically on every boot? That removes the post-upgrade SSH-and-start step permanently.
+
+Recommended upgrades (pick one)
+
+  ┌───────────────┬─────────────┬───────┬────────────────────────────────┬───────────────────────────────────────────────────────────┐
+  │    Target     │    vCPU     │  RAM  │ ~$/mo (us-central1, on-demand) │                    Fits your workload?                    │
+  ├───────────────┼─────────────┼───────┼────────────────────────────────┼───────────────────────────────────────────────────────────┤
+  │ e2-small      │ 0.5–2 burst │ 2 GB  │ ~$13                           │ Marginal — works for solo dev, not concurrent voice calls │
+  ├───────────────┼─────────────┼───────┼────────────────────────────────┼───────────────────────────────────────────────────────────┤
+  │ e2-medium     │ 1–2 burst   │ 4 GB  │ ~$25                           │ Decent for low traffic (1–2 concurrent calls)             │
+  ├───────────────┼─────────────┼───────┼────────────────────────────────┼───────────────────────────────────────────────────────────┤
+  │ e2-standard-2 │ 2 dedicated │ 8 GB  │ ~$50                           │ Solid for early production with several concurrent calls  │
+  ├───────────────┼─────────────┼───────┼────────────────────────────────┼───────────────────────────────────────────────────────────┤
+  │ e2-standard-4 │ 4 dedicated │ 16 GB │ ~$100                          │ Headroom + you can co-host more services                  │
+  └───────────────┴─────────────┴───────┴────────────────────────────────┴───────────────────────────────────────────────────────────┘

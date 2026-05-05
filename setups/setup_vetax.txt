@@ -1,0 +1,157 @@
+On voxeats-server, don't ship the credentials file at all. Use the service account attached to the VM:
+
+  1. Confirm the SA is attached:
+  gcloud compute instances describe voxeats-server --zone=us-central1-a \
+    --format="value(serviceAccounts.email,serviceAccounts.scopes)"
+  1. You should see restoai-vertex@... (or whatever you named it) and cloud-platform in scopes. If not, attach it per the migration doc Phase 0 step 5.
+  2. Remove the credentials mount and env var from the production docker-compose.yml:
+  # delete these two lines:
+  #   GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+  #   - /home/qzhang/.../application_default_credentials.json:/gcp/adc.json:ro
+  2. With nothing set, google.auth.default() automatically falls through to the GCE metadata server, which mints a fresh token from the attached SA on every request. No file, no expiry, no re-login ever.
+  3. docker compose up -d and you're done.
+
+  The GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION env vars stay — those are needed regardless of how you authenticate.
+
+
+  Every GCE VM has a built-in metadata server at 169.254.169.254. When your VM has a service account attached and the Google client libraries can't find an explicit credential, they automatically query the metadata server and get back a short-lived token signed by that
+  service account. The metadata server keeps minting new tokens forever — no expiry from a user perspective, no file to refresh, no reauth.
+
+  User-account ADC (what you have now) doesn't have this property. Service accounts via metadata server do.
+
+  Production setup — step by step
+
+  Step 1. Confirm the SA is attached to voxeats-server
+
+  gcloud compute instances describe voxeats-server --zone=us-central1-a \
+    --format="yaml(serviceAccounts)"
+
+  Should show something like:
+  serviceAccounts:
+  - email: restoai-vertex@voxeats.iam.gserviceaccount.com
+    scopes:
+    - https://www.googleapis.com/auth/cloud-platform
+
+  If email is the default Compute Engine SA (<projectnumber>-compute@developer.gserviceaccount.com) or scopes are missing cloud-platform, fix it:
+
+  # VM must be stopped to change SA
+  gcloud compute instances stop voxeats-server --zone=us-central1-a
+
+
+  gcloud compute instances set-service-account voxeats-server \
+    --zone=us-central1-a \
+    --service-account=voxeats-vertex@voxeats.iam.gserviceaccount.com \
+    --scopes=https://www.googleapis.com/auth/cloud-platform
+
+  gcloud compute instances start voxeats-server --zone=us-central1-a
+
+  Step 2. Confirm the SA has the right IAM role
+
+  gcloud projects get-iam-policy voxeats \
+    --flatten="bindings[].members" \
+    --filter="bindings.members:voxeats-vertex@voxeats.iam.gserviceaccount.com" \
+    --format="value(bindings.role)"
+
+  Should include roles/aiplatform.user. If not:
+
+  gcloud projects add-iam-policy-binding voxeats \
+    --member="serviceAccount:voxeats-vertex@voxeats.iam.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+
+  Step 3. (on the VM): switch to vertex
+
+  cd ~/voxeats
+  git fetch origin
+  git checkout vertex     # creates a local tracking branch from origin/vertex
+
+  If git checkout vertex complains that vertex already exists locally but is out of date:
+  git checkout vertex
+  git pull origin vertex
+
+  Step 4. (on the VM): edit docker-compose.yml to remove the laptop-only credential mount
+
+  cd ~/voxeats/backend
+  nano docker-compose.yml        # or vim
+
+  Delete these two lines from the api: service:
+  GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+  # ...
+  - /home/qzhang/mydata/myproject/apps/Resto_AI/src/VoxEats/application_default_credentials.json:/gcp/adc.json:ro
+
+  Save. With the voxeats-vertex SA attached to the VM (which we set up earlier), google.auth.default() will fall through to the metadata server automatically.
+
+  ▎ Tip to avoid this every deploy: mark the file as locally-modified-but-not-committed:
+  ▎ git update-index --assume-unchanged backend/docker-compose.yml
+  ▎ This stops git pull from overwriting your VM-only edits to compose. To undo: git update-index --no-assume-unchanged backend/docker-compose.yml.
+
+  Step 5 (on the VM): run new migrations and bring services up
+
+  The vertex branch added two new migrations (0020_menu_item_variants.py, 0021_backfill_sml_variants.py). They need to run.
+
+  The compose command: already includes alembic upgrade head on container start, so a clean restart handles it:
+
+  cd ~/voxeats/backend
+  docker compose down
+  docker compose up -d --build
+  docker compose logs -f api | head -100
+
+  Watch the logs:
+  - "alembic upgrade head" should run and apply 0020 + 0021 successfully
+  - Then "Voice LLM: Vertex google/gemini-live-2.5-flash-native-audio @ voxeats/us-central1" should print
+  - The reauth error should be gone
+
+
+  Step 4. Test from inside the container on the VM
+
+  docker compose exec api python -c "
+  from google import genai
+  import os
+  c = genai.Client(vertexai=True, project=os.environ['GOOGLE_CLOUD_PROJECT'], location=os.environ['GOOGLE_CLOUD_LOCATION'])
+  print(c.models.generate_content(model='google/gemini-2.5-flash', contents='ping').text)
+  "
+
+  If it prints anything, you're done — the metadata server is providing tokens, and they will keep rolling forever.
+
+  Keeping local dev working without breaking production
+
+  The challenge: you want the credentials mount on your laptop (no metadata server there) but not on the VM. Solutions, cleanest first:
+
+  Option A (recommended): split into base + override
+
+  docker-compose.yml (committed, production-safe) — drop the credential lines:
+  services:
+    api:
+      environment:
+        # GOOGLE_APPLICATION_CREDENTIALS removed
+        GOOGLE_CLOUD_PROJECT: voxeats
+        GOOGLE_CLOUD_LOCATION: us-central1
+        # ... rest unchanged
+      volumes:
+        - ./app:/app/app
+        # credential mount removed
+        # ... rest unchanged
+
+  docker-compose.override.yml (in .gitignore, only on your laptop) — adds back the dev-only ADC:
+  services:
+    api:
+      environment:
+        GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+      volumes:
+        - /home/qzhang/.config/gcloud/application_default_credentials.json:/gcp/adc.json:ro
+
+  Docker Compose loads docker-compose.override.yml automatically when you run docker compose up from the same directory. On the VM, that file doesn't exist, so the override is silently skipped.
+
+  Bonus: I made the volume path point at the gcloud-managed file directly, so future gcloud auth application-default login runs are picked up immediately without copying.
+
+  Option B: profiles
+
+  Tag the credential mount with a profile (profiles: ["devauth"]) and only run docker compose --profile devauth up locally. More verbose, less idiomatic.
+
+  Recap
+
+  - Why your error happens: user ADC tokens have a session lifetime, file-based ADC stops working when that runs out.
+  - Why metadata-server SA tokens are permanent: GCE issues them on demand, forever.
+  - Production fix: SA attached + roles/aiplatform.user + remove the credential file from the prod compose.
+  - Local dev stays unchanged if you split into base + override, with the override gitignored.
+
+  Want me to make those compose edits and create the .gitignore entry now?
