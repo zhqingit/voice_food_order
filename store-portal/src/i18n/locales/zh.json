@@ -14,7 +14,8 @@
     "default": "默认",
     "inactive": "未激活",
     "copied": "已复制！",
-    "storeIdPrefix": "ID: {{id}}..."
+    "storeIdPrefix": "ID: {{id}}...",
+    "fileTooLarge": "{{names}} 超过了 {{max}} 上传大小限制。"
   },
   "auth": {
     "title": "VoxEats 商家门户",

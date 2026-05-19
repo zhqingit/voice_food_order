@@ -557,7 +557,7 @@ def create_item_variant_endpoint(
     if item is None:
         raise AppError(status_code=404, code="item_not_found", detail="Item not found")
 
-    existing = menu_service.find_variant_by_name(
+    existing = menu_service.find_variant_by_exact_name(
         db, menu_item_id=item_id, name=payload.name
     )
     if existing is not None:
@@ -590,7 +590,7 @@ def update_item_variant_endpoint(
 
     # Rename collision check.
     if payload.name is not None:
-        conflicting = menu_service.find_variant_by_name(
+        conflicting = menu_service.find_variant_by_exact_name(
             db, menu_item_id=item_id, name=payload.name
         )
         if conflicting is not None and conflicting.id != variant.id:

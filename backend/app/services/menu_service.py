@@ -187,7 +187,11 @@ def find_variant_by_name(
 ) -> MenuItemVariant | None:
     """Case-insensitive exact match, then containment fallback — mirrors the
     fuzzy style we already use for item lookup so the bot can say '2 liter'
-    and hit the '2 Liter' variant row."""
+    and hit the '2 Liter' variant row.
+
+    Voice-path only — do NOT use for CRUD uniqueness checks, since the
+    containment fallback rejects legitimate names like "non-spicy" when
+    "spicy" already exists. Use find_variant_by_exact_name for that."""
     n = (name or "").strip().lower()
     if not n:
         return None
@@ -197,6 +201,19 @@ def find_variant_by_name(
             return v
     for v in rows:
         if n in v.name.lower() or v.name.lower() in n:
+            return v
+    return None
+
+
+def find_variant_by_exact_name(
+    db: Session, *, menu_item_id: uuid.UUID, name: str
+) -> MenuItemVariant | None:
+    """Strict case-insensitive equality — for create/rename uniqueness checks."""
+    n = (name or "").strip().lower()
+    if not n:
+        return None
+    for v in list_item_variants(db, menu_item_id=menu_item_id):
+        if v.name.strip().lower() == n:
             return v
     return None
 

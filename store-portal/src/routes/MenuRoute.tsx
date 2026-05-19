@@ -24,6 +24,7 @@ import {
   uploadItemsCsv,
   uploadItemsImage,
 } from '../api/menuApi'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_SIZE_LABEL } from '../config'
 
 // ── CSV template ───────────────────────────────────────────
 const CSV_TEMPLATE = `name,alias_name,category,price,price_small,price_medium,price_large,description,ingredient,note,tags,availability
@@ -771,6 +772,12 @@ export function MenuRoute(): React.JSX.Element {
     if (!files || files.length === 0) return
     setError(null)
     setUploadMsg(null)
+    const oversized = Array.from(files).filter((f) => f.size > MAX_UPLOAD_BYTES)
+    if (oversized.length > 0) {
+      setError(t('common.fileTooLarge', { names: oversized.map((f) => f.name).join(', '), max: MAX_UPLOAD_SIZE_LABEL }))
+      if (imageInputRef.current) imageInputRef.current.value = ''
+      return
+    }
     setUploading(true)
     try {
       const result = await uploadItemsImage(files)

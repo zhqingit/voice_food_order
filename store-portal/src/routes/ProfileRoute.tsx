@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getMe, updateMe, uploadLogo, getHours, updateHours, type StoreMe, type DayHours } from '../api/storeApi'
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_SIZE_LABEL } from '../config'
 
 const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 
@@ -147,6 +148,11 @@ export function ProfileRoute(): React.JSX.Element {
     if (!file) return
     setError(null)
     setMessage(null)
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(t('common.fileTooLarge', { names: file.name, max: MAX_UPLOAD_SIZE_LABEL }))
+      if (logoInputRef.current) logoInputRef.current.value = ''
+      return
+    }
     try {
       const updated = await uploadLogo(file)
       setMe(updated)

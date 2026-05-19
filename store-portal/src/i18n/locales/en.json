@@ -14,7 +14,8 @@
     "default": "Default",
     "inactive": "Inactive",
     "copied": "Copied!",
-    "storeIdPrefix": "ID: {{id}}..."
+    "storeIdPrefix": "ID: {{id}}...",
+    "fileTooLarge": "{{names}} exceeds the {{max}} upload limit."
   },
   "auth": {
     "title": "VoxEats Store Portal",
