@@ -1,5 +1,6 @@
 class OrderOut {
   final String id;
+  final String shortCode;
   final String storeId;
   final String? userId;
   final String status;
@@ -14,6 +15,7 @@ class OrderOut {
 
   const OrderOut({
     required this.id,
+    required this.shortCode,
     required this.storeId,
     required this.userId,
     required this.status,
@@ -30,6 +32,7 @@ class OrderOut {
   factory OrderOut.fromJson(Map<String, dynamic> json) {
     return OrderOut(
       id: json['id'] as String,
+      shortCode: (json['short_code'] as String?) ?? '',
       storeId: json['store_id'] as String,
       userId: json['user_id'] as String?,
       status: json['status'] as String,

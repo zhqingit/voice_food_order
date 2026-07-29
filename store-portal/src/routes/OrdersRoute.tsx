@@ -181,7 +181,7 @@ export function OrdersRoute(): React.JSX.Element {
     ).join('')
     const orderNote = selectedOrder.notes ? `<div style="margin-top:12px;font-style:italic;font-size:12px;color:#666">Note: ${selectedOrder.notes}</div>` : ''
 
-    const html = `<!DOCTYPE html><html><head><title>Order ${selectedOrder.id.slice(0, 8)}</title>
+    const html = `<!DOCTYPE html><html><head><title>Order ${selectedOrder.short_code}</title>
       <style>
         body { font-family: sans-serif; padding: 24px; max-width: 400px; margin: 0 auto; }
         h2 { margin: 0 0 4px; font-size: 18px; }
@@ -194,7 +194,7 @@ export function OrdersRoute(): React.JSX.Element {
         .totals .total { font-weight: 700; font-size: 15px; border-top: 2px solid #333; margin-top: 4px; padding-top: 4px; }
         @media print { body { padding: 0; } }
       </style></head><body>
-      <h2>Order #${selectedOrder.id.slice(0, 8)}</h2>
+      <h2>Order #${selectedOrder.short_code}</h2>
       <div class="meta">
         ${localTime(selectedOrder.created_at)}<br/>
         Status: ${selectedOrder.status} &nbsp; Channel: ${selectedOrder.channel}
@@ -283,7 +283,7 @@ export function OrdersRoute(): React.JSX.Element {
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.subtotal)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.tax)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>${String(o.total)}</td>
-                  <td style={{ ...tdStyle, fontSize: 11, color: 'var(--color-text-secondary)' }} className="mono">{o.id.slice(0, 8)}…</td>
+                  <td style={{ ...tdStyle, fontSize: 14, fontWeight: 700, letterSpacing: 1 }} className="mono">{o.short_code}</td>
                 </tr>
               ))}
             </tbody>

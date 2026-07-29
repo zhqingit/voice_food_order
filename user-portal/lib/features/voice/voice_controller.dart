@@ -49,6 +49,7 @@ class LiveOrderItem {
 /// Live order summary received via WebSocket during an active session.
 class LiveOrderSummary {
   final String? orderId;
+  final String? shortCode;
   final String status;
   final double subtotal;
   final double tax;
@@ -59,6 +60,7 @@ class LiveOrderSummary {
 
   const LiveOrderSummary({
     required this.orderId,
+    required this.shortCode,
     required this.status,
     required this.subtotal,
     required this.tax,
@@ -74,6 +76,7 @@ class LiveOrderSummary {
         .toList() ?? [];
     return LiveOrderSummary(
       orderId: json['order_id'] as String?,
+      shortCode: json['short_code'] as String?,
       status: json['status'] as String? ?? 'draft',
       subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
       tax: (json['tax'] as num?)?.toDouble() ?? 0,
@@ -87,6 +90,7 @@ class LiveOrderSummary {
   LiveOrderSummary copyWith({String? deliveryAddress}) {
     return LiveOrderSummary(
       orderId: orderId,
+      shortCode: shortCode,
       status: status,
       subtotal: subtotal,
       tax: tax,

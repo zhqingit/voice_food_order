@@ -124,6 +124,9 @@ async def voice_ws(
 
             # Fulfillment context for the voice bot.
             store_address: str | None = None
+            store_city: str | None = None
+            store_state: str | None = None
+            store_country: str | None = None
             allow_pickup_flag = True
             allow_delivery_flag = True
             if store is not None:
@@ -138,6 +141,9 @@ async def voice_ws(
                 ]
                 joined = ", ".join(p for p in addr_parts if p)
                 store_address = joined or None
+                store_city = (store.city or "").strip() or None
+                store_state = (store.state or "").strip() or None
+                store_country = (store.country or "").strip() or None
 
             _VOICE_TONE_MAP = {
                 "male": "Puck",
@@ -162,6 +168,9 @@ async def voice_ws(
         store_address=store_address,
         allow_pickup=allow_pickup_flag,
         allow_delivery=allow_delivery_flag,
+        store_city=store_city,
+        store_state=store_state,
+        store_country=store_country,
     )
 
     # Tool context uses db_factory so each tool call gets its own short-lived session.

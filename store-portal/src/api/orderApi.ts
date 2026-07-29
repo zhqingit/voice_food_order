@@ -3,6 +3,8 @@ import type { Money, UUID } from './types'
 
 export type OrderOut = {
   id: UUID
+  short_code: string
+  code_day: string
   store_id: UUID
   user_id: UUID | null
   status: string

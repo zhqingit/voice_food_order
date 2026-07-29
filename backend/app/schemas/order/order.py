@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,8 @@ class OrderItemOut(BaseModel):
 
 class OrderOut(BaseModel):
     id: uuid.UUID
+    short_code: str
+    code_day: date
     store_id: uuid.UUID
     user_id: uuid.UUID | None
     status: str

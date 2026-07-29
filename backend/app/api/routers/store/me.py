@@ -17,6 +17,7 @@ from app.models.store_hours import StoreHours
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.store.hours import DayHours, StoreHoursUpdate
 from app.schemas.store.store import StoreOut, StoreUpdate
+from app.services import delivery_service
 
 router = APIRouter(
     prefix="/store",
@@ -39,6 +40,9 @@ def _store_out(s: Store) -> StoreOut:
         timezone=s.timezone,
         allow_pickup=s.allow_pickup,
         allow_delivery=s.allow_delivery,
+        latitude=s.latitude,
+        longitude=s.longitude,
+        delivery_radius_km=s.delivery_radius_km,
         min_order_amount=s.min_order_amount,
         tax_rate=s.tax_rate,
         voice_tone=s.voice_tone,
@@ -55,6 +59,21 @@ def me(current_store: Store = Depends(get_current_store_web)) -> StoreOut:
     return _store_out(current_store)
 
 
+_ADDRESS_FIELDS = (
+    "address_line1",
+    "address_line2",
+    "city",
+    "state",
+    "postal_code",
+    "country",
+)
+
+
+def _compose_address(store: Store) -> str:
+    parts = [getattr(store, f) or "" for f in _ADDRESS_FIELDS]
+    return ", ".join(p.strip() for p in parts if p and p.strip())
+
+
 @router.patch("/me", response_model=StoreOut)
 def update_me(
     payload: StoreUpdate,
@@ -62,8 +81,27 @@ def update_me(
     db: Session = Depends(get_db),
 ) -> StoreOut:
     updates = payload.model_dump(exclude_unset=True)
+    address_changed = any(key in updates for key in _ADDRESS_FIELDS)
     for key, value in updates.items():
         setattr(current_store, key, value)
+
+    if address_changed:
+        composed = _compose_address(current_store)
+        if composed:
+            # No coord bias here — the store is geocoding its own address and
+            # may not yet have coords. Country (free-form column) is normalized
+            # inside the service.
+            coords = delivery_service.geocode_address(
+                composed, country=current_store.country
+            )
+            if coords is not None:
+                current_store.latitude, current_store.longitude = coords
+            # Keep prior coords if geocoding fails — don't wipe a good lookup
+            # because of a temporary outage or a typo'd partial edit.
+        else:
+            # Address fully cleared — drop the coords.
+            current_store.latitude = None
+            current_store.longitude = None
 
     db.add(current_store)
     db.commit()

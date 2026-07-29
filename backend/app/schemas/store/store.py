@@ -42,6 +42,9 @@ class StoreOut(BaseModel):
     timezone: str | None = None
     allow_pickup: bool | None = None
     allow_delivery: bool | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    delivery_radius_km: float | None = None
     min_order_amount: Decimal | None = None
     tax_rate: Decimal = Decimal("0.0000")
     voice_tone: str | None = None
@@ -64,6 +67,7 @@ class StoreUpdate(BaseModel):
     timezone: str | None = Field(default=None, max_length=64)
     allow_pickup: bool | None = None
     allow_delivery: bool | None = None
+    delivery_radius_km: float | None = Field(default=None, ge=0, le=1000)
     min_order_amount: Decimal | None = None
     tax_rate: Decimal | None = Field(default=None, ge=0, le=1)
     voice_tone: str | None = Field(default=None, max_length=32)

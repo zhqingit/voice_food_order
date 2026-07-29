@@ -28,6 +28,8 @@ router = APIRouter(
 def _order_out(order: Order) -> OrderOut:
     return OrderOut(
         id=order.id,
+        short_code=order.short_code,
+        code_day=order.code_day,
         store_id=order.store_id,
         user_id=order.user_id,
         status=order.status,

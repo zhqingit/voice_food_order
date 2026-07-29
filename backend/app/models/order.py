@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,12 @@ from app.db.base import Base
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (
+        # short_code is unique per (store, calendar day in store's tz). Codes
+        # can repeat across days or across stores — only same-day same-store
+        # collisions are blocked.
+        UniqueConstraint("store_id", "code_day", "short_code", name="uq_orders_store_day_short_code"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     store_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("stores.id", ondelete="CASCADE"), index=True)
@@ -31,4 +37,14 @@ class Order(Base):
     # "pickup" | "delivery" | None (not yet chosen)
     fulfillment_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Timestamp of the customer's verbal confirmation of delivery_address.
+    # Cleared automatically whenever delivery_address changes. checkout refuses
+    # delivery orders where this is still None — tool-layer enforcement so the
+    # bot cannot skip the address-confirmation step.
+    delivery_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
+    # Human-friendly per-day per-store identifier (e.g. "K7M2P").
+    short_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    code_day: Mapped[date] = mapped_column(Date, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utcnow_naive)

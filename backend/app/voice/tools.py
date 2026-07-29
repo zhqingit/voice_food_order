@@ -141,7 +141,16 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
             },
             {
                 "name": "set_fulfillment",
-                "description": "Record whether the order is for pickup or delivery. Call this as soon as the customer states their choice. For delivery you MUST include the customer's delivery address.",
+                "description": (
+                    "Record whether the order is for pickup or delivery. For delivery you MUST include the "
+                    "customer's delivery address. Saving an address does NOT confirm it — after this call you "
+                    "must read the saved address back letter-by-letter and, when the customer says yes, call "
+                    "confirm_delivery_address. checkout will refuse a delivery order without confirmation. "
+                    "Delivery may be rejected if the address is outside the store's delivery range — when "
+                    "that happens the tool returns ok=false with a reason code (out_of_range, "
+                    "geocode_failed, store_no_location, store_no_radius) and a message you should relay; "
+                    "then offer pickup or ask for a different address."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -159,8 +168,28 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                 },
             },
             {
+                "name": "confirm_delivery_address",
+                "description": (
+                    "Record that the customer has verbally confirmed the saved delivery address. Call this "
+                    "ONLY after you have (1) called set_fulfillment with the address, (2) read the saved "
+                    "delivery_address back to the customer letter-by-letter, and (3) the customer said yes. "
+                    "checkout will refuse a delivery order until this is called. If the customer corrects the "
+                    "address, call set_fulfillment again with the new value (the prior confirmation is "
+                    "automatically cleared) and read back the new value before calling this."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
                 "name": "checkout",
-                "description": "Finalize the order. Must include the customer's name for pickup/delivery identification.",
+                "description": (
+                    "Finalize the order. Must include the customer's name for pickup/delivery identification. "
+                    "For DELIVERY orders, this tool refuses unless confirm_delivery_address has been called "
+                    "after the customer verbally confirmed the saved delivery address — there is no way to "
+                    "bypass that."
+                ),
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -446,6 +475,20 @@ def create_voice_tool_handlers(
 
         return await _run_shielded("set_fulfillment", params, _work)
 
+    async def confirm_delivery_address(params: Any):
+        args = _extract_args(params)
+        if monitor is not None:
+            monitor.record_tool_call("confirm_delivery_address", args)
+
+        async def _work() -> dict:
+            result = await asyncio.to_thread(router.confirm_delivery_address)
+            if monitor is not None:
+                monitor.record_tool_result("confirm_delivery_address", result)
+            await _notify_order(result)
+            return result
+
+        return await _run_shielded("confirm_delivery_address", params, _work)
+
     return {
         "add_item": add_item,
         "update_item": update_item,
@@ -453,6 +496,7 @@ def create_voice_tool_handlers(
         "get_summary": get_summary,
         "set_order_note": set_order_note,
         "set_fulfillment": set_fulfillment,
+        "confirm_delivery_address": confirm_delivery_address,
         "checkout": checkout,
     }
 

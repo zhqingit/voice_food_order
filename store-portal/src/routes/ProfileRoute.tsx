@@ -33,6 +33,7 @@ export function ProfileRoute(): React.JSX.Element {
   const [timezone, setTimezone] = useState('')
   const [allowPickup, setAllowPickup] = useState<boolean>(true)
   const [allowDelivery, setAllowDelivery] = useState<boolean>(true)
+  const [deliveryRadius, setDeliveryRadius] = useState('')
   const [minOrder, setMinOrder] = useState('')
   const [taxRate, setTaxRate] = useState('')
   const logoInputRef = useRef<HTMLInputElement>(null)
@@ -56,10 +57,11 @@ export function ProfileRoute(): React.JSX.Element {
       timezone !== (me.timezone ?? '') ||
       allowPickup !== Boolean(me.allow_pickup ?? true) ||
       allowDelivery !== Boolean(me.allow_delivery ?? true) ||
+      deliveryRadius !== (me.delivery_radius_km != null ? String(me.delivery_radius_km) : '') ||
       minOrder !== (me.min_order_amount != null ? String(me.min_order_amount) : '') ||
       taxRate !== String(Number(me.tax_rate ?? 0) * 100)
     )
-  }, [me, name, phone, address1, address2, city, state, postal, country, timezone, allowPickup, allowDelivery, minOrder, taxRate])
+  }, [me, name, phone, address1, address2, city, state, postal, country, timezone, allowPickup, allowDelivery, deliveryRadius, minOrder, taxRate])
 
   useEffect(() => {
     void (async () => {
@@ -79,6 +81,7 @@ export function ProfileRoute(): React.JSX.Element {
         setTimezone(data.timezone ?? '')
         setAllowPickup(Boolean(data.allow_pickup ?? true))
         setAllowDelivery(Boolean(data.allow_delivery ?? true))
+        setDeliveryRadius(data.delivery_radius_km != null ? String(data.delivery_radius_km) : '')
         setMinOrder(data.min_order_amount != null ? String(data.min_order_amount) : '')
         setTaxRate(String(Number(data.tax_rate ?? 0) * 100))
         setHours(hoursData)
@@ -107,6 +110,15 @@ export function ProfileRoute(): React.JSX.Element {
       return
     }
 
+    let deliveryRadiusParsed: number | null = null
+    if (deliveryRadius.trim()) {
+      deliveryRadiusParsed = Number(deliveryRadius)
+      if (!Number.isFinite(deliveryRadiusParsed) || deliveryRadiusParsed <= 0) {
+        setError(t('profile.invalidDeliveryRadius'))
+        return
+      }
+    }
+
     try {
       const updated = await updateMe({
         name: name.trim() ? name.trim() : undefined,
@@ -120,6 +132,7 @@ export function ProfileRoute(): React.JSX.Element {
         timezone: timezone.trim() ? timezone.trim() : null,
         allow_pickup: allowPickup,
         allow_delivery: allowDelivery,
+        delivery_radius_km: deliveryRadiusParsed,
         min_order_amount: minOrderParsed,
         tax_rate: taxRateParsed,
       })
@@ -306,6 +319,27 @@ export function ProfileRoute(): React.JSX.Element {
                   {t('profile.allowDelivery')}
                 </label>
               </div>
+
+              {allowDelivery && (
+                <div className="form-group grid-full">
+                  <label className="form-label">{t('profile.deliveryRadius')}</label>
+                  <input
+                    className="form-input"
+                    value={deliveryRadius}
+                    onChange={(e) => setDeliveryRadius(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="5"
+                  />
+                  <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
+                    {t('profile.deliveryRadiusDesc')}
+                  </p>
+                  <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
+                    {me.latitude != null && me.longitude != null
+                      ? t('profile.geoResolved', { lat: me.latitude.toFixed(5), lng: me.longitude.toFixed(5) })
+                      : t('profile.geoUnresolved')}
+                  </p>
+                </div>
+              )}
 
               <div className="form-group grid-full">
                 <label className="form-label">{t('profile.storeLogo')}</label>

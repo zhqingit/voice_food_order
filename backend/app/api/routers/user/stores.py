@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -15,7 +16,7 @@ from app.schemas.common import Audience, PrincipalType
 from app.schemas.menu.menu import MenuItemOut
 from app.schemas.store.hours import DayHours
 from app.schemas.store.store import StorePublicOut
-from app.services import menu_service
+from app.services import delivery_service, menu_service
 
 router = APIRouter(
     prefix="/user/stores",
@@ -96,3 +97,34 @@ def get_store_menu(store_id: uuid.UUID, db: Session = Depends(get_db)) -> list[M
         return []
     items = menu_service.list_menu_items(db, menu_id=menu.id)
     return [MenuItemOut.model_validate(item, from_attributes=True) for item in items]
+
+
+class DeliveryRangeCheckIn(BaseModel):
+    address: str = Field(min_length=1, max_length=512)
+
+
+class DeliveryRangeCheckOut(BaseModel):
+    in_range: bool
+    distance_km: float | None = None
+    max_km: float | None = None
+    reason: str
+
+
+@router.post("/{store_id}/delivery/check-range", response_model=DeliveryRangeCheckOut)
+def check_delivery_range(
+    store_id: uuid.UUID,
+    payload: DeliveryRangeCheckIn,
+    db: Session = Depends(get_db),
+) -> DeliveryRangeCheckOut:
+    """Pre-check whether an address can be delivered to. Lets the user portal
+    show an out-of-range hint before the customer builds a cart."""
+    store = db.get(Store, store_id)
+    if store is None or not store.is_active or not store.is_published:
+        raise AppError(status_code=404, code="store_not_found", detail="Store not found")
+    in_range, distance_km, reason = delivery_service.is_within_delivery_range(store, payload.address)
+    return DeliveryRangeCheckOut(
+        in_range=in_range,
+        distance_km=round(distance_km, 2) if distance_km is not None else None,
+        max_km=float(store.delivery_radius_km) if store.delivery_radius_km is not None else None,
+        reason=reason,
+    )

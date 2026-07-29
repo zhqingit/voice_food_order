@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Numeric, String
+from sqlalchemy import Boolean, DateTime, Float, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,6 +30,12 @@ class Store(Base):
 
     allow_pickup: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     allow_delivery: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Geocoded from the address fields above on save. Used together with
+    # delivery_radius_km to gate whether a customer's delivery address falls
+    # inside the store's delivery area (haversine distance check).
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    delivery_radius_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     min_order_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
     voice_tone: Mapped[str | None] = mapped_column(String(32), nullable=True)

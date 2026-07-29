@@ -6,7 +6,10 @@ import time
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, Callable
+
+from app.core.time import utcnow_naive
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,7 +19,8 @@ from app.models.menu_item_variant import MenuItemVariant
 from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.voice_session import VoiceSession
-from app.services import menu_service, order_service
+from app.models.store import Store
+from app.services import delivery_service, menu_service, order_service
 from app.schemas.order.order import OrderCreate
 
 logger = logging.getLogger(__name__)
@@ -216,6 +220,7 @@ class VoiceToolRouter:
             summary_items.append(item_data)
         result: dict[str, Any] = {
             "order_id": str(order.id),
+            "short_code": order.short_code,
             "status": order.status,
             "subtotal": float(order.subtotal),
             "tax": float(order.tax),
@@ -389,6 +394,29 @@ class VoiceToolRouter:
             if order.status != "draft":
                 return {"ok": False, "message": "Order is not editable."}
 
+            # Tool-layer gate: delivery orders MUST have a verbal confirmation
+            # (recorded by confirm_delivery_address) before checkout. This is
+            # enforced server-side so the bot cannot skip the read-back step
+            # even under prompt-instruction pressure.
+            if order.fulfillment_type == "delivery":
+                if order.delivery_confirmed_at is None:
+                    return {
+                        "ok": False,
+                        "message": (
+                            "Delivery address has not been confirmed by the customer yet. "
+                            "Read the saved delivery_address back letter-by-letter and, when the customer says yes, "
+                            "call confirm_delivery_address. Only then call checkout."
+                        ),
+                    }
+                # Re-check delivery range at checkout — the address may have been
+                # edited (or the store may have tightened its radius) after the
+                # earlier set_fulfillment call.
+                if order.delivery_address:
+                    store = db.get(Store, self._context.store_id)
+                    range_check = self._check_delivery_range(store, order.delivery_address)
+                    if range_check is not None:
+                        return range_check
+
             if customer_name:
                 order.customer_name = customer_name
             order.status = "submitted"
@@ -514,6 +542,20 @@ class VoiceToolRouter:
             if order.status != "draft":
                 return {"ok": False, "message": "Order is not editable."}
 
+            if t == "delivery":
+                store = db.get(Store, self._context.store_id)
+                range_check = self._check_delivery_range(store, addr)
+                if range_check is not None:
+                    return range_check
+
+            # If the address actually changed (including: switching to pickup,
+            # or a different delivery address), drop any prior verbal
+            # confirmation. The customer must reconfirm.
+            prev_addr = (order.delivery_address or "").strip().lower()
+            new_addr = (addr or "").strip().lower()
+            if t != order.fulfillment_type or prev_addr != new_addr:
+                order.delivery_confirmed_at = None
+
             order.fulfillment_type = t
             order.delivery_address = addr
             db.commit()
@@ -521,5 +563,96 @@ class VoiceToolRouter:
             if t == "pickup":
                 msg = "Fulfillment set to pickup."
             else:
-                msg = f"Fulfillment set to delivery to {addr}."
+                msg = (
+                    f"Fulfillment set to delivery to {addr}. "
+                    "Address NOT yet confirmed by the customer — read it back letter-by-letter "
+                    "and, only after the customer says yes, call confirm_delivery_address before checkout."
+                )
             return {"ok": True, "message": msg, "order": self._build_summary(db, order)}
+
+    def confirm_delivery_address(self) -> dict[str, Any]:
+        """Record that the customer verbally confirmed the saved delivery address.
+
+        Required before checkout for delivery orders. The bot must read the
+        saved address back and wait for the customer's "yes" before calling
+        this. Any subsequent change to the address (via set_fulfillment or the
+        client UI) clears this flag and requires another confirmation.
+        """
+        with self._context.db_factory() as db:
+            order = self._get_order(db)
+            if order is None:
+                return {"ok": False, "message": "No active order."}
+            if order.status != "draft":
+                return {"ok": False, "message": "Order is not editable."}
+            if order.fulfillment_type != "delivery":
+                return {
+                    "ok": False,
+                    "message": "Confirmation is only needed for delivery orders.",
+                }
+            if not (order.delivery_address or "").strip():
+                return {
+                    "ok": False,
+                    "message": "No delivery address has been captured yet. Ask the customer for one and call set_fulfillment first.",
+                }
+            order.delivery_confirmed_at = utcnow_naive()
+            db.commit()
+            return {
+                "ok": True,
+                "message": f"Delivery address confirmed: {order.delivery_address}.",
+                "order": self._build_summary(db, order),
+            }
+
+    def _check_delivery_range(
+        self, store: Store | None, delivery_address: str
+    ) -> dict[str, Any] | None:
+        """Run the range check and return a tool-failure dict on rejection.
+
+        Returns None when the address is in range (callers proceed). The
+        returned failure dict mirrors the documented voice contract: a
+        structured `reason` so the LLM can phrase a natural response."""
+        if store is None:
+            return {
+                "ok": False,
+                "reason": delivery_service.REASON_STORE_NO_LOCATION,
+                "message": "This store hasn't configured a delivery area yet.",
+            }
+        in_range, distance_km, reason = delivery_service.is_within_delivery_range(
+            store, delivery_address
+        )
+        if in_range:
+            return None
+        if reason == delivery_service.REASON_OUT_OF_RANGE:
+            return {
+                "ok": False,
+                "reason": reason,
+                "distance_km": round(distance_km, 2) if distance_km is not None else None,
+                "max_km": float(store.delivery_radius_km) if store.delivery_radius_km else None,
+                "message": (
+                    f"That address is about {distance_km:.1f} km away, but we only "
+                    f"deliver within {store.delivery_radius_km:.1f} km. Would you like "
+                    "pickup instead, or a different address?"
+                ),
+            }
+        if reason == delivery_service.REASON_GEOCODE_FAILED:
+            return {
+                "ok": False,
+                "reason": reason,
+                "message": "I couldn't locate that address. Could you say it again, or include the postcode?",
+            }
+        if reason == delivery_service.REASON_STORE_NO_LOCATION:
+            return {
+                "ok": False,
+                "reason": reason,
+                "message": "This store hasn't set a delivery location yet. Would you like pickup instead?",
+            }
+        if reason == delivery_service.REASON_STORE_NO_RADIUS:
+            return {
+                "ok": False,
+                "reason": reason,
+                "message": "This store hasn't set a delivery radius yet. Would you like pickup instead?",
+            }
+        return {
+            "ok": False,
+            "reason": reason,
+            "message": "I couldn't confirm that delivery address. Would you like pickup instead?",
+        }

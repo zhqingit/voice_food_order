@@ -631,6 +631,26 @@ class _LiveOrderPanelState extends ConsumerState<_LiveOrderPanel> {
                       '$itemCount ${itemCount == 1 ? (l10n?.item ?? "Item") : (l10n?.item ?? "Items")}',
                       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _kTextDark),
                     ),
+                    if (order.shortCode != null && order.shortCode!.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: _kOrangeStart.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: _kOrangeStart.withValues(alpha: 0.3), width: 0.5),
+                        ),
+                        child: Text(
+                          '#${order.shortCode}',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.2,
+                            color: _kOrangeStart,
+                          ),
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     Text(
                       '\$${order.total.toStringAsFixed(2)}',

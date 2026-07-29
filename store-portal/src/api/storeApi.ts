@@ -14,6 +14,9 @@ export type StoreMe = {
   timezone: string | null
   allow_pickup: boolean | null
   allow_delivery: boolean | null
+  latitude: number | null
+  longitude: number | null
+  delivery_radius_km: number | null
   min_order_amount: Money | null
   tax_rate: Money
   voice_tone: string | null
@@ -37,6 +40,7 @@ export type StoreMeUpdate = Partial<
     | 'timezone'
     | 'allow_pickup'
     | 'allow_delivery'
+    | 'delivery_radius_km'
     | 'min_order_amount'
     | 'tax_rate'
     | 'voice_tone'

@@ -36,6 +36,8 @@ router = APIRouter(
 def _order_out(order: Order) -> OrderOut:
     return OrderOut(
         id=order.id,
+        short_code=order.short_code,
+        code_day=order.code_day,
         store_id=order.store_id,
         user_id=order.user_id,
         status=order.status,
@@ -111,6 +113,15 @@ def patch_order(
         raise AppError(status_code=409, code="order_not_editable", detail="Order is not editable")
 
     updates = payload.model_dump(exclude_unset=True)
+    # If the customer edits the delivery address in the app, the prior verbal
+    # confirmation no longer applies — the bot must re-confirm before checkout.
+    if "delivery_address" in updates:
+        old = (order.delivery_address or "").strip().lower()
+        new = (updates["delivery_address"] or "").strip().lower()
+        if old != new:
+            order.delivery_confirmed_at = None
+    if "fulfillment_type" in updates and updates["fulfillment_type"] != order.fulfillment_type:
+        order.delivery_confirmed_at = None
     for key, value in updates.items():
         setattr(order, key, value)
     db.commit()
