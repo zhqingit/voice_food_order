@@ -47,4 +47,11 @@ class Order(Base):
     short_code: Mapped[str] = mapped_column(String(8), nullable=False)
     code_day: Mapped[date] = mapped_column(Date, nullable=False)
 
+    # Payment tracking — orthogonal to `status`. An order can be submitted but
+    # still "unpaid", then flip to "paid" once Stripe confirms the charge.
+    payment_status: Mapped[str] = mapped_column(String(16), nullable=False, default="unpaid", server_default="unpaid")
+    # Stripe PaymentIntent id (pi_...) for the charge against this order.
+    payment_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utcnow_naive)

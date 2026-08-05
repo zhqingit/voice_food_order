@@ -3,16 +3,24 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
 
 import '../../app/providers.dart';
+import '../../core/app_config.dart';
 import '../../data/menu_models.dart';
 import '../../data/menu_repository.dart';
+import '../../data/order_models.dart';
+import '../../data/payment_repository.dart';
 import '../../gen_l10n/app_localizations.dart';
 import '../../ui/style/app_background.dart';
 import 'voice_controller.dart';
 
 final menuRepositoryProvider = Provider<MenuRepository>((ref) {
   return MenuRepository(ref.watch(apiClientProvider).dio);
+});
+
+final paymentRepositoryProvider = Provider<PaymentRepository>((ref) {
+  return PaymentRepository(ref.watch(apiClientProvider).dio);
 });
 
 const _kOrangeStart = Color(0xFFFF8A2A);
@@ -965,6 +973,7 @@ class _PostSessionView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
+    final voice = ref.watch(voiceControllerProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -992,6 +1001,12 @@ class _PostSessionView extends ConsumerWidget {
             ),
           ),
           const SizedBox(height: 24),
+
+          // Payment (only when there's an order with a balance to pay)
+          if (voice.orderSummary != null && voice.orderSummary!.total > 0) ...[
+            _PaymentCard(order: voice.orderSummary!, storeName: storeName),
+            const SizedBox(height: 24),
+          ],
 
           // Review & Rating
           _ReviewCard(storeName: storeName),
@@ -1506,6 +1521,179 @@ class _Card extends StatelessWidget {
         ],
       ),
       child: child,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Payment card (post-session) — Stripe PaymentSheet, with pay-at-store fallback
+// ---------------------------------------------------------------------------
+
+class _PaymentCard extends ConsumerStatefulWidget {
+  final OrderOut order;
+  final String storeName;
+
+  const _PaymentCard({required this.order, required this.storeName});
+
+  @override
+  ConsumerState<_PaymentCard> createState() => _PaymentCardState();
+}
+
+class _PaymentCardState extends ConsumerState<_PaymentCard> {
+  bool _busy = false;
+  bool _paid = false;
+  bool _payAtStore = false;
+  String? _error;
+
+  bool get _alreadyPaid => widget.order.paymentStatus == 'paid' || _paid;
+
+  Future<void> _pay() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _payAtStore = false;
+    });
+    try {
+      final result = await ref.read(paymentRepositoryProvider).createPaymentIntent(widget.order.id);
+
+      // Store isn't payment-ready → collect at the store instead of charging.
+      if (!result.paymentAvailable || result.clientSecret == null) {
+        if (mounted) setState(() { _payAtStore = true; _busy = false; });
+        return;
+      }
+      final pk = result.publishableKey;
+      if (pk == null || pk.isEmpty) {
+        if (mounted) setState(() { _error = 'Online payment is temporarily unavailable.'; _busy = false; });
+        return;
+      }
+
+      Stripe.publishableKey = pk;
+      Stripe.merchantIdentifier = AppConfig.stripeMerchantIdentifier;
+      await Stripe.instance.applySettings();
+
+      await Stripe.instance.initPaymentSheet(
+        paymentSheetParameters: SetupPaymentSheetParameters(
+          paymentIntentClientSecret: result.clientSecret!,
+          merchantDisplayName: widget.storeName,
+          applePay: const PaymentSheetApplePay(merchantCountryCode: 'US'),
+          // testEnv: true pairs with Stripe test keys; set false for live.
+          googlePay: const PaymentSheetGooglePay(merchantCountryCode: 'US', testEnv: true),
+        ),
+      );
+      // Completes without throwing → the PaymentIntent succeeded. The backend
+      // webhook flips the order to paid; we reflect success locally.
+      await Stripe.instance.presentPaymentSheet();
+
+      if (mounted) setState(() { _paid = true; _busy = false; });
+    } on StripeException catch (e) {
+      // User cancellation is not an error; surface everything else.
+      final canceled = e.error.code == FailureCode.Canceled;
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = canceled ? null : (e.error.localizedMessage ?? 'Payment failed.');
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() { _busy = false; _error = 'Payment failed. Please try again.'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: _kOrangeStart.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
+                child: const Icon(Icons.credit_card_rounded, size: 20, color: _kOrangeStart),
+              ),
+              const SizedBox(width: 12),
+              const Text('Payment', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _kTextDark)),
+              const Spacer(),
+              Text('\$${widget.order.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _kOrangeStart)),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          if (_alreadyPaid)
+            _statusBox(
+              bg: const Color(0xFFE8F5E9),
+              fg: const Color(0xFF2E7D32),
+              icon: Icons.check_circle_rounded,
+              title: 'Payment complete',
+              body: 'Your order is paid. Thank you!',
+            )
+          else if (_payAtStore)
+            _statusBox(
+              bg: const Color(0xFFFFF3E6),
+              fg: const Color(0xFFB25E00),
+              icon: Icons.storefront_rounded,
+              title: 'Pay at the store',
+              body: 'This store isn\'t set up for online payment yet — please pay when you pick up or on delivery.',
+            )
+          else ...[
+            if (_error != null) ...[
+              Text(_error!, style: const TextStyle(color: Color(0xFFCC4B00), fontSize: 13)),
+              const SizedBox(height: 12),
+            ],
+            GestureDetector(
+              onTap: _busy ? null : () => _pay(),
+              child: Container(
+                width: double.infinity,
+                height: 52,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  gradient: const LinearGradient(colors: [_kOrangeStart, _kOrangeEnd]),
+                  boxShadow: [BoxShadow(color: _kOrangeStart.withValues(alpha: 0.3), blurRadius: 14, offset: const Offset(0, 5))],
+                ),
+                child: Center(
+                  child: _busy
+                      ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : Text(
+                          'Pay \$${widget.order.total.toStringAsFixed(2)}',
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statusBox({
+    required Color bg,
+    required Color fg,
+    required IconData icon,
+    required String title,
+    required String body,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(14)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: fg, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(body, style: TextStyle(color: fg.withValues(alpha: 0.9), fontSize: 12, height: 1.35)),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

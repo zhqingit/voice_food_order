@@ -33,6 +33,11 @@ class VoiceAudioBridge {
 
   bool get isRunning => _running;
 
+  /// Whether the bot is currently producing playback audio. Android only —
+  /// iOS playback is native (not routed through [VoiceAudioPlayer]), so this
+  /// returns false there.
+  bool get isPlaying => _player?.isPlaying ?? false;
+
   /// Start recording + playback engine.
   ///
   /// On iOS the caller must configure the AVAudioSession (via the

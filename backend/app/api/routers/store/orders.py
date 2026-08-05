@@ -39,6 +39,7 @@ def _order_out(order: Order, db: Session) -> OrderOut:
         store_id=order.store_id,
         user_id=order.user_id,
         status=order.status,
+        payment_status=order.payment_status,
         channel=order.channel,
         subtotal=order.subtotal,
         tax=order.tax,

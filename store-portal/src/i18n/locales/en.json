@@ -1,4 +1,12 @@
 {
+  "status": {
+    "suspendedTitle": "Store suspended",
+    "suspendedDesc": "Your store has been suspended by the platform. Customers can't place orders. Please contact support.",
+    "pendingTitle": "Pending approval",
+    "pendingDesc": "Your store is under review. Customers can't order until the platform approves it.",
+    "unpublishedTitle": "Not published",
+    "unpublishedDesc": "Your store is unpublished, so it's hidden from customers. Publish it in Profile to go live."
+  },
   "common": {
     "loading": "Loading...",
     "save": "Save Changes",
@@ -193,6 +201,7 @@
     "status": "Status",
     "items": "Items",
     "channel": "Channel",
+    "payment": "Payment",
     "itemName": "Item",
     "qty": "Qty",
     "unitPrice": "Unit Price",
@@ -308,5 +317,22 @@
     "failedSave": "Failed to save AI settings.",
     "failedGenerate": "Failed to generate rule.",
     "rawRequired": "Enter your requirement first."
+  },
+  "payments": {
+    "title": "Payments",
+    "platformFee": "Platform fee",
+    "feeDesc": "This commission is deducted from each online order; you receive the rest, paid out to your Stripe account.",
+    "notConnected": "Connect Stripe to accept online payments from customers. Until then, orders are collected as pay-at-store.",
+    "connectBtn": "Connect Stripe",
+    "incompleteTitle": "Finish payment setup",
+    "incompleteDesc": "Your Stripe onboarding isn't complete yet. Until it is, orders are collected as pay-at-store.",
+    "inReview": "Details submitted — Stripe is reviewing your account. This usually takes a few minutes.",
+    "continueBtn": "Continue setup",
+    "activeTitle": "Payments active",
+    "activeDesc": "You're set up to accept online payments.",
+    "paid": "Paid",
+    "unpaid": "Unpaid",
+    "loadError": "Couldn't load payment status.",
+    "connectError": "Couldn't start Stripe onboarding. Please try again."
   }
 }

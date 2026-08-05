@@ -1,4 +1,12 @@
 {
+  "status": {
+    "suspendedTitle": "门店已暂停",
+    "suspendedDesc": "您的门店已被平台暂停，顾客无法下单。请联系客服。",
+    "pendingTitle": "待审核",
+    "pendingDesc": "您的门店正在审核中。平台批准前顾客无法下单。",
+    "unpublishedTitle": "未发布",
+    "unpublishedDesc": "您的门店尚未发布，顾客看不到它。请在“资料”中发布以上线。"
+  },
   "common": {
     "loading": "加载中...",
     "save": "保存更改",

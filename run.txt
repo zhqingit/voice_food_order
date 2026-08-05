@@ -32,6 +32,17 @@ RUN backend:
 docker compose exec db psql -U postgres -d auth_template -c "SELECT vs.id::text, vs.rating, vs.review, s.name as store, vs.started_at FROM voice_sessions vs JOIN stores s ON s.id = vs.store_id ORDER BY vs.started_at DESC LIMIT 10;"
 docker compose exec db psql -U postgres -d auth_template -c "SELECT id::text, rating, review, started_at FROM voice_sessions WHERE review IS NOT NULL ORDER BY started_at DESC;"
 
+Run admin portal
+
+cd admin-portal
+cp .env.example .env      # first time only
+npm run dev
+
+Then open http://localhost:5175 and log in with the admin credentials you create via:
+
+#cd ../backend
+#docker compose exec api python -m app.cli.create_admin admin@voxeats.com 'somepassword'
+
 
 # run gcp server
 1. 

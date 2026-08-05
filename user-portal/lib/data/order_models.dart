@@ -1,9 +1,18 @@
+// Money fields are `Decimal` on the backend, which pydantic serializes as JSON
+// strings (e.g. "16.16"), not numbers. Parse either form so `as num` never throws.
+double _toDouble(Object? v) {
+  if (v is num) return v.toDouble();
+  if (v is String) return double.tryParse(v) ?? 0.0;
+  return 0.0;
+}
+
 class OrderOut {
   final String id;
   final String shortCode;
   final String storeId;
   final String? userId;
   final String status;
+  final String paymentStatus;
   final String channel;
   final double subtotal;
   final double tax;
@@ -19,6 +28,7 @@ class OrderOut {
     required this.storeId,
     required this.userId,
     required this.status,
+    required this.paymentStatus,
     required this.channel,
     required this.subtotal,
     required this.tax,
@@ -36,10 +46,11 @@ class OrderOut {
       storeId: json['store_id'] as String,
       userId: json['user_id'] as String?,
       status: json['status'] as String,
+      paymentStatus: json['payment_status'] as String? ?? 'unpaid',
       channel: json['channel'] as String,
-      subtotal: (json['subtotal'] as num).toDouble(),
-      tax: (json['tax'] as num).toDouble(),
-      total: (json['total'] as num).toDouble(),
+      subtotal: _toDouble(json['subtotal']),
+      tax: _toDouble(json['tax']),
+      total: _toDouble(json['total']),
       notes: json['notes'] as String?,
       fulfillmentType: json['fulfillment_type'] as String?,
       deliveryAddress: json['delivery_address'] as String?,
@@ -76,7 +87,7 @@ class OrderItemOut {
       menuItemId: json['menu_item_id'] as String,
       name: json['name'] as String?,
       quantity: json['quantity'] as int,
-      priceSnapshot: (json['price_snapshot'] as num).toDouble(),
+      priceSnapshot: _toDouble(json['price_snapshot']),
       note: json['note'] as String?,
       variantName: json['variant_name'] as String?,
     );

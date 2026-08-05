@@ -49,6 +49,8 @@ def _store_out(s: Store) -> StoreOut:
         custom_prompts=list(s.custom_prompts or []),
         logo_url=s.logo_url,
         is_published=s.is_published,
+        is_approved=s.is_approved,
+        is_active=s.is_active,
         email=s.email,
         created_at=s.created_at,
     )

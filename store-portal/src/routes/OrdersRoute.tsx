@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   type OrderItemOut,
   type OrderOut,
@@ -61,6 +62,24 @@ type SortDir = 'asc' | 'desc'
 function sortIndicator(col: SortKey, active: SortKey, dir: SortDir): string {
   if (col !== active) return ' ↕'
   return dir === 'asc' ? ' ↑' : ' ↓'
+}
+
+function paymentBadge(paymentStatus: string, t: TFunction): React.JSX.Element {
+  const paid = paymentStatus === 'paid'
+  return (
+    <span
+      style={{
+        fontSize: 11,
+        fontWeight: 700,
+        padding: '2px 8px',
+        borderRadius: 999,
+        background: paid ? '#dcfce7' : '#f3f4f6',
+        color: paid ? '#16a34a' : '#6b7280',
+      }}
+    >
+      {paid ? t('payments.paid') : t('payments.unpaid')}
+    </span>
+  )
 }
 
 export function OrdersRoute(): React.JSX.Element {
@@ -260,6 +279,7 @@ export function OrdersRoute(): React.JSX.Element {
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('subtotal')}>{t('orders.subtotal')}{sortIndicator('subtotal', sortKey, sortDir)}</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('tax')}>{t('orders.tax')}{sortIndicator('tax', sortKey, sortDir)}</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('total')}>{t('orders.total')}{sortIndicator('total', sortKey, sortDir)}</th>
+                <th style={thStyle}>{t('orders.payment')}</th>
                 <th style={thStyle}>{t('orders.orderId')}</th>
               </tr>
             </thead>
@@ -283,6 +303,7 @@ export function OrdersRoute(): React.JSX.Element {
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.subtotal)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.tax)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>${String(o.total)}</td>
+                  <td style={tdStyle}>{paymentBadge(o.payment_status, t)}</td>
                   <td style={{ ...tdStyle, fontSize: 14, fontWeight: 700, letterSpacing: 1 }} className="mono">{o.short_code}</td>
                 </tr>
               ))}
@@ -314,6 +335,10 @@ export function OrdersRoute(): React.JSX.Element {
               <div className="form-group">
                 <span className="meta-label">{t('orders.created')}</span>
                 <span>{localTime(selectedOrder.created_at)}</span>
+              </div>
+              <div className="form-group">
+                <span className="meta-label">{t('orders.payment')}</span>
+                <span>{paymentBadge(selectedOrder.payment_status, t)}</span>
               </div>
               <div className="form-group">
                 <span className="meta-label">{t('orders.totals')}</span>

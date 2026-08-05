@@ -233,6 +233,7 @@ def seed() -> None:
                 country="US",
                 allow_pickup=True,
                 allow_delivery=True,
+                is_approved=True,
             )
             db.add(store)
             db.flush()

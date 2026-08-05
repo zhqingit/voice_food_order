@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, Numeric, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,9 +43,23 @@ class Store(Base):
     custom_prompts: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     logo_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
+    # Stripe Connect (Express) connected-account id (acct_...). Set once the
+    # store completes Stripe-hosted onboarding; payments for this store's orders
+    # are routed here via destination charges.
+    stripe_account_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Cached from Stripe (account.updated webhook): whether the store can accept
+    # charges yet. Drives payment-ready badges; NOT a gate on orderability.
+    stripe_charges_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Per-store commission override in basis points (e.g. 1000 = 10%). None
+    # falls back to the platform default (settings.platform_fee_bps).
+    platform_fee_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     is_published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Platform approval gate (admin-controlled). A store is orderable only when
+    # is_approved AND is_published AND is_active.
+    is_approved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), default=utcnow_naive)

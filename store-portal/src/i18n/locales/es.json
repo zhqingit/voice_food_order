@@ -1,4 +1,12 @@
 {
+  "status": {
+    "suspendedTitle": "Tienda suspendida",
+    "suspendedDesc": "La plataforma ha suspendido tu tienda. Los clientes no pueden hacer pedidos. Contacta con soporte.",
+    "pendingTitle": "Pendiente de aprobación",
+    "pendingDesc": "Tu tienda está en revisión. Los clientes no podrán pedir hasta que la plataforma la apruebe.",
+    "unpublishedTitle": "No publicada",
+    "unpublishedDesc": "Tu tienda no está publicada, así que está oculta para los clientes. Publícala en Perfil para activarla."
+  },
   "common": {
     "loading": "Cargando...",
     "save": "Guardar cambios",

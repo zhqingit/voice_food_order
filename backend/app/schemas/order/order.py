@@ -25,6 +25,7 @@ class OrderOut(BaseModel):
     store_id: uuid.UUID
     user_id: uuid.UUID | None
     status: str
+    payment_status: str = "unpaid"
     channel: str
     subtotal: Decimal
     tax: Decimal

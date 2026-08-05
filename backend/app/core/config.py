@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     # For local dev, you can map these hostnames to 127.0.0.1 via /etc/hosts.
     user_api_hosts: str = "user-api.local"
     store_api_hosts: str = "store-api.local"
+    admin_api_hosts: str = "admin-api.local"
 
     # Multi-worker deployment
     web_workers: int = 4
@@ -86,6 +87,17 @@ class Settings(BaseSettings):
     telephony_twilio_account_sid: str | None = None
     telephony_twilio_auth_token: str | None = None
     telephony_twilio_app_sid: str | None = None
+
+    # Payments (Stripe Connect). Platform-level keys shared by all stores; each
+    # store links its own Express account via Stripe-hosted onboarding and is
+    # referenced by its acct_ id (stores.stripe_account_id).
+    stripe_secret_key: str | None = None
+    stripe_publishable_key: str | None = None
+    # Webhook signing secret (whsec_...); set once the webhook is registered.
+    stripe_webhook_secret: str | None = None
+    # Platform commission in basis points (1000 = 10%). Default for all stores;
+    # a store may override via stores.platform_fee_bps.
+    platform_fee_bps: int = 1000
 
 
 settings = Settings()

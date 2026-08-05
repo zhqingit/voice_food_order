@@ -8,6 +8,7 @@ export type OrderOut = {
   store_id: UUID
   user_id: UUID | null
   status: string
+  payment_status: string
   channel: string
   subtotal: Money
   tax: Money

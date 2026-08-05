@@ -22,6 +22,9 @@ export type StoreMe = {
   voice_tone: string | null
   logo_url: string | null
   is_published: boolean
+  // Admin-controlled, read-only. Drives the status banner.
+  is_approved: boolean
+  is_active: boolean
   email: string
   created_at: string
 }

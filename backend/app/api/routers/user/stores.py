@@ -68,7 +68,7 @@ def _store_public_out(store: Store, hours: list[DayHours]) -> StorePublicOut:
 def list_stores(db: Session = Depends(get_db)) -> list[StorePublicOut]:
     """List all active stores, sorted by creation date descending."""
     stores = (
-        db.execute(select(Store).where(Store.is_active == True, Store.is_published == True).order_by(Store.created_at.desc()))  # noqa: E712
+        db.execute(select(Store).where(Store.is_active == True, Store.is_approved == True, Store.is_published == True).order_by(Store.created_at.desc()))  # noqa: E712
         .scalars()
         .all()
     )
@@ -79,7 +79,7 @@ def list_stores(db: Session = Depends(get_db)) -> list[StorePublicOut]:
 def get_store(store_id: uuid.UUID, db: Session = Depends(get_db)) -> StorePublicOut:
     """Get a single store by ID. Returns 404 if not found, or 410 if unpublished."""
     store = db.get(Store, store_id)
-    if store is None or not store.is_active:
+    if store is None or not store.is_active or not store.is_approved:
         raise AppError(status_code=404, code="store_not_found", detail="Store not found")
     if not store.is_published:
         raise AppError(status_code=410, code="store_unpublished", detail="This store is no longer available")
@@ -90,7 +90,7 @@ def get_store(store_id: uuid.UUID, db: Session = Depends(get_db)) -> StorePublic
 def get_store_menu(store_id: uuid.UUID, db: Session = Depends(get_db)) -> list[MenuItemOut]:
     """Return the active menu items for a store (public, no auth required)."""
     store = db.get(Store, store_id)
-    if store is None or not store.is_active or not store.is_published:
+    if store is None or not store.is_active or not store.is_approved or not store.is_published:
         raise AppError(status_code=404, code="store_not_found", detail="Store not found")
     menu = menu_service.get_menu_by_version(db, store_id=store.id, version=None)
     if menu is None:
@@ -119,7 +119,7 @@ def check_delivery_range(
     """Pre-check whether an address can be delivered to. Lets the user portal
     show an out-of-range hint before the customer builds a cart."""
     store = db.get(Store, store_id)
-    if store is None or not store.is_active or not store.is_published:
+    if store is None or not store.is_active or not store.is_approved or not store.is_published:
         raise AppError(status_code=404, code="store_not_found", detail="Store not found")
     in_range, distance_km, reason = delivery_service.is_within_delivery_range(store, payload.address)
     return DeliveryRangeCheckOut(

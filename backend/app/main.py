@@ -23,6 +23,10 @@ from app.api.routers.store.me import router as store_router
 from app.api.routers.store.menu import router as store_menu_router
 from app.api.routers.store.orders import router as store_orders_router
 from app.api.routers.store.ai import router as store_ai_router
+from app.api.routers.store.payments import router as store_payments_router
+from app.api.routers.admin.auth import router as admin_auth_router
+from app.api.routers.admin.stores import router as admin_stores_router
+from app.api.routers.webhooks.stripe import router as stripe_webhook_router
 from app.api.routers.voice.sessions import router as voice_sessions_router
 from app.api.routers.voice.orders import router as voice_orders_router
 from app.api.routers.voice.ws import router as voice_ws_router
@@ -52,6 +56,10 @@ app.include_router(store_router)
 app.include_router(store_menu_router)
 app.include_router(store_orders_router)
 app.include_router(store_ai_router)
+app.include_router(store_payments_router)
+app.include_router(admin_auth_router)
+app.include_router(admin_stores_router)
+app.include_router(stripe_webhook_router)
 app.include_router(voice_sessions_router)
 app.include_router(voice_orders_router)
 app.include_router(voice_ws_router)

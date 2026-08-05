@@ -130,8 +130,11 @@ def signup(payload: StoreSignupRequest, response: Response, db: Session = Depend
 @router.post("/login", response_model=AccessTokenResponse)
 def login(payload: StoreLoginRequest, response: Response, db: Session = Depends(get_db)) -> AccessTokenResponse:
     store = db.execute(select(Store).where(Store.email == payload.email)).scalar_one_or_none()
-    if store is None or not store.is_active or not verify_password(payload.password, store.password_hash):
+    if store is None or not verify_password(payload.password, store.password_hash):
         raise AppError(status_code=401, code="invalid_credentials", detail="Invalid credentials")
+    # Suspended (is_active=False) stores may still sign in so the owner sees the
+    # suspension banner and can reach support. is_active still gates orderability
+    # (user-facing endpoints), so no customer can order from a suspended store.
 
     _revoke_all_store_sessions(db, store.id)
 

@@ -6,8 +6,10 @@ from enum import StrEnum
 class PrincipalType(StrEnum):
     user = "user"
     store = "store"
+    admin = "admin"
 
 
 class Audience(StrEnum):
     mobile = "mobile"
     web = "web"
+    admin = "admin"

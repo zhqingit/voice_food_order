@@ -212,6 +212,7 @@ final voiceControllerProvider = NotifierProvider<VoiceController, VoiceUiState>(
 class VoiceController extends Notifier<VoiceUiState> {
   StreamSubscription? _wsSub;
   StreamSubscription? _audioSub;
+  bool _submitHandled = false;
 
   @override
   VoiceUiState build() {
@@ -222,6 +223,7 @@ class VoiceController extends Notifier<VoiceUiState> {
     if (state.connecting || state.connected) return;
 
     state = state.copyWith(connecting: true, error: null);
+    _submitHandled = false;
 
     final tokenStore = ref.read(tokenStoreProvider);
     final bundle = await tokenStore.read();
@@ -278,7 +280,17 @@ class VoiceController extends Notifier<VoiceUiState> {
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
-            state = state.copyWith(liveOrder: LiveOrderSummary.fromJson(orderJson));
+            final summary = LiveOrderSummary.fromJson(orderJson);
+            state = state.copyWith(liveOrder: summary);
+            // Order just got submitted → per design, end the session and take
+            // the customer to the payment screen. But wait for the bot to finish
+            // its spoken confirmation ("order placed / order number") first, so
+            // it isn't cut off. Guarded so repeat 'submitted' updates only
+            // trigger the teardown once.
+            if (summary.status == 'submitted' && state.connected && !_submitHandled) {
+              _submitHandled = true;
+              _finishSpeakingThenStop();
+            }
           }
         } else if (type == 'closed' && state.connected) {
           stop();
@@ -299,6 +311,30 @@ class VoiceController extends Notifier<VoiceUiState> {
     } catch (e) {
       state = state.copyWith(connecting: false, connected: false, error: e.toString());
     }
+  }
+
+  /// After checkout, let the bot finish speaking its confirmation (order
+  /// placed + order number) before ending the session and navigating to the
+  /// payment screen. Bounded so it never hangs. On iOS, where playback state
+  /// isn't observable here, the time caps drive the delay instead.
+  Future<void> _finishSpeakingThenStop() async {
+    final bridge = ref.read(voiceAudioBridgeProvider);
+    // Wait (briefly) for the confirmation audio to start.
+    final startBy = DateTime.now().add(const Duration(seconds: 3));
+    while (state.connected && !bridge.isPlaying && DateTime.now().isBefore(startBy)) {
+      await Future.delayed(const Duration(milliseconds: 150));
+    }
+    // Then wait until playback has been idle for a beat (bot done), capped.
+    final deadline = DateTime.now().add(const Duration(seconds: 12));
+    while (state.connected && DateTime.now().isBefore(deadline)) {
+      if (!bridge.isPlaying) {
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (!bridge.isPlaying) break;
+      } else {
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
+    }
+    if (state.connected) await stop();
   }
 
   Future<void> stop() async {

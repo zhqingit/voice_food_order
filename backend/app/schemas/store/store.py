@@ -51,6 +51,10 @@ class StoreOut(BaseModel):
     custom_prompts: list[dict] = []
     logo_url: str | None = None
     is_published: bool = False
+    # Admin-controlled, read-only for the store. Surfaced so the portal can show
+    # a status banner (pending approval / suspended).
+    is_approved: bool = False
+    is_active: bool = True
     email: EmailStr
     created_at: datetime
 

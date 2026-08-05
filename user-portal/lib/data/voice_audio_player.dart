@@ -51,7 +51,12 @@ class VoiceAudioPlayer {
       pcmBytes.offsetInBytes,
       pcmBytes.lengthInBytes ~/ 2,
     );
-    FlutterPcmSound.feed(PcmArrayInt16.fromList(samples));
+    // feed() is async; it can race a concurrent teardown (e.g. the session
+    // auto-ends on order submit while the bot is still speaking). After
+    // release() the native track is gone and feed throws "must call setup
+    // first". Swallow that specific teardown race so it isn't an unhandled
+    // async exception.
+    FlutterPcmSound.feed(PcmArrayInt16.fromList(samples)).catchError((_) {});
 
     if (!_playing) {
       _playing = true;

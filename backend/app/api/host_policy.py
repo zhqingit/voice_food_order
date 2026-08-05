@@ -23,11 +23,14 @@ def get_host_policy(request: Request) -> HostPolicy:
     host = (request.url.hostname or "").lower()
     user_hosts = _split_hosts(settings.user_api_hosts)
     store_hosts = _split_hosts(settings.store_api_hosts)
+    admin_hosts = _split_hosts(settings.admin_api_hosts)
 
     if host in user_hosts:
         return HostPolicy(principal=PrincipalType.user, audience=Audience.mobile)
     if host in store_hosts:
         return HostPolicy(principal=PrincipalType.store, audience=Audience.web)
+    if host in admin_hosts:
+        return HostPolicy(principal=PrincipalType.admin, audience=Audience.admin)
 
     raise AppError(status_code=403, code="invalid_host", detail="Invalid API host")
 

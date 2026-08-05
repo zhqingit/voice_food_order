@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { logout } from '../../auth/authApi'
 import { setAccessToken } from '../../auth/tokenStore'
 import { getMe } from '../../api/storeApi'
+import type { StoreMe } from '../../api/storeApi'
+import type { TFunction } from 'i18next'
 import { changeLanguage, SUPPORTED_LANGUAGES } from '../../i18n'
 
 const navKeys = [
@@ -22,6 +24,7 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
   const location = useLocation()
   const [storeId, setStoreId] = useState<string | null>(null)
   const [storeName, setStoreName] = useState<string>(t('auth.title'))
+  const [me, setMe] = useState<StoreMe | null>(null)
   const [copied, setCopied] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem('sidebar-width')
@@ -52,9 +55,10 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
 
   useEffect(() => {
     void getMe()
-      .then((me) => {
-        setStoreId(me.id)
-        if (me.name) setStoreName(me.name)
+      .then((data) => {
+        setMe(data)
+        setStoreId(data.id)
+        if (data.name) setStoreName(data.name)
       })
       .catch(() => {})
   }, [])
@@ -130,7 +134,57 @@ export function Shell({ children }: { children: React.ReactNode }): React.JSX.El
           document.body.style.userSelect = 'none'
         }}
       />
-      <main className="main-content" style={{ marginLeft: sidebarWidth }}>{children}</main>
+      <main className="main-content" style={{ marginLeft: sidebarWidth }}>
+        <StoreStatusBanner me={me} t={t} />
+        {children}
+      </main>
+    </div>
+  )
+}
+
+// Highest-priority store status issue, shown as a banner on every page.
+// Suspended (admin) > pending approval (admin) > unpublished (store's own toggle).
+function StoreStatusBanner({ me, t }: { me: StoreMe | null; t: TFunction }): React.JSX.Element | null {
+  if (!me) return null
+
+  let tone: 'danger' | 'warning' | 'muted'
+  let title: string
+  let desc: string
+  if (!me.is_active) {
+    tone = 'danger'
+    title = t('status.suspendedTitle')
+    desc = t('status.suspendedDesc')
+  } else if (!me.is_approved) {
+    tone = 'warning'
+    title = t('status.pendingTitle')
+    desc = t('status.pendingDesc')
+  } else if (!me.is_published) {
+    tone = 'muted'
+    title = t('status.unpublishedTitle')
+    desc = t('status.unpublishedDesc')
+  } else {
+    return null
+  }
+
+  const palette = {
+    danger: { bg: 'rgba(220,38,38,0.10)', border: 'rgba(220,38,38,0.35)', fg: '#b91c1c' },
+    warning: { bg: 'rgba(217,119,6,0.10)', border: 'rgba(217,119,6,0.35)', fg: '#b45309' },
+    muted: { bg: 'rgba(100,116,139,0.10)', border: 'rgba(100,116,139,0.30)', fg: '#475569' },
+  }[tone]
+
+  return (
+    <div
+      role="status"
+      style={{
+        margin: '0 0 16px',
+        padding: '12px 16px',
+        borderRadius: 12,
+        background: palette.bg,
+        border: `1px solid ${palette.border}`,
+      }}
+    >
+      <div style={{ fontWeight: 600, color: palette.fg }}>{title}</div>
+      <div style={{ fontSize: 13, color: palette.fg, opacity: 0.85, marginTop: 2 }}>{desc}</div>
     </div>
   )
 }

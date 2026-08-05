@@ -8,15 +8,18 @@ from sqlalchemy.orm import Session
 
 from app.api.deps.user import get_current_user_mobile
 from app.api.host_policy import require_host_policy
+from app.core.config import settings
 from app.core.errors import AppError
 from app.db.session import get_db
 from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemCreate, OrderItemOut, OrderOut
-from app.services import order_service
+from app.schemas.order.payment import PaymentIntentResponse
+from app.services import order_service, payment_service
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +44,7 @@ def _order_out(order: Order) -> OrderOut:
         store_id=order.store_id,
         user_id=order.user_id,
         status=order.status,
+        payment_status=order.payment_status,
         channel=order.channel,
         subtotal=order.subtotal,
         tax=order.tax,
@@ -218,3 +222,49 @@ def finalize_order(
     db.commit()
     db.refresh(order)
     return _order_out(order)
+
+
+@router.post("/{order_id}/payment-intent", response_model=PaymentIntentResponse)
+def create_payment_intent(
+    order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user_mobile),
+    db: Session = Depends(get_db),
+) -> PaymentIntentResponse:
+    """Start an online payment for an order owned by the current user.
+
+    If the store isn't payment-ready, returns payment_available=False so the
+    client falls back to collecting at the store instead of charging online.
+    """
+    order = db.execute(
+        select(Order).where(Order.user_id == current_user.id).where(Order.id == order_id)
+    ).scalar_one_or_none()
+    if order is None:
+        raise AppError(status_code=404, code="order_not_found", detail="Order not found")
+    if order.payment_status == "paid":
+        raise AppError(status_code=409, code="already_paid", detail="Order is already paid")
+
+    store = db.get(Store, order.store_id)
+    if store is None:
+        raise AppError(status_code=404, code="store_not_found", detail="Store not found")
+
+    amount = payment_service.to_cents(order.total)
+
+    # Store not payment-ready → tell the client to collect at the store.
+    if not store.stripe_account_id or not store.stripe_charges_enabled:
+        return PaymentIntentResponse(
+            payment_available=False,
+            amount=amount,
+            reason="store_not_payment_ready",
+        )
+
+    result = payment_service.create_payment_intent(order, store)
+    order.payment_ref = result.payment_intent_id
+    db.add(order)
+    db.commit()
+
+    return PaymentIntentResponse(
+        payment_available=True,
+        client_secret=result.client_secret,
+        publishable_key=settings.stripe_publishable_key,
+        amount=amount,
+    )

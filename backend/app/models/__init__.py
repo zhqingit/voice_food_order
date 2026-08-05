@@ -1,3 +1,4 @@
+from app.models.admin import Admin
 from app.models.menu import Menu
 from app.models.menu_item import MenuItem
 from app.models.menu_item_variant import MenuItemVariant
@@ -13,6 +14,7 @@ from app.models.user import User
 __all__ = [
 	"User",
 	"Store",
+	"Admin",
 	"Menu",
 	"MenuItem",
 	"MenuItemVariant",
