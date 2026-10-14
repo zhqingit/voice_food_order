@@ -219,3 +219,16 @@ Step 6: Configure Environment
   - Any real load testing: No
 
   My recommendation: Use e2-small (0.5 vCPU, 2GB RAM) — it's ~$13/month (vs $8 for micro) and avoids all the RAM headaches. It'll handle 2 workers + Postgres + store portal without swap tricks.
+
+
+
+### access database
+#local
+cd backend
+docker compose exec db psql -U postgres -d auth_template
+
+# server
+gcloud compute ssh voxeats-server --zone=us-central1-a
+cd ~/voxeats/backend
+docker compose exec db psql -U postgres -d auth_template
+

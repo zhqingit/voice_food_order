@@ -2,7 +2,7 @@ class AppConfig {
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     //defaultValue: 'http://localhost:8000',
-    defaultValue: 'http://192.168.1.25:8000',
+    defaultValue: 'http://192.168.1.30:8000',
     //defaultValue: 'http://136.112.211.46:8000',
     //defaultValue: 'https://voxeats.rest-oai.com',
   );

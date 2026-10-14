@@ -1,0 +1,35 @@
+# Local development overrides. Copy to docker-compose.override.yml (gitignored):
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+# Requires GOOGLE_ADC_PATH in backend/.env pointing at your
+# application_default_credentials.json (gcloud auth application-default login).
+services:
+  db:
+    ports:
+      - "5432:5432"
+
+  api:
+    environment:
+      COOKIE_SECURE: "false"
+      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
+      WEB_RELOAD: "true"
+    # !override replaces the base 127.0.0.1-only binding instead of appending.
+    ports: !override
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+      - ${GOOGLE_ADC_PATH:?set GOOGLE_ADC_PATH in backend/.env}:/gcp/adc.json:ro
+
+  store-portal:
+    build:
+      context: ../store-portal
+    environment:
+      VITE_API_TARGET: http://api:8000
+    ports:
+      - "5174:5174"
+    depends_on:
+      - api
+    volumes:
+      - ../store-portal/src:/app/src
+      - ../store-portal/public:/app/public

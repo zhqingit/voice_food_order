@@ -1,3 +1,8 @@
+# Production-safe base. On a laptop, copy docker-compose.override.example.yml
+# to docker-compose.override.yml (gitignored); Compose merges it automatically.
+#
+# Secrets come from backend/.env (gitignored) and are required — compose
+# refuses to start without them. See .env.example.
 services:
   db:
     image: postgres:16
@@ -5,8 +10,6 @@ services:
       POSTGRES_DB: auth_template
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,11 +23,12 @@ services:
       context: .
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/auth_template
-      JWT_SECRET: change-me
-      REFRESH_TOKEN_PEPPER: change-me-too
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in backend/.env}
+      REFRESH_TOKEN_PEPPER: ${REFRESH_TOKEN_PEPPER:?set REFRESH_TOKEN_PEPPER in backend/.env}
       ACCESS_TOKEN_TTL_MINUTES: 10
       REFRESH_TOKEN_TTL_DAYS: 14
-      CORS_ORIGINS: "*"
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       # Stripe keys come from backend/.env (Compose reads it for ${VAR} interpolation).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
@@ -32,7 +36,6 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       GOOGLE_CLOUD_PROJECT: voxeats
       GOOGLE_CLOUD_LOCATION: us-central1
-      GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
       GEMINI_USE_VERTEX: "true"
       # Live voice pipeline:
       #   false → Gemini API + gemini-3.1-flash-live-preview (better voice, occasional 503s)
@@ -42,33 +45,16 @@ services:
       # Paused during testing to reduce Vertex quota pressure. Code stays in
       # place — flip to "true" to re-enable without a rebuild.
       VOICE_MONITOR_ENABLED: "false"
-      WEB_RELOAD: "true"
-      WEB_WORKERS: "4"
+      WEB_RELOAD: "false"
+      WEB_WORKERS: "1"
+    # Only nginx on the same host talks to the API.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
       - uploads:/app/uploads
-      - /home/qzhang/mydata/myproject/apps/Resto_AI/src/VoxEats/application_default_credentials.json:/gcp/adc.json:ro
-    command: ["bash", "-lc", "alembic upgrade head && python -m app.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
-
-  store-portal:
-    build:
-      context: ../store-portal
-    environment:
-      VITE_API_TARGET: http://api:8000
-    ports:
-      - "5174:5174"
-    depends_on:
-      - api
-    volumes:
-      - ../store-portal/src:/app/src
-      - ../store-portal/public:/app/public
 
 volumes:
   pgdata:

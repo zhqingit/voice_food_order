@@ -1,3 +1,9 @@
+import os
+
+# Settings require real-looking secrets; set them before the app is imported.
+os.environ.setdefault("JWT_SECRET", "test-jwt-secret-" + "x" * 32)
+os.environ.setdefault("REFRESH_TOKEN_PEPPER", "test-refresh-pepper-" + "x" * 32)
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

@@ -1,4 +1,11 @@
 sudo vim /etc/nginx/sites-available/restoai
+# Rate limits (this file is included inside nginx's http{} block, so zones go here).
+# auth: login/signup/guest/refresh per client IP; voice_conn: concurrent voice sockets per IP.
+  limit_req_zone $binary_remote_addr zone=auth:10m rate=30r/m;
+  limit_conn_zone $binary_remote_addr zone=voice_conn:10m;
+  limit_req_status 429;
+  limit_conn_status 429;
+
 # Voxeats — store portal + API
   server {
       listen 443 ssl;
@@ -9,12 +16,30 @@ sudo vim /etc/nginx/sites-available/restoai
       include /etc/letsencrypt/options-ssl-nginx.conf;
       ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
+      # Menu photos / CSV / logo uploads (nginx default is 1 MB)
+      client_max_body_size 20m;
+
       # Store portal — static SPA at root
       root /var/www/store-portal;
       index index.html;
 
       location / {
           try_files $uri $uri/ /index.html;
+      }
+
+      # Auth endpoints — rate limited (guest signup creates a user per call)
+      location /store/auth/ {
+          limit_req zone=auth burst=20 nodelay;
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host store-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      location /user/auth/ {
+          limit_req zone=auth burst=20 nodelay;
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header Host user-api.local;
+          proxy_set_header X-Real-IP $remote_addr;
       }
 
       # Store API
@@ -31,7 +56,31 @@ sudo vim /etc/nginx/sites-available/restoai
           proxy_set_header X-Real-IP $remote_addr;
       }
 
-      # Voice WebSocket
+      # Voice WebSocket — each open socket is a paid Gemini Live session
+      location /voice/ws {
+          limit_conn voice_conn 2;
+          proxy_pass http://127.0.0.1:8000;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host user-api.local;
+          proxy_read_timeout 3600s;
+      }
+
+      # Uploaded store logos (validated PNG/JPEG/WebP only)
+      location /uploads/ {
+          proxy_pass http://127.0.0.1:8000;
+          add_header X-Content-Type-Options nosniff;
+      }
+
+      # Stripe webhooks — no Host rewrite (the backend skips host policy here
+      # and verifies the Stripe signature instead)
+      location /webhooks/ {
+          proxy_pass http://127.0.0.1:8000;
+          proxy_set_header X-Real-IP $remote_addr;
+      }
+
+      # Voice REST (sessions, orders)
       location /voice/ {
           proxy_pass http://127.0.0.1:8000;
           proxy_http_version 1.1;

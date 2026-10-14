@@ -38,14 +38,14 @@ app = FastAPI(title=settings.app_name)
 
 app.add_exception_handler(AppError, app_error_handler)
 
-origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins if origins else ["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
+if settings.cors_origin_list:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origin_list,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"]
+    )
 
 app.include_router(user_auth_router)
 app.include_router(user_router)
