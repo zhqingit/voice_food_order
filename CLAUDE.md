@@ -26,8 +26,9 @@ uvicorn app.main:app --reload
 cd backend && alembic upgrade head
 cd backend && alembic revision --autogenerate -m "description"
 
-# Tests
-cd backend && pytest -q
+# Tests (need Postgres; tables are dropped/recreated per test. One-time:
+#   docker compose exec db createdb -U postgres voxeats_test)
+cd backend && TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/voxeats_test venv/bin/python -m pytest -q
 ```
 
 ### Store Portal (React)
