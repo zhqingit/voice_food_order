@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useSyncExternalStore } from 'react'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import axios from 'axios'
 
-import { getAccessToken } from './auth/tokenStore'
+import { getAccessToken, subscribeAccessToken } from './auth/tokenStore'
 import { getMe, login, logout, refresh, signup } from './auth/authApi'
 import { addItemToMenu, createMenu, createStoreItem, listMenuItems, listMenus, listStoreItems } from './api/menuApi'
 import { Shell } from './components/shell/Shell'
@@ -16,7 +16,7 @@ import { changeLanguage, SUPPORTED_LANGUAGES } from './i18n'
 export function App(): React.JSX.Element {
   const { t } = useTranslation()
   const [bootstrapped, setBootstrapped] = useState(false)
-  const [token, setToken] = useState<string | null>(getAccessToken())
+  const token = useSyncExternalStore(subscribeAccessToken, getAccessToken)
 
   useEffect(() => {
     void (async () => {
@@ -27,7 +27,6 @@ export function App(): React.JSX.Element {
       } catch {
         // ignore
       } finally {
-        setToken(getAccessToken())
         setBootstrapped(true)
       }
     })()
@@ -55,11 +54,11 @@ export function App(): React.JSX.Element {
       </Shell>
     </BrowserRouter>
   ) : (
-    <AuthPage onAuthed={() => setToken(getAccessToken())} />
+    <AuthPage />
   )
 }
 
-function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
+function AuthPage(): React.JSX.Element {
   const { t, i18n } = useTranslation()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
@@ -123,7 +122,6 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
       try { await getMe() } catch {}
       try { await seedDemoData() } catch {}
       setMessage(t('auth.signedInDemo'))
-      onAuthed()
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
@@ -152,7 +150,6 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     try {
       await login(email, password)
       try { await getMe() } catch {}
-      onAuthed()
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
@@ -169,7 +166,6 @@ function AuthPage({ onAuthed }: { onAuthed: () => void }): React.JSX.Element {
     setMessage(null)
     try {
       await signup({ email, password, name, phone: phone.trim() || undefined })
-      onAuthed()
     } catch (err) {
       if (axios.isAxiosError(err)) {
         const data = err.response?.data as any
