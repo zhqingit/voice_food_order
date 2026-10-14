@@ -203,24 +203,88 @@ final voiceAudioBridgeProvider = Provider<VoiceAudioBridge>((ref) {
   return bridge;
 });
 
-final voiceControllerProvider = NotifierProvider<VoiceController, VoiceUiState>(VoiceController.new);
+/// Voice controller scoped to a single store screen.
+///
+/// `autoDispose` + `family(storeId)`: each store gets its own fresh state, and
+/// once the voice screen is gone (back button, Android back, iOS swipe-back)
+/// the provider is disposed and [VoiceController._teardown] releases the mic,
+/// WebSocket and server-side voice session.
+final voiceControllerProvider =
+    NotifierProvider.autoDispose.family<VoiceController, VoiceUiState, String>(VoiceController.new);
 
-class VoiceController extends Notifier<VoiceUiState> {
+class VoiceController extends AutoDisposeFamilyNotifier<VoiceUiState, String> {
   StreamSubscription? _wsSub;
   StreamSubscription? _audioSub;
 
+  // Dependencies captured in build() so teardown in onDispose never has to
+  // touch `ref`.
+  late VoiceSessionRepository _sessionRepo;
+  late VoiceAudioBridge _bridge;
+  late VoiceWsClient _ws;
+
+  // Resources this controller currently owns. Teardown only releases what is
+  // flagged here, so a late teardown never stops another screen's session on
+  // the shared bridge / WebSocket client.
+  bool _bridgeOwned = false;
+  bool _wsOwned = false;
+  String? _activeSessionId; // created on server and not yet ended
+
+  bool _disposed = false;
+
   @override
-  VoiceUiState build() {
+  VoiceUiState build(String storeId) {
+    _sessionRepo = ref.read(voiceSessionRepositoryProvider);
+    _bridge = ref.read(voiceAudioBridgeProvider);
+    _ws = ref.read(voiceWsClientProvider);
+
+    ref.onDispose(() {
+      _disposed = true;
+      _teardown();
+    });
+
     return VoiceUiState.initial();
   }
 
-  Future<void> start({required String storeId}) async {
-    if (state.connecting || state.connected) return;
+  /// Synchronously release every resource this controller owns. Async work
+  /// (closing sockets, stopping audio, ending the server session) is
+  /// fire-and-forget. Never touches `state` or other providers, so it is safe
+  /// to call from `ref.onDispose`. Idempotent.
+  void _teardown() {
+    final wsSub = _wsSub;
+    final audioSub = _audioSub;
+    _wsSub = null;
+    _audioSub = null;
+    if (wsSub != null) unawaited(wsSub.cancel());
+    if (audioSub != null) unawaited(audioSub.cancel());
+
+    if (_bridgeOwned) {
+      _bridgeOwned = false;
+      _bridge.onRecordedChunk = null;
+      _bridge.onRecordError = null;
+      _bridge.onPlayingChanged = null;
+      unawaited(_bridge.stopSession().catchError((_) {}));
+    }
+
+    if (_wsOwned) {
+      _wsOwned = false;
+      unawaited(_ws.disconnect().catchError((_) {}));
+    }
+
+    final sessionId = _activeSessionId;
+    _activeSessionId = null;
+    if (sessionId != null) {
+      unawaited(_sessionRepo.end(sessionId: sessionId).then((_) {}, onError: (_) {}));
+    }
+  }
+
+  Future<void> start() async {
+    if (_disposed || state.connecting || state.connected) return;
 
     state = state.copyWith(connecting: true, error: null);
 
     final tokenStore = ref.read(tokenStoreProvider);
     final bundle = await tokenStore.read();
+    if (_disposed) return;
     if (bundle == null) {
       state = state.copyWith(connecting: false, error: 'Not authenticated. Please login first.');
       return;
@@ -228,41 +292,61 @@ class VoiceController extends Notifier<VoiceUiState> {
 
     try {
       // 1. Create voice session via REST API.
-      final repo = ref.read(voiceSessionRepositoryProvider);
-      final session = await repo.create(storeId: storeId, channel: 'voice');
+      final session = await _sessionRepo.create(storeId: arg, channel: 'voice');
+      _activeSessionId = session.id;
+      if (_disposed) {
+        _teardown();
+        return;
+      }
       _append('created session ${session.id}');
 
       // 2. Configure iOS audio session BEFORE starting the audio bridge so
       //    the single AVAudioEngine starts with voiceChat mode + defaultToSpeaker.
       if (Platform.isIOS) {
         await _configureIosAudioSession();
+        if (_disposed) {
+          _teardown();
+          return;
+        }
       }
 
       // 3. Start the unified audio bridge (recording + playback).
       //    On iOS this creates one AVAudioEngine; on Android it delegates to
       //    the existing VoiceAudioPlayer + VoiceAudioRecorder.
-      final bridge = ref.read(voiceAudioBridgeProvider);
-      final ws = ref.read(voiceWsClientProvider);
+      final bridge = _bridge;
+      final ws = _ws;
 
       bridge.onRecordedChunk = (Uint8List chunk) {
         ws.sendBytes(chunk);
       };
       bridge.onRecordError = (e) {
+        if (_disposed) return;
         _append('mic error: $e');
         state = state.copyWith(error: 'Microphone stopped unexpectedly.');
         stop();
       };
 
+      _bridgeOwned = true;
       final granted = await bridge.startSession();
+      if (_disposed) {
+        _teardown();
+        return;
+      }
       if (!granted) {
         state = state.copyWith(connecting: false, error: 'Microphone permission not granted.');
         return;
       }
 
       // 4. Connect WebSocket with sessionId so backend can link order.
-      await ws.connect(storeId: storeId, sessionId: session.id, accessToken: bundle.accessToken);
+      _wsOwned = true;
+      await ws.connect(storeId: arg, sessionId: session.id, accessToken: bundle.accessToken);
+      if (_disposed) {
+        _teardown();
+        return;
+      }
 
       _wsSub = ws.events.listen((evt) {
+        if (_disposed) return;
         // Parse transcript events from the backend.
         final type = evt['type'] as String?;
         if (type == 'transcript_user') {
@@ -270,7 +354,7 @@ class VoiceController extends Notifier<VoiceUiState> {
         } else if (type == 'transcript_assistant') {
           _addTranscript('assistant', evt['text'] as String? ?? '');
         } else if (type == 'interruption') {
-          ref.read(voiceAudioBridgeProvider).clearPlayback();
+          bridge.clearPlayback();
         } else if (type == 'order_update') {
           final orderJson = evt['order'] as Map<String, dynamic>?;
           if (orderJson != null) {
@@ -293,14 +377,22 @@ class VoiceController extends Notifier<VoiceUiState> {
         error: null,
       );
     } catch (e) {
+      if (_disposed) {
+        _teardown();
+        return;
+      }
       state = state.copyWith(connecting: false, connected: false, error: e.toString());
     }
   }
 
   Future<void> stop() async {
+    if (_disposed) return;
     if (!state.connected && !state.connecting) return;
 
     final sessionId = state.sessionId;
+    // stop() ends the session itself (and fetches the order); make sure a
+    // concurrent dispose does not end it a second time.
+    if (_activeSessionId == sessionId) _activeSessionId = null;
 
     state = state.copyWith(connecting: false, connected: false);
 
@@ -310,20 +402,22 @@ class VoiceController extends Notifier<VoiceUiState> {
     _audioSub = null;
 
     try {
-      final bridge = ref.read(voiceAudioBridgeProvider);
-      bridge.onRecordedChunk = null;
-      bridge.onRecordError = null;
-      bridge.onPlayingChanged = null;
-      await bridge.stopSession();
+      _bridgeOwned = false;
+      _bridge.onRecordedChunk = null;
+      _bridge.onRecordError = null;
+      _bridge.onPlayingChanged = null;
+      await _bridge.stopSession();
     } catch (_) {}
 
     try {
-      await ref.read(voiceWsClientProvider).disconnect();
+      _wsOwned = false;
+      await _ws.disconnect();
     } catch (_) {}
 
     if (sessionId != null) {
       try {
-        final ended = await ref.read(voiceSessionRepositoryProvider).end(sessionId: sessionId);
+        final ended = await _sessionRepo.end(sessionId: sessionId);
+        if (_disposed) return;
         _append('ended session ${ended.id}');
 
         // Fetch order summary if an order was created during the session.
@@ -332,12 +426,14 @@ class VoiceController extends Notifier<VoiceUiState> {
             final orderRepo = ref.read(orderRepositoryProvider);
             final order = await orderRepo.getOrder(ended.orderId!);
             final items = await orderRepo.getOrderItems(ended.orderId!);
+            if (_disposed) return;
             state = state.copyWith(
               sessionEnded: true,
               orderSummary: order,
               orderItems: items,
             );
           } catch (e) {
+            if (_disposed) return;
             _append('fetch order failed: $e');
             state = state.copyWith(sessionEnded: true);
           }
@@ -345,6 +441,7 @@ class VoiceController extends Notifier<VoiceUiState> {
           state = state.copyWith(sessionEnded: true);
         }
       } catch (e) {
+        if (_disposed) return;
         _append('end session failed: $e');
         state = state.copyWith(sessionEnded: true);
       }
@@ -367,6 +464,7 @@ class VoiceController extends Notifier<VoiceUiState> {
             deliveryAddress: address,
           );
     } catch (e) {
+      if (_disposed) return;
       _append('update delivery address failed: $e');
     }
   }
@@ -378,9 +476,11 @@ class VoiceController extends Notifier<VoiceUiState> {
     state = state.copyWith(rating: rating);
 
     try {
-      await ref.read(voiceSessionRepositoryProvider).submitRating(sessionId: sessionId, rating: rating);
+      await _sessionRepo.submitRating(sessionId: sessionId, rating: rating);
+      if (_disposed) return;
       state = state.copyWith(ratingSubmitted: true);
     } catch (e) {
+      if (_disposed) return;
       _append('submit rating failed: $e');
     }
   }
@@ -390,9 +490,11 @@ class VoiceController extends Notifier<VoiceUiState> {
     if (sessionId == null || review.trim().isEmpty) return;
 
     try {
-      await ref.read(voiceSessionRepositoryProvider).submitReview(sessionId: sessionId, review: review.trim());
+      await _sessionRepo.submitReview(sessionId: sessionId, review: review.trim());
+      if (_disposed) return;
       state = state.copyWith(reviewSubmitted: true);
     } catch (e) {
+      if (_disposed) return;
       _append('submit review failed: $e');
     }
   }

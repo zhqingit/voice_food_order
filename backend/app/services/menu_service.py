@@ -43,6 +43,8 @@ def create_menu(db: Session, *, store_id: uuid.UUID, payload: MenuCreate) -> Men
     max_version = db.execute(select(func.max(Menu.version)).where(Menu.store_id == store_id)).scalar_one()
     next_version = (max_version or 0) + 1
 
+    if payload.active:
+        _deactivate_menus(db, store_id=store_id)
     menu = Menu(
         store_id=store_id,
         name=payload.name,
@@ -59,6 +61,8 @@ def update_menu(db: Session, *, menu: Menu, payload: MenuUpdate) -> Menu:
         menu.name = payload.name
         touched = True
     if payload.active is not None and payload.active != menu.active:
+        if payload.active:
+            _deactivate_menus(db, store_id=menu.store_id)
         menu.active = payload.active
         touched = True
 
@@ -67,11 +71,18 @@ def update_menu(db: Session, *, menu: Menu, payload: MenuUpdate) -> Menu:
     return menu
 
 
-def set_default_menu(db: Session, *, store_id: uuid.UUID, menu: Menu) -> Menu:
+def _deactivate_menus(db: Session, *, store_id: uuid.UUID) -> None:
+    """Deactivate the store's active menus and flush, so a following activation
+    never collides with the one-active-menu-per-store unique index."""
     for m in db.execute(select(Menu).where(Menu.store_id == store_id, Menu.active.is_(True))).scalars().all():
-        if m.id != menu.id:
-            m.active = False
-    menu.active = True
+        m.active = False
+    db.flush()
+
+
+def set_default_menu(db: Session, *, store_id: uuid.UUID, menu: Menu) -> Menu:
+    if not menu.active:
+        _deactivate_menus(db, store_id=store_id)
+        menu.active = True
     return menu
 
 
@@ -107,6 +118,8 @@ def create_store_item(db: Session, *, store_id: uuid.UUID, payload: MenuItemCrea
         modifiers=payload.modifiers,
     )
     db.add(item)
+    db.flush()
+    sync_size_variants(db, item=item)
     return item
 
 
@@ -122,6 +135,7 @@ def update_store_item(db: Session, *, item: MenuItem, payload: MenuItemUpdate) -
         if value is None and key in non_nullable:
             continue
         setattr(item, key, value)
+    sync_size_variants(db, item=item)
     return item
 
 
@@ -199,6 +213,40 @@ def find_variant_by_name(
         if n in v.name.lower() or v.name.lower() in n:
             return v
     return None
+
+
+# Legacy S/M/L price columns → variant rows. The voice bot only offers sizes
+# that exist as variants, so every write of these columns must sync them.
+_SIZE_VARIANTS = (("Small", "price_small", 0), ("Medium", "price_medium", 1), ("Large", "price_large", 2))
+
+
+def sync_size_variants(db: Session, *, item: MenuItem) -> None:
+    """Create/update Small/Medium/Large variants from the item's S/M/L prices.
+
+    Only adds or reprices — never deletes, so variants the store created in the
+    variants editor are left alone. Picks a default (Medium, else Small, else
+    Large — same rule as migration 0021) when the item has none. The item must
+    already be flushed (have an id).
+    """
+    sized = [(name, getattr(item, col), order) for name, col, order in _SIZE_VARIANTS if getattr(item, col) is not None]
+    if not sized:
+        return
+
+    existing = {v.name.lower(): v for v in list_item_variants(db, menu_item_id=item.id)}
+    for name, price, order in sized:
+        variant = existing.get(name.lower())
+        if variant is None:
+            variant = MenuItemVariant(menu_item_id=item.id, name=name, price=price, sort_order=order)
+            db.add(variant)
+            existing[name.lower()] = variant
+        else:
+            variant.price = price
+
+    if not any(v.is_default for v in existing.values()):
+        sized_names = [name.lower() for name, _, _ in sized]
+        default_name = "medium" if "medium" in sized_names else sized_names[0]
+        existing[default_name].is_default = True
+    db.flush()
 
 
 def create_item_variant(

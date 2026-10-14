@@ -18,7 +18,8 @@ class MenuOut(BaseModel):
 
 class MenuCreate(BaseModel):
     name: str = Field(min_length=2, max_length=255)
-    active: bool = True
+    # True makes this the store's only active menu (others are deactivated).
+    active: bool = False
 
 
 class MenuUpdate(BaseModel):

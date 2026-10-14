@@ -316,7 +316,7 @@ export function ProfileRoute(): React.JSX.Element {
                     <input
                       ref={logoInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/png,image/jpeg,image/webp"
                       style={{ display: 'none' }}
                       onChange={(e) => void handleLogoUpload(e)}
                     />

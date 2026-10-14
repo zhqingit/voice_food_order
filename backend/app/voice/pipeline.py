@@ -145,20 +145,19 @@ def create_voice_pipeline_task(
         for name, handler in tool_handlers.items():
             llm.register_function(name, handler)
 
-    # Hook into the LLM's internal metrics object to capture token usage.
-    # We patch _metrics.start_llm_usage_metrics because the Gemini Live
-    # service calls self.start_llm_usage_metrics() which delegates to
-    # self._metrics.start_llm_usage_metrics() — patching at the _metrics
-    # level reliably intercepts all token reports.
+    # Capture token usage from the raw Live usage metadata. pipecat's own
+    # LLMTokenUsage drops the per-modality breakdown (text vs audio), which
+    # differs ~6x in price, so wrap the message handler instead.
     if usage is not None:
-        _metrics = llm._metrics
-        _orig_metrics_llm_usage = _metrics.start_llm_usage_metrics
+        usage.model = settings.voice_llm_model_vertex if settings.voice_use_vertex else runtime.llm_model
+        _orig_handle_usage = llm._handle_msg_usage_metadata
 
-        async def _patched_metrics_llm_usage(tokens: Any) -> Any:
-            usage.add_tokens(tokens.prompt_tokens, tokens.completion_tokens)
-            return await _orig_metrics_llm_usage(tokens)
+        async def _handle_usage_with_accounting(message: Any) -> None:
+            if message.usage_metadata:
+                usage.add_usage_metadata(message.usage_metadata)
+            await _orig_handle_usage(message)
 
-        _metrics.start_llm_usage_metrics = _patched_metrics_llm_usage
+        llm._handle_msg_usage_metadata = _handle_usage_with_accounting
 
     # Create context with greeting message for the aggregator pair.
     context = LLMContext(
@@ -223,10 +222,14 @@ def create_voice_pipeline_task(
     # ── Silence nudge: if user doesn't speak within 5s after bot finishes, ──
     # ── prompt the LLM to follow up. ──────────────────────────────────────
     SILENCE_TIMEOUT = settings.voice_silence_nudge_seconds
+    MAX_NUDGES = settings.voice_silence_max_nudges
     _nudge_timer: asyncio.Task[None] | None = None
+    _nudges_sent = 0
 
     async def _nudge_after_silence() -> None:
+        nonlocal _nudges_sent
         await asyncio.sleep(SILENCE_TIMEOUT)
+        _nudges_sent += 1
         logger.info("Silence nudge: user silent for %.1fs, prompting bot follow-up", SILENCE_TIMEOUT)
         # Push directly to the LLM processor, bypassing transport/aggregator
         # which may not forward LLMMessagesAppendFrame.
@@ -244,13 +247,21 @@ def create_voice_pipeline_task(
     def _start_nudge() -> None:
         nonlocal _nudge_timer
         _cancel_nudge()
+        if _nudges_sent >= MAX_NUDGES:
+            logger.info("Silence nudge: %d sent with no reply, waiting for idle timeout", _nudges_sent)
+            return
         _nudge_timer = asyncio.create_task(_nudge_after_silence())
+
+    def _reset_nudges() -> None:
+        nonlocal _nudges_sent
+        _nudges_sent = 0
+        _cancel_nudge()
 
     # Notify client of interruptions so it can clear its audio buffer.
     @user_agg.event_handler("on_user_turn_started")
     async def _on_user_turn_started(agg: Any, strategy: Any) -> None:
         logger.debug("User turn started (barge-in detected)")
-        _cancel_nudge()
+        _reset_nudges()
         if on_interruption is not None:
             await on_interruption()
 
@@ -258,7 +269,7 @@ def create_voice_pipeline_task(
     @user_agg.event_handler("on_user_turn_stopped")
     async def _on_user_turn(agg: Any, strategy: Any, message: UserTurnStoppedMessage) -> None:
         logger.debug("User turn stopped, cancelling silence nudge timer")
-        _cancel_nudge()
+        _reset_nudges()
         if monitor is not None:
             monitor.record_user(message.content)
         if on_transcript is not None:

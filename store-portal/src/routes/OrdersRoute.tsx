@@ -46,6 +46,16 @@ if (typeof document !== 'undefined') {
   document.addEventListener('keydown', warmUp, { once: true })
 }
 
+// OWASP HTML-body encoding for values interpolated into the print receipt HTML.
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;')
+}
+
 function localTime(iso: string): string {
   const s = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
   return new Date(s).toLocaleString()
@@ -173,15 +183,15 @@ export function OrdersRoute(): React.JSX.Element {
     if (!selectedOrder) return
     const rows = items.map((it) =>
       `<tr>
-        <td style="padding:4px 8px">${it.name ?? 'Unknown item'}${it.note ? `<br/><span style="font-size:11px;color:#666;font-style:italic">${it.note}</span>` : ''}</td>
-        <td style="padding:4px 8px;text-align:center">${it.quantity}</td>
-        <td style="padding:4px 8px;text-align:right">$${String(it.price_snapshot)}</td>
+        <td style="padding:4px 8px">${escapeHtml(it.name ?? 'Unknown item')}${it.variant_name ? ` (${escapeHtml(it.variant_name)})` : ''}${it.note ? `<br/><span style="font-size:11px;color:#666;font-style:italic">${escapeHtml(it.note)}</span>` : ''}</td>
+        <td style="padding:4px 8px;text-align:center">${escapeHtml(it.quantity)}</td>
+        <td style="padding:4px 8px;text-align:right">$${escapeHtml(it.price_snapshot)}</td>
         <td style="padding:4px 8px;text-align:right">$${(Number(it.price_snapshot) * it.quantity).toFixed(2)}</td>
       </tr>`
     ).join('')
-    const orderNote = selectedOrder.notes ? `<div style="margin-top:12px;font-style:italic;font-size:12px;color:#666">Note: ${selectedOrder.notes}</div>` : ''
+    const orderNote = selectedOrder.notes ? `<div style="margin-top:12px;font-style:italic;font-size:12px;color:#666">Note: ${escapeHtml(selectedOrder.notes)}</div>` : ''
 
-    const html = `<!DOCTYPE html><html><head><title>Order ${selectedOrder.id.slice(0, 8)}</title>
+    const html = `<!DOCTYPE html><html><head><title>Order ${escapeHtml(selectedOrder.id.slice(0, 8))}</title>
       <style>
         body { font-family: sans-serif; padding: 24px; max-width: 400px; margin: 0 auto; }
         h2 { margin: 0 0 4px; font-size: 18px; }
@@ -194,12 +204,12 @@ export function OrdersRoute(): React.JSX.Element {
         .totals .total { font-weight: 700; font-size: 15px; border-top: 2px solid #333; margin-top: 4px; padding-top: 4px; }
         @media print { body { padding: 0; } }
       </style></head><body>
-      <h2>Order #${selectedOrder.id.slice(0, 8)}</h2>
+      <h2>Order #${escapeHtml(selectedOrder.id.slice(0, 8))}</h2>
       <div class="meta">
-        ${localTime(selectedOrder.created_at)}<br/>
-        Status: ${selectedOrder.status} &nbsp; Channel: ${selectedOrder.channel}
-        ${selectedOrder.customer_name ? `<br/>Customer: <strong>${selectedOrder.customer_name}</strong>` : ''}
-        ${selectedOrder.user_email ? `<br/>Account: ${selectedOrder.user_email}` : ''}
+        ${escapeHtml(localTime(selectedOrder.created_at))}<br/>
+        Status: ${escapeHtml(selectedOrder.status)} &nbsp; Channel: ${escapeHtml(selectedOrder.channel)}
+        ${selectedOrder.customer_name ? `<br/>Customer: <strong>${escapeHtml(selectedOrder.customer_name)}</strong>` : ''}
+        ${selectedOrder.user_email ? `<br/>Account: ${escapeHtml(selectedOrder.user_email)}` : ''}
       </div>
       <table>
         <thead><tr>
@@ -210,9 +220,9 @@ export function OrdersRoute(): React.JSX.Element {
       </table>
       ${orderNote}
       <div class="totals">
-        <div class="row"><span>Subtotal</span><span>$${String(selectedOrder.subtotal)}</span></div>
-        <div class="row"><span>Tax</span><span>$${String(selectedOrder.tax)}</span></div>
-        <div class="row total"><span>Total</span><span>$${String(selectedOrder.total)}</span></div>
+        <div class="row"><span>Subtotal</span><span>$${escapeHtml(selectedOrder.subtotal)}</span></div>
+        <div class="row"><span>Tax</span><span>$${escapeHtml(selectedOrder.tax)}</span></div>
+        <div class="row total"><span>Total</span><span>$${escapeHtml(selectedOrder.total)}</span></div>
       </div>
       <script>window.onload=function(){window.print()}<\/script>
     </body></html>`

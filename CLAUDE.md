@@ -15,6 +15,8 @@ AI-powered voice food ordering system with three components:
 
 ```bash
 # Start with Docker (Postgres + API, auto-runs migrations)
+# One-time: cp .env.example .env (fill JWT_SECRET, REFRESH_TOKEN_PEPPER, GOOGLE_ADC_PATH)
+#           cp docker-compose.override.example.yml docker-compose.override.yml  (dev only, gitignored)
 cd backend && docker compose up --build
 # Health check: http://localhost:8000/health
 
@@ -26,8 +28,8 @@ uvicorn app.main:app --reload
 cd backend && alembic upgrade head
 cd backend && alembic revision --autogenerate -m "description"
 
-# Tests
-cd backend && pytest -q
+# Tests (need Postgres; tables are dropped/recreated per test)
+cd backend && TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/voxeats_test pytest -q
 ```
 
 ### Store Portal (React)
@@ -141,8 +143,8 @@ State management: Riverpod. HTTP: Dio. Localization: ARB files in `l10n/`.
 
 Backend (`backend/.env`):
 - `DATABASE_URL` — Postgres connection string
-- `JWT_SECRET`, `REFRESH_TOKEN_PEPPER` — Auth secrets
-- `CORS_ORIGINS` — Allowed origins
+- `JWT_SECRET`, `REFRESH_TOKEN_PEPPER` — Auth secrets; required, ≥32 chars, placeholders rejected at startup
+- `CORS_ORIGINS` — Explicit allowed origins (empty = no CORS; `*` rejected)
 - `VOICE_PROVIDER_STT`, `VOICE_PROVIDER_TTS`, `VOICE_PROVIDER_LLM` — Voice providers (default: google)
 - `VOICE_LLM_MODEL` — LLM model (default: gemini-3.0-flash-preview)
 - `GOOGLE_API_KEY` or `GEMINI_API_KEY` — For voice services

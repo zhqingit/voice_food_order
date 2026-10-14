@@ -49,6 +49,7 @@ def create_session(
     """Create a new voice session for the current user. 
     A session represents an active interaction with the voice assistant,
     and can be used to track context across multiple requests (e.g. multiple orders in the same session)."""
+    voice_session_service.get_orderable_store(db, store_id=payload.store_id)
     session = voice_session_service.create_session(
         db,
         store_id=payload.store_id,

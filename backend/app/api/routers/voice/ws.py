@@ -14,8 +14,8 @@ from app.api.host_policy import get_host_policy
 from app.core.errors import AppError
 from app.core.security import decode_access_token
 from app.db.session import get_db_session
-from app.models.store import Store
 from app.models.user import User
+from app.services import voice_session_service
 from app.schemas.common import Audience, PrincipalType
 from app.voice import (
     GEMINI_VOICE_TOOLS_SCHEMA,
@@ -110,10 +110,20 @@ async def voice_ws(
             current_user = _get_current_user_from_ws(websocket, db)
             current_user_id = current_user.id
 
-            store = db.get(Store, store_id)
-            store_name = store.name if store else None
+            store = voice_session_service.get_orderable_store(db, store_id=store_id)
+            # Client-supplied ids must belong to this user and this store, or the
+            # tools would read/modify someone else's order and session.
+            if session_id is not None:
+                voice_session_service.get_owned_session(
+                    db, session_id=session_id, user_id=current_user_id, store_id=store_id
+                )
+            if order_id is not None:
+                voice_session_service.get_owned_draft_order(
+                    db, order_id=order_id, user_id=current_user_id, store_id=store_id
+                )
+            store_name = store.name
             custom_prompt = None
-            if store and store.custom_prompts:
+            if store.custom_prompts:
                 generated_parts = [
                     (p.get("generated") or "").strip()
                     for p in store.custom_prompts
@@ -123,27 +133,22 @@ async def voice_ws(
                     custom_prompt = "\n\n".join(generated_parts)
 
             # Fulfillment context for the voice bot.
-            store_address: str | None = None
-            allow_pickup_flag = True
-            allow_delivery_flag = True
-            if store is not None:
-                allow_pickup_flag = bool(store.allow_pickup)
-                allow_delivery_flag = bool(store.allow_delivery)
-                addr_parts = [
-                    (store.address_line1 or "").strip(),
-                    (store.address_line2 or "").strip(),
-                    (store.city or "").strip(),
-                    (store.state or "").strip(),
-                    (store.postal_code or "").strip(),
-                ]
-                joined = ", ".join(p for p in addr_parts if p)
-                store_address = joined or None
+            allow_pickup_flag = bool(store.allow_pickup)
+            allow_delivery_flag = bool(store.allow_delivery)
+            addr_parts = [
+                (store.address_line1 or "").strip(),
+                (store.address_line2 or "").strip(),
+                (store.city or "").strip(),
+                (store.state or "").strip(),
+                (store.postal_code or "").strip(),
+            ]
+            store_address = ", ".join(p for p in addr_parts if p) or None
 
             _VOICE_TONE_MAP = {
                 "male": "Puck",
                 "female": "Kore",
             }
-            voice_id = _VOICE_TONE_MAP.get(store.voice_tone, "Puck") if store else "Puck"
+            voice_id = _VOICE_TONE_MAP.get(store.voice_tone, "Puck")
             menu = load_menu_for_store(db, store_id)
         # db is now closed — connection returned to pool
     except AppError:
@@ -236,6 +241,13 @@ async def voice_ws(
         logger.info("Client disconnected, cancelling pipeline task")
         await task.cancel(reason="client_disconnected")
 
+    async def _enforce_max_duration() -> None:
+        await asyncio.sleep(runtime.ws_max_seconds)
+        logger.info("Voice session hit %ss limit: store=%s user=%s", runtime.ws_max_seconds, store_id, current_user_id)
+        await task.cancel(reason="max_duration")
+
+    watchdog = asyncio.create_task(_enforce_max_duration())
+
     runner = PipelineRunner()
     try:
         await runner.run(task)
@@ -248,6 +260,7 @@ async def voice_ws(
         except Exception:
             pass
     finally:
+        watchdog.cancel()
         # Persist order_id and token usage with a fresh short-lived session.
         if session_id is not None:
             try:

@@ -33,6 +33,7 @@ coverage/
 !.env.example
 backend/.env
 backend/.env.*
+!backend/.env.example
 *.pem
 *.p8
 credentials/
@@ -71,3 +72,9 @@ app.*.map.json
 backend/.venv
 backend/venv/
 user-portal/build/
+
+# Local docker compose overrides (dev only)
+backend/docker-compose.override.yml
+
+# Runtime uploads (store logos)
+backend/uploads/

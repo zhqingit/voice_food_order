@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import io
 import os
 from datetime import time as dt_time
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from PIL import Image
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -71,27 +73,34 @@ def update_me(
     return _store_out(current_store)
 
 
+_LOGO_MAX_BYTES = 2 * 1024 * 1024
+_LOGO_FORMATS = {"PNG": "png", "JPEG": "jpg", "WEBP": "webp"}
+
+
 @router.post("/me/logo", response_model=StoreOut)
 async def upload_logo(
     file: UploadFile = File(...),
     current_store: Store = Depends(get_current_store_web),
     db: Session = Depends(get_db),
 ) -> StoreOut:
-    ct = (file.content_type or "").lower()
-    ext_from_name = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else ""
-    image_exts = {"png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"}
-    if not ct.startswith("image/") and ext_from_name not in image_exts:
-        raise AppError(status_code=400, code="invalid_file_type", detail="File must be an image")
-
-    contents = await file.read()
-    if len(contents) > 2 * 1024 * 1024:
+    # Never trust the client's filename or Content-Type: decode the bytes with
+    # Pillow, accept only raster formats, and pick the extension server-side
+    # (StaticFiles serves by extension, so an .svg/.html upload would run script).
+    contents = await file.read(_LOGO_MAX_BYTES + 1)
+    if len(contents) > _LOGO_MAX_BYTES:
         raise AppError(status_code=400, code="file_too_large", detail="File size must be <= 2MB")
-
-    ext = file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "png"
+    try:
+        with Image.open(io.BytesIO(contents), formats=list(_LOGO_FORMATS)) as img:
+            img.verify()
+            ext = _LOGO_FORMATS[img.format]
+    except Exception:
+        raise AppError(status_code=400, code="invalid_file_type", detail="Logo must be a PNG, JPEG or WebP image")
 
     backend_root = Path(__file__).resolve().parent.parent.parent.parent.parent
     upload_dir = backend_root / "uploads" / "logos"
     upload_dir.mkdir(parents=True, exist_ok=True)
+    for old in upload_dir.glob(f"{current_store.id}.*"):
+        old.unlink(missing_ok=True)
     file_path = upload_dir / f"{current_store.id}.{ext}"
     file_path.write_bytes(contents)
 

@@ -168,13 +168,28 @@ class VoiceToolRouter:
                 return row
         return None
 
-    def _get_order(self, db: Session) -> Order | None:
+    _NOT_EDITABLE = "This order has already been submitted and can't be changed."
+
+    def _get_order(self, db: Session, *, for_update: bool = False) -> Order | None:
+        """Load the session's order, scoped to this store and user.
+
+        ``for_update`` takes a row lock so the draft-status check and the
+        change that follows happen atomically.
+        """
         if self._context.order_id is None:
             return None
-        return db.get(Order, self._context.order_id)
+        query = select(Order).where(
+            Order.id == self._context.order_id,
+            Order.store_id == self._context.store_id,
+            Order.user_id == self._context.user_id,
+        )
+        if for_update:
+            query = query.with_for_update()
+        return db.execute(query).scalar_one_or_none()
 
     def _ensure_order(self, db: Session) -> Order:
-        order = self._get_order(db)
+        """Return the locked current order, creating a draft if there is none."""
+        order = self._get_order(db, for_update=True)
         if order is not None:
             return order
 
@@ -255,6 +270,8 @@ class VoiceToolRouter:
 
         with self._context.db_factory() as db:
             order = self._ensure_order(db)
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
             menu_item = None
             if menu_item_id is not None:
                 menu_item = order_service.get_menu_item_for_store(
@@ -337,9 +354,11 @@ class VoiceToolRouter:
         item_name: str | None,
     ) -> dict[str, Any]:
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
             if order is None:
                 return {"ok": False, "message": "No active order."}
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             item = None
             if order_item_id is not None:
@@ -382,12 +401,22 @@ class VoiceToolRouter:
 
     def checkout(self, *, customer_name: str | None = None) -> dict[str, Any]:
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
 
             if order is None:
                 return {"ok": False, "message": "Order is empty."}
             if order.status != "draft":
-                return {"ok": False, "message": "Order is not editable."}
+                return {"ok": False, "message": self._NOT_EDITABLE}
+            has_items = db.execute(
+                select(OrderItem.id).where(OrderItem.order_id == order.id).limit(1)
+            ).first()
+            if has_items is None:
+                return {"ok": False, "message": "Order is empty. Add items before checkout."}
+            if not order.fulfillment_type:
+                return {
+                    "ok": False,
+                    "message": "Pickup or delivery is not set. Ask the customer and call set_fulfillment first.",
+                }
 
             if customer_name:
                 order.customer_name = customer_name
@@ -415,9 +444,11 @@ class VoiceToolRouter:
         instead of silently "succeeding" and re-trying in a loop.
         """
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
             if order is None:
                 return {"ok": False, "message": "No active order."}
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             # Find the order item
             oi = None
@@ -487,11 +518,11 @@ class VoiceToolRouter:
 
     def set_order_note(self, *, note: str) -> dict[str, Any]:
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
             if order is None:
                 return {"ok": False, "message": "No active order."}
             if order.status != "draft":
-                return {"ok": False, "message": "Order is not editable."}
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             order.notes = note
             db.commit()
@@ -512,7 +543,7 @@ class VoiceToolRouter:
         with self._context.db_factory() as db:
             order = self._ensure_order(db)
             if order.status != "draft":
-                return {"ok": False, "message": "Order is not editable."}
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             order.fulfillment_type = t
             order.delivery_address = addr

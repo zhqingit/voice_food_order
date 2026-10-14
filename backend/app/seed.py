@@ -10,6 +10,7 @@ from app.models.menu import Menu
 from app.models.menu_item import MenuItem
 from app.models.menu_menu_item import MenuMenuItem
 from app.models.store import Store
+from app.services import menu_service
 
 TEST_STORE_EMAIL = "test@example.com"
 
@@ -275,6 +276,7 @@ def seed() -> None:
                 )
                 db.add(item)
                 db.flush()
+                menu_service.sync_size_variants(db, item=item)
                 db.add(MenuMenuItem(menu_id=menu.id, menu_item_id=item.id))
 
             db.commit()

@@ -33,7 +33,7 @@ class VoiceOrderScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final voice = ref.watch(voiceControllerProvider);
+    final voice = ref.watch(voiceControllerProvider(storeId));
     final showPostSession = voice.sessionEnded && !voice.connected;
 
     return Scaffold(
@@ -174,7 +174,7 @@ class _ActiveSessionView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context);
-    final voice = ref.watch(voiceControllerProvider);
+    final voice = ref.watch(voiceControllerProvider(storeId));
     // Soft keyboard up → hide the mic orb so the order card + delivery
     // TextField fit without overflow. The user can dismiss the keyboard to
     // reach the mic again.
@@ -193,7 +193,7 @@ class _ActiveSessionView extends ConsumerWidget {
       children: [
         // Live order summary (slides in when items are added)
         if (voice.liveOrder != null && voice.liveOrder!.items.isNotEmpty)
-          _LiveOrderPanel(order: voice.liveOrder!),
+          _LiveOrderPanel(storeId: storeId, order: voice.liveOrder!),
 
         // Transcript area
         Expanded(
@@ -247,9 +247,9 @@ class _ActiveSessionView extends ConsumerWidget {
                   connecting: voice.connecting,
                   onTap: () async {
                     if (voice.connected) {
-                      await ref.read(voiceControllerProvider.notifier).stop();
+                      await ref.read(voiceControllerProvider(storeId).notifier).stop();
                     } else if (!voice.connecting) {
-                      await ref.read(voiceControllerProvider.notifier).start(storeId: storeId);
+                      await ref.read(voiceControllerProvider(storeId).notifier).start();
                     }
                   },
                 ),
@@ -514,9 +514,10 @@ class _WaveformPainter extends CustomPainter {
 // ---------------------------------------------------------------------------
 
 class _LiveOrderPanel extends ConsumerStatefulWidget {
+  final String storeId;
   final LiveOrderSummary order;
 
-  const _LiveOrderPanel({required this.order});
+  const _LiveOrderPanel({required this.storeId, required this.order});
 
   @override
   ConsumerState<_LiveOrderPanel> createState() => _LiveOrderPanelState();
@@ -584,7 +585,7 @@ class _LiveOrderPanelState extends ConsumerState<_LiveOrderPanel> {
     }
     if (mounted) setState(() => _saving = true);
     try {
-      await ref.read(voiceControllerProvider.notifier).updateDeliveryAddress(value);
+      await ref.read(voiceControllerProvider(widget.storeId).notifier).updateDeliveryAddress(value);
       _lastSyncedAddress = value;
     } finally {
       _isEditing = false;
@@ -974,12 +975,12 @@ class _PostSessionView extends ConsumerWidget {
           const SizedBox(height: 24),
 
           // Review & Rating
-          _ReviewCard(storeName: storeName),
+          _ReviewCard(storeName: storeName, storeId: storeId),
           const SizedBox(height: 24),
 
           // New order button
           GestureDetector(
-            onTap: () => ref.read(voiceControllerProvider.notifier).resetSession(),
+            onTap: () => ref.read(voiceControllerProvider(storeId).notifier).resetSession(),
             child: Container(
               height: 52,
               decoration: BoxDecoration(
@@ -1010,8 +1011,9 @@ class _PostSessionView extends ConsumerWidget {
 
 class _ReviewCard extends ConsumerStatefulWidget {
   final String storeName;
+  final String storeId;
 
-  const _ReviewCard({required this.storeName});
+  const _ReviewCard({required this.storeName, required this.storeId});
 
   @override
   ConsumerState<_ReviewCard> createState() => _ReviewCardState();
@@ -1030,7 +1032,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final voice = ref.watch(voiceControllerProvider);
+    final voice = ref.watch(voiceControllerProvider(widget.storeId));
     final allSubmitted = voice.ratingSubmitted && voice.reviewSubmitted;
 
     return _Card(
@@ -1059,7 +1061,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
                 final apiValue = starValue * 2;
                 final selected = voice.rating != null && voice.rating! >= apiValue;
                 return GestureDetector(
-                  onTap: allSubmitted ? null : () => ref.read(voiceControllerProvider.notifier).submitRating(apiValue),
+                  onTap: allSubmitted ? null : () => ref.read(voiceControllerProvider(widget.storeId).notifier).submitRating(apiValue),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: AnimatedScale(
@@ -1116,7 +1118,7 @@ class _ReviewCardState extends ConsumerState<_ReviewCard> {
             GestureDetector(
               onTap: _submitting ? null : () async {
                 setState(() => _submitting = true);
-                final notifier = ref.read(voiceControllerProvider.notifier);
+                final notifier = ref.read(voiceControllerProvider(widget.storeId).notifier);
                 // Submit review if text is provided
                 if (_reviewController.text.trim().isNotEmpty) {
                   await notifier.submitReview(_reviewController.text);
