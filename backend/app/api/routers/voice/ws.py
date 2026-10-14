@@ -279,10 +279,11 @@ async def voice_ws(
                         vs.llm_cost = total_cost
                         db.commit()
                         logger.warning(
-                            "Session %s usage: pipeline=%d/%d, monitor=%d/%d, "
+                            "Session %s usage: pipeline=%d/%d (audio %d/%d), monitor=%d/%d, "
                             "total=%d prompt + %d completion = %d tokens, cost=$%s",
                             session_id,
                             usage.prompt_tokens, usage.completion_tokens,
+                            usage.input_audio_tokens, usage.output_audio_tokens,
                             monitor.prompt_tokens, monitor.completion_tokens,
                             total_prompt, total_completion,
                             total_prompt + total_completion, total_cost,

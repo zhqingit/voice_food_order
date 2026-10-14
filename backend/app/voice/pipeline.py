@@ -150,12 +150,21 @@ def create_voice_pipeline_task(
     # service calls self.start_llm_usage_metrics() which delegates to
     # self._metrics.start_llm_usage_metrics() — patching at the _metrics
     # level reliably intercepts all token reports.
+    #
+    # Audio tokens are reported as a *subset* of prompt/completion totals and
+    # are billed at a much higher rate, so they must be carried through
+    # separately or session cost comes out far too low.
     if usage is not None:
         _metrics = llm._metrics
         _orig_metrics_llm_usage = _metrics.start_llm_usage_metrics
 
         async def _patched_metrics_llm_usage(tokens: Any) -> Any:
-            usage.add_tokens(tokens.prompt_tokens, tokens.completion_tokens)
+            usage.add_tokens(
+                tokens.prompt_tokens,
+                tokens.completion_tokens,
+                tokens.input_audio_tokens or 0,
+                tokens.output_audio_tokens or 0,
+            )
             return await _orig_metrics_llm_usage(tokens)
 
         _metrics.start_llm_usage_metrics = _patched_metrics_llm_usage
@@ -170,6 +179,16 @@ def create_voice_pipeline_task(
     #   Live's transcription frames (no local VAD needed).
     # - FunctionCallUserMuteStrategy: suppress interruptions while tool calls
     #   are in flight, preventing the "second item not added" bug.
+    #
+    # realtime_service_mode is opted out of explicitly. Gemini Live advertises
+    # itself as a realtime service, which would auto-enable the mode — and that
+    # drops TranscriptionUserTurnStartStrategy on the grounds that the service
+    # drives turn-taking itself. But Gemini Live emits no turn-start/-end
+    # frames, and our websocket transport carries no local VAD, so nothing
+    # would be left to start a user turn: on_user_turn_started would stop
+    # firing and the client would never be told to flush its audio buffer on
+    # barge-in. Realtime mode also stops populating UserTurnStoppedMessage
+    # .content, which our transcript handler reads.
     user_agg, assistant_agg = LLMContextAggregatorPair(
         context,
         user_params=LLMUserAggregatorParams(
@@ -178,6 +197,7 @@ def create_voice_pipeline_task(
             ),
             user_mute_strategies=[FunctionCallUserMuteStrategy()],
         ),
+        realtime_service_mode=False,
     )
 
     # Observe FunctionCallCancelFrame so we can recover when pipecat cancels a
@@ -210,7 +230,9 @@ def create_voice_pipeline_task(
     task = PipelineTask(
         pipeline,
         params=PipelineParams(
-            allow_interruptions=True,
+            # No allow_interruptions: the field was removed in pipecat 1.x and
+            # is silently discarded. Interruptions are governed by the user
+            # turn/mute strategies on the aggregator pair above.
             enable_metrics=enable_metrics,
             enable_usage_metrics=enable_metrics,
         ),
