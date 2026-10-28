@@ -17,6 +17,44 @@ def store_auth(store_client):
     return {"Authorization": f"Bearer {r.json()['access_token']}"}
 
 
+def test_only_one_menu_is_active(store_client, store_auth):
+    for name in ("Lunch", "Dinner"):
+        r = store_client.post("/store/menus", json={"name": name, "active": True}, headers=store_auth)
+        assert r.status_code == 200, r.text
+    r = store_client.post("/store/menus", json={"name": "Draft menu"}, headers=store_auth)
+    assert r.status_code == 200 and r.json()["active"] is False
+
+    menus = store_client.get("/store/menus", headers=store_auth).json()
+    assert [m["name"] for m in menus if m["active"]] == ["Dinner"]
+
+    lunch = next(m for m in menus if m["name"] == "Lunch")
+    r = store_client.patch(f"/store/menus/{lunch['id']}", json={"active": True}, headers=store_auth)
+    assert r.status_code == 200, r.text
+    r = store_client.post(f"/store/menus/{lunch['id']}/set-default", headers=store_auth)
+    assert r.status_code == 200, r.text
+
+    menus = store_client.get("/store/menus", headers=store_auth).json()
+    assert [m["name"] for m in menus if m["active"]] == ["Lunch"]
+
+
+def test_csv_import_creates_size_variants(store_client, store_auth):
+    csv = "name,price_small,price_medium,price_large\nWonton Soup,5,7,9\n"
+    r = store_client.post(
+        "/store/items/upload-csv",
+        files={"file": ("menu.csv", csv.encode(), "text/csv")},
+        headers=store_auth,
+    )
+    assert r.status_code == 200, r.text
+    item = next(i for i in store_client.get("/store/items", headers=store_auth).json() if i["name"] == "Wonton Soup")
+
+    variants = store_client.get(f"/store/items/{item['id']}/variants", headers=store_auth).json()
+    assert {v["name"]: (float(v["price"]), v["is_default"]) for v in variants} == {
+        "Small": (5.0, False),
+        "Medium": (7.0, True),
+        "Large": (9.0, False),
+    }
+
+
 def _png_bytes() -> bytes:
     buf = io.BytesIO()
     Image.new("RGB", (4, 4), "orange").save(buf, format="PNG")

@@ -62,6 +62,25 @@ def _draft_order(db, world, *, user):
     )
 
 
+def test_sized_item_has_variants_and_charges_chosen_size(db_factory, world):
+    router = _router(db_factory, world, user="alice")
+
+    result = router.add_item(menu_item_id=world["item_id"], item_name=None, quantity=1, variant="Large")
+
+    assert result["ok"], result
+    assert result["order"]["subtotal"] == 12.0
+    assert result["order"]["items"][0]["variant"] == "Large"
+
+
+def test_sized_item_without_choice_uses_default_medium(db_factory, world):
+    router = _router(db_factory, world, user="alice")
+
+    result = router.add_item(menu_item_id=world["item_id"], item_name=None, quantity=2)
+
+    assert result["ok"], result
+    assert result["order"]["subtotal"] == 20.0
+
+
 def test_tools_ignore_another_users_order(db_factory, world, session_factory):
     bob_router = _router(db_factory, world, user="bob")
     assert bob_router.add_item(menu_item_id=world["item_id"], item_name=None, quantity=1)["ok"]

@@ -260,6 +260,7 @@ async def upload_items_csv(
     by_name: dict[str, MenuItem] = {item.name.lower(): item for item in existing}
 
     created = 0
+    touched: list[MenuItem] = []
     updated = 0
     errors: list[str] = []
 
@@ -315,6 +316,7 @@ async def upload_items_csv(
             if tags is not None:
                 item.tags = tags
             item.availability = availability
+            touched.append(item)
             updated += 1
         else:
             item = MenuItem(
@@ -334,8 +336,12 @@ async def upload_items_csv(
             )
             db.add(item)
             by_name[name.lower()] = item
+            touched.append(item)
             created += 1
 
+    db.flush()
+    for item in touched:
+        menu_service.sync_size_variants(db, item=item)
     db.commit()
     return {"created": created, "updated": updated, "errors": errors}
 
@@ -431,6 +437,7 @@ Rules:
     by_name: dict[str, MenuItem] = {item.name.lower(): item for item in existing}
 
     created = 0
+    touched: list[MenuItem] = []
     updated = 0
     errors: list[str] = []
 
@@ -479,6 +486,7 @@ Rules:
                 existing_item.category = category
             if description:
                 existing_item.description = description
+            touched.append(existing_item)
             updated += 1
         else:
             new_item = MenuItem(
@@ -493,8 +501,12 @@ Rules:
             )
             db.add(new_item)
             by_name[name.lower()] = new_item
+            touched.append(new_item)
             created += 1
 
+    db.flush()
+    for item in touched:
+        menu_service.sync_size_variants(db, item=item)
     db.commit()
     return {"created": created, "updated": updated, "errors": errors}
 
