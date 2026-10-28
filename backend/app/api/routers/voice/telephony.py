@@ -71,6 +71,7 @@ async def start_daily_call(payload: DailyStartRequest) -> dict:
         system_prompt=system_prompt,
         tool_schema=GEMINI_VOICE_TOOLS_SCHEMA,
         tool_handlers=tool_handlers,
+        on_bot_stopped_speaking=tool_context.mark_bot_stopped_speaking,
     )
 
     runner = PipelineRunner()

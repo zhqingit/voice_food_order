@@ -240,7 +240,7 @@
     "minOrderAmount": "Monto mínimo de pedido",
     "allowPickup": "Permitir recogida",
     "allowDelivery": "Permitir entrega",
-    "deliveryRadius": "Radio de entrega (km)",
+    "deliveryRadius": "Radio de entrega (millas)",
     "deliveryRadiusDesc": "Distancia máxima en línea recta desde la tienda. Las direcciones fuera de este radio se rechazan.",
     "invalidDeliveryRadius": "El radio de entrega debe ser un número positivo.",
     "geoResolved": "Ubicación resuelta: {{lat}}, {{lng}}",

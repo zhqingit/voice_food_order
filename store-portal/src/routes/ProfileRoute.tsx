@@ -4,6 +4,14 @@ import { getMe, updateMe, uploadLogo, getHours, updateHours, type StoreMe, type 
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_SIZE_LABEL } from '../config'
 import { PaymentsCard } from '../components/PaymentsCard'
 
+// The radius is stored in km (delivery_radius_km) but stores are US-based, so
+// the form shows and accepts miles.
+const KM_PER_MILE = 1.609344
+
+function radiusMilesText(km: number | null | undefined): string {
+  return km != null ? String(Math.round((km / KM_PER_MILE) * 100) / 100) : ''
+}
+
 const DAY_KEYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
 
 function defaultHours(): DayHours[] {
@@ -58,7 +66,7 @@ export function ProfileRoute(): React.JSX.Element {
       timezone !== (me.timezone ?? '') ||
       allowPickup !== Boolean(me.allow_pickup ?? true) ||
       allowDelivery !== Boolean(me.allow_delivery ?? true) ||
-      deliveryRadius !== (me.delivery_radius_km != null ? String(me.delivery_radius_km) : '') ||
+      deliveryRadius !== radiusMilesText(me.delivery_radius_km) ||
       minOrder !== (me.min_order_amount != null ? String(me.min_order_amount) : '') ||
       taxRate !== String(Number(me.tax_rate ?? 0) * 100)
     )
@@ -82,7 +90,7 @@ export function ProfileRoute(): React.JSX.Element {
         setTimezone(data.timezone ?? '')
         setAllowPickup(Boolean(data.allow_pickup ?? true))
         setAllowDelivery(Boolean(data.allow_delivery ?? true))
-        setDeliveryRadius(data.delivery_radius_km != null ? String(data.delivery_radius_km) : '')
+        setDeliveryRadius(radiusMilesText(data.delivery_radius_km))
         setMinOrder(data.min_order_amount != null ? String(data.min_order_amount) : '')
         setTaxRate(String(Number(data.tax_rate ?? 0) * 100))
         setHours(hoursData)
@@ -113,11 +121,12 @@ export function ProfileRoute(): React.JSX.Element {
 
     let deliveryRadiusParsed: number | null = null
     if (deliveryRadius.trim()) {
-      deliveryRadiusParsed = Number(deliveryRadius)
-      if (!Number.isFinite(deliveryRadiusParsed) || deliveryRadiusParsed <= 0) {
+      const miles = Number(deliveryRadius)
+      if (!Number.isFinite(miles) || miles <= 0) {
         setError(t('profile.invalidDeliveryRadius'))
         return
       }
+      deliveryRadiusParsed = miles * KM_PER_MILE
     }
 
     try {

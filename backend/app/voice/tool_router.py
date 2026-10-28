@@ -34,6 +34,52 @@ class VoiceToolContext:
     channel: str = "voice"
     order_id: uuid.UUID | None = None
     session_id: uuid.UUID | None = None
+    # Name read-back gate (time.monotonic() values). The pipeline records when
+    # the bot last finished speaking; set_customer_name records when the name
+    # was captured. checkout requires the bot to have spoken (the read-back)
+    # after the name was captured, plus a pause for the customer to answer.
+    name_set_at: float | None = None
+    bot_speech_ended_at: float | None = None
+
+    def mark_bot_stopped_speaking(self) -> None:
+        self.bot_speech_ended_at = time.monotonic()
+
+
+# Seconds between the bot finishing the name read-back and checkout. A checkout
+# issued in the same model response as the read-back lands within milliseconds;
+# one triggered by the customer's "yes" comes seconds later.
+_NAME_CONFIRM_MIN_GAP_SECONDS = 1.0
+
+_SPOKEN_WORDS = {
+    "n": "North", "s": "South", "e": "East", "w": "West",
+    "ne": "Northeast", "nw": "Northwest", "se": "Southeast", "sw": "Southwest",
+    "st": "Street", "ave": "Avenue", "blvd": "Boulevard", "rd": "Road", "dr": "Drive",
+    "ln": "Lane", "ct": "Court", "pl": "Place", "pkwy": "Parkway", "hwy": "Highway",
+    "cir": "Circle", "ter": "Terrace", "trl": "Trail", "sq": "Square",
+    "apt": "Apartment", "ste": "Suite", "#": "number",
+}
+_KEEP_AS_WORD = {w.lower() for w in _SPOKEN_WORDS.values()} | {"way", "loop", "unit", "suite", "apartment"}
+
+
+def _spell_out(text: str) -> str:
+    """Spoken read-back: numbers and street types as words, names letter by letter.
+
+    "540 N Mammoth Way, Chandler, AZ 85225" → "540 North M, A, M, M, O, T, H Way, Chandler".
+    """
+    parts = [p.strip() for p in text.split(",") if p.strip()]
+    if not parts:
+        return text
+    words = []
+    for token in parts[0].split():
+        key = token.lower().rstrip(".")
+        if key in _SPOKEN_WORDS:
+            words.append(_SPOKEN_WORDS[key])
+        elif key in _KEEP_AS_WORD or not token.isalpha():
+            words.append(token)
+        else:
+            words.append(", ".join(token.upper()))
+    spoken = " ".join(words)
+    return f"{spoken}, {parts[1]}" if len(parts) > 1 else spoken
 
 
 class VoiceToolRouter:
@@ -172,13 +218,28 @@ class VoiceToolRouter:
                 return row
         return None
 
-    def _get_order(self, db: Session) -> Order | None:
+    _NOT_EDITABLE = "This order has already been submitted and can't be changed."
+
+    def _get_order(self, db: Session, *, for_update: bool = False) -> Order | None:
+        """Load the session's order, scoped to this store and user.
+
+        ``for_update`` takes a row lock so the draft-status check and the
+        change that follows happen atomically.
+        """
         if self._context.order_id is None:
             return None
-        return db.get(Order, self._context.order_id)
+        query = select(Order).where(
+            Order.id == self._context.order_id,
+            Order.store_id == self._context.store_id,
+            Order.user_id == self._context.user_id,
+        )
+        if for_update:
+            query = query.with_for_update()
+        return db.execute(query).scalar_one_or_none()
 
     def _ensure_order(self, db: Session) -> Order:
-        order = self._get_order(db)
+        """Return the locked current order, creating a draft if there is none."""
+        order = self._get_order(db, for_update=True)
         if order is not None:
             return order
 
@@ -260,6 +321,8 @@ class VoiceToolRouter:
 
         with self._context.db_factory() as db:
             order = self._ensure_order(db)
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
             menu_item = None
             if menu_item_id is not None:
                 menu_item = order_service.get_menu_item_for_store(
@@ -342,9 +405,11 @@ class VoiceToolRouter:
         item_name: str | None,
     ) -> dict[str, Any]:
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
             if order is None:
                 return {"ok": False, "message": "No active order."}
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             item = None
             if order_item_id is not None:
@@ -385,14 +450,61 @@ class VoiceToolRouter:
             db.flush()
             return {"ok": True, "message": "Order summary.", "order": self._build_summary(db, order)}
 
-    def checkout(self, *, customer_name: str | None = None) -> dict[str, Any]:
+    def set_customer_name(self, *, name: str) -> dict[str, Any]:
+        """Record the name for the order and start the read-back gate."""
+        clean = " ".join((name or "").split())
+        if not clean:
+            return {"ok": False, "message": "Name is required."}
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._ensure_order(db)
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
+            order.customer_name = clean
+            db.commit()
+            self._context.name_set_at = time.monotonic()
+            return {
+                "ok": True,
+                "message": (
+                    "Name saved. Read it back exactly as read_back, then ask if anything else is needed "
+                    "before placing the order. Wait for the customer to answer before calling checkout."
+                ),
+                "read_back": _spell_out(clean),
+                "order": self._build_summary(db, order),
+            }
+
+    def _name_confirmation_error(self) -> str | None:
+        ctx = self._context
+        if ctx.name_set_at is None:
+            return "No name on the order yet. Ask for the customer's name and call set_customer_name first."
+        spoke_after = ctx.bot_speech_ended_at is not None and ctx.bot_speech_ended_at > ctx.name_set_at
+        if not spoke_after or time.monotonic() - ctx.bot_speech_ended_at < _NAME_CONFIRM_MIN_GAP_SECONDS:
+            return (
+                "The customer has not confirmed the name yet. Read the name back, ask if they need anything "
+                "else, and wait for their answer before calling checkout."
+            )
+        return None
+
+    def checkout(self) -> dict[str, Any]:
+        name_error = self._name_confirmation_error()
+        if name_error is not None:
+            return {"ok": False, "message": name_error}
+        with self._context.db_factory() as db:
+            order = self._get_order(db, for_update=True)
 
             if order is None:
                 return {"ok": False, "message": "Order is empty."}
             if order.status != "draft":
-                return {"ok": False, "message": "Order is not editable."}
+                return {"ok": False, "message": self._NOT_EDITABLE}
+            has_items = db.execute(
+                select(OrderItem.id).where(OrderItem.order_id == order.id).limit(1)
+            ).first()
+            if has_items is None:
+                return {"ok": False, "message": "Order is empty. Add items before checkout."}
+            if not order.fulfillment_type:
+                return {
+                    "ok": False,
+                    "message": "Pickup or delivery is not set. Ask the customer and call set_fulfillment first.",
+                }
 
             # Tool-layer gate: delivery orders MUST have a verbal confirmation
             # (recorded by confirm_delivery_address) before checkout. This is
@@ -413,12 +525,10 @@ class VoiceToolRouter:
                 # earlier set_fulfillment call.
                 if order.delivery_address:
                     store = db.get(Store, self._context.store_id)
-                    range_check = self._check_delivery_range(store, order.delivery_address)
-                    if range_check is not None:
-                        return range_check
+                    range_error, _ = self._check_delivery_range(store, order.delivery_address)
+                    if range_error is not None:
+                        return range_error
 
-            if customer_name:
-                order.customer_name = customer_name
             order.status = "submitted"
             order_service.recalc_totals(db, order=order)
             db.commit()
@@ -443,9 +553,11 @@ class VoiceToolRouter:
         instead of silently "succeeding" and re-trying in a loop.
         """
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
             if order is None:
                 return {"ok": False, "message": "No active order."}
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             # Find the order item
             oi = None
@@ -515,11 +627,11 @@ class VoiceToolRouter:
 
     def set_order_note(self, *, note: str) -> dict[str, Any]:
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
             if order is None:
                 return {"ok": False, "message": "No active order."}
             if order.status != "draft":
-                return {"ok": False, "message": "Order is not editable."}
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             order.notes = note
             db.commit()
@@ -538,15 +650,21 @@ class VoiceToolRouter:
             addr = None
 
         with self._context.db_factory() as db:
-            order = self._ensure_order(db)
-            if order.status != "draft":
-                return {"ok": False, "message": "Order is not editable."}
-
+            # Range check first: it geocodes over the network, which must not
+            # happen while the order row is locked.
             if t == "delivery":
                 store = db.get(Store, self._context.store_id)
-                range_check = self._check_delivery_range(store, addr)
-                if range_check is not None:
-                    return range_check
+                range_error, canonical = self._check_delivery_range(store, addr)
+                if range_error is not None:
+                    return range_error
+                # Save Google's spelling of the matched address: it fixes
+                # mis-heard street names, and the read-back lets the customer
+                # catch a wrong match.
+                addr = canonical or addr
+
+            order = self._ensure_order(db)
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
 
             # If the address actually changed (including: switching to pickup,
             # or a different delivery address), drop any prior verbal
@@ -561,14 +679,17 @@ class VoiceToolRouter:
             db.commit()
 
             if t == "pickup":
-                msg = "Fulfillment set to pickup."
-            else:
-                msg = (
+                return {"ok": True, "message": "Fulfillment set to pickup.", "order": self._build_summary(db, order)}
+            return {
+                "ok": True,
+                "message": (
                     f"Fulfillment set to delivery to {addr}. "
-                    "Address NOT yet confirmed by the customer — read it back letter-by-letter "
-                    "and, only after the customer says yes, call confirm_delivery_address before checkout."
-                )
-            return {"ok": True, "message": msg, "order": self._build_summary(db, order)}
+                    "Address NOT yet confirmed by the customer — say read_back to them word for word, "
+                    "ask if it is correct, and only after they say yes call confirm_delivery_address."
+                ),
+                "read_back": _spell_out(addr),
+                "order": self._build_summary(db, order),
+            }
 
     def confirm_delivery_address(self) -> dict[str, Any]:
         """Record that the customer verbally confirmed the saved delivery address.
@@ -579,11 +700,11 @@ class VoiceToolRouter:
         client UI) clears this flag and requires another confirmation.
         """
         with self._context.db_factory() as db:
-            order = self._get_order(db)
+            order = self._get_order(db, for_update=True)
             if order is None:
                 return {"ok": False, "message": "No active order."}
             if order.status != "draft":
-                return {"ok": False, "message": "Order is not editable."}
+                return {"ok": False, "message": self._NOT_EDITABLE}
             if order.fulfillment_type != "delivery":
                 return {
                     "ok": False,
@@ -604,55 +725,59 @@ class VoiceToolRouter:
 
     def _check_delivery_range(
         self, store: Store | None, delivery_address: str
-    ) -> dict[str, Any] | None:
-        """Run the range check and return a tool-failure dict on rejection.
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Run the range check: (failure dict, None) on rejection, else
+        (None, canonical address).
 
-        Returns None when the address is in range (callers proceed). The
-        returned failure dict mirrors the documented voice contract: a
-        structured `reason` so the LLM can phrase a natural response."""
+        The failure dict mirrors the documented voice contract: a structured
+        `reason` so the LLM can phrase a natural response."""
         if store is None:
             return {
                 "ok": False,
                 "reason": delivery_service.REASON_STORE_NO_LOCATION,
                 "message": "This store hasn't configured a delivery area yet.",
-            }
-        in_range, distance_km, reason = delivery_service.is_within_delivery_range(
-            store, delivery_address
-        )
-        if in_range:
-            return None
+            }, None
+        check = delivery_service.is_within_delivery_range(store, delivery_address)
+        if check.in_range:
+            return None, check.formatted_address
+        reason = check.reason
         if reason == delivery_service.REASON_OUT_OF_RANGE:
+            distance_mi = delivery_service.km_to_miles(check.distance_km)
+            radius_mi = delivery_service.km_to_miles(store.delivery_radius_km)
             return {
                 "ok": False,
                 "reason": reason,
-                "distance_km": round(distance_km, 2) if distance_km is not None else None,
-                "max_km": float(store.delivery_radius_km) if store.delivery_radius_km else None,
+                "distance_miles": round(distance_mi, 1),
+                "max_miles": round(radius_mi, 1),
                 "message": (
-                    f"That address is about {distance_km:.1f} km away, but we only "
-                    f"deliver within {store.delivery_radius_km:.1f} km. Would you like "
+                    f"That address is about {distance_mi:.1f} miles away, but we only "
+                    f"deliver within {radius_mi:.1f} miles. Would you like "
                     "pickup instead, or a different address?"
                 ),
-            }
+            }, None
         if reason == delivery_service.REASON_GEOCODE_FAILED:
             return {
                 "ok": False,
                 "reason": reason,
-                "message": "I couldn't locate that address. Could you say it again, or include the postcode?",
-            }
+                "message": (
+                    "I couldn't find that exact address. Ask the customer to repeat the house number and "
+                    "street, and to include the city and ZIP code."
+                ),
+            }, None
         if reason == delivery_service.REASON_STORE_NO_LOCATION:
             return {
                 "ok": False,
                 "reason": reason,
                 "message": "This store hasn't set a delivery location yet. Would you like pickup instead?",
-            }
+            }, None
         if reason == delivery_service.REASON_STORE_NO_RADIUS:
             return {
                 "ok": False,
                 "reason": reason,
                 "message": "This store hasn't set a delivery radius yet. Would you like pickup instead?",
-            }
+            }, None
         return {
             "ok": False,
             "reason": reason,
             "message": "I couldn't confirm that delivery address. Would you like pickup instead?",
-        }
+        }, None

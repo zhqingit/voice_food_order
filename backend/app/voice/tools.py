@@ -143,8 +143,9 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                 "name": "set_fulfillment",
                 "description": (
                     "Record whether the order is for pickup or delivery. For delivery you MUST include the "
-                    "customer's delivery address. Saving an address does NOT confirm it — after this call you "
-                    "must read the saved address back letter-by-letter and, when the customer says yes, call "
+                    "customer's delivery address. The tool saves the matched address in its standard spelling and "
+                    "returns `read_back`. Saving an address does NOT confirm it — after this call you must say "
+                    "`read_back` to the customer word for word and, when the customer says yes, call "
                     "confirm_delivery_address. checkout will refuse a delivery order without confirmation. "
                     "Delivery may be rejected if the address is outside the store's delivery range — when "
                     "that happens the tool returns ok=false with a reason code (out_of_range, "
@@ -183,22 +184,34 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                 },
             },
             {
-                "name": "checkout",
+                "name": "set_customer_name",
                 "description": (
-                    "Finalize the order. Must include the customer's name for pickup/delivery identification. "
-                    "For DELIVERY orders, this tool refuses unless confirm_delivery_address has been called "
-                    "after the customer verbally confirmed the saved delivery address — there is no way to "
-                    "bypass that."
+                    "Save the customer's name for the order as soon as they say it. Returns `read_back`: say it "
+                    "to the customer word for word, ask if anything else is needed before placing the order, "
+                    "and wait for their answer. Call again with the new name if they correct it."
                 ),
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "customer_name": {
+                        "name": {
                             "type": "string",
                             "description": "The customer's name for the order.",
                         },
                     },
-                    "required": ["customer_name"],
+                    "required": ["name"],
+                },
+            },
+            {
+                "name": "checkout",
+                "description": (
+                    "Finalize the order. Refuses unless set_customer_name was called, the name was read back, "
+                    "and the customer has answered since. For DELIVERY orders it also refuses unless "
+                    "confirm_delivery_address has been called after the customer verbally confirmed the saved "
+                    "delivery address — there is no way to bypass either check."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
                 },
             },
         ]
@@ -423,16 +436,27 @@ def create_voice_tool_handlers(
 
         return await _run_shielded("get_summary", params, _work)
 
+    async def set_customer_name(params: Any):
+        args = _extract_args(params)
+        if monitor is not None:
+            monitor.record_tool_call("set_customer_name", args)
+
+        async def _work() -> dict:
+            result = await asyncio.to_thread(router.set_customer_name, name=args.get("name") or "")
+            if monitor is not None:
+                monitor.record_tool_result("set_customer_name", result)
+            await _notify_order(result)
+            return result
+
+        return await _run_shielded("set_customer_name", params, _work)
+
     async def checkout(params: Any):
         args = _extract_args(params)
         if monitor is not None:
             monitor.record_tool_call("checkout", args)
 
         async def _work() -> dict:
-            result = await asyncio.to_thread(
-                router.checkout,
-                customer_name=args.get("customer_name") or None,
-            )
+            result = await asyncio.to_thread(router.checkout)
             if monitor is not None:
                 monitor.record_tool_result("checkout", result)
             await _notify_order(result)
@@ -497,6 +521,7 @@ def create_voice_tool_handlers(
         "set_order_note": set_order_note,
         "set_fulfillment": set_fulfillment,
         "confirm_delivery_address": confirm_delivery_address,
+        "set_customer_name": set_customer_name,
         "checkout": checkout,
     }
 

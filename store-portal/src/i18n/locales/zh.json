@@ -240,7 +240,7 @@
     "minOrderAmount": "最低订单金额",
     "allowPickup": "允许自取",
     "allowDelivery": "允许配送",
-    "deliveryRadius": "配送范围 (km)",
+    "deliveryRadius": "配送范围（英里）",
     "deliveryRadiusDesc": "距门店的最大直线距离。超出此范围的顾客地址将被拒绝。",
     "invalidDeliveryRadius": "配送范围必须为正数。",
     "geoResolved": "已解析位置：{{lat}}, {{lng}}",

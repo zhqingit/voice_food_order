@@ -241,7 +241,7 @@
     "minOrderAmount": "Min Order Amount",
     "allowPickup": "Allow Pickup",
     "allowDelivery": "Allow Delivery",
-    "deliveryRadius": "Delivery Radius (km)",
+    "deliveryRadius": "Delivery Radius (miles)",
     "deliveryRadiusDesc": "Max straight-line distance from the store. Customer delivery addresses outside this radius are rejected.",
     "invalidDeliveryRadius": "Delivery radius must be a positive number.",
     "geoResolved": "Resolved location: {{lat}}, {{lng}}",

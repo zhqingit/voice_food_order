@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     # Seconds the pipeline waits after the bot stops speaking before nudging
     # the LLM to ask a follow-up ("anything else?"). Longer = more patient bot.
     voice_silence_nudge_seconds: float = 8.0
+    # Consecutive nudges allowed while the customer stays silent. After that the
+    # bot stops talking, so pipecat's idle timeout can end an abandoned session.
+    voice_silence_max_nudges: int = 2
+    # Mic RMS level (16-bit PCM) counted as the customer talking; while they
+    # talk the silence nudge is held back. Raise it if background noise keeps
+    # the nudge from ever firing.
+    voice_speech_rms_threshold: int = 500
 
     # Vertex AI (Gen AI). Two independent flags — the live voice pipeline and
     # the background text/image calls can pick different surfaces:
@@ -85,6 +92,8 @@ class Settings(BaseSettings):
     gemini_background_model_vertex: str = "gemini-2.5-flash"
     gemini_background_model_api: str = "gemini-2.5-flash"
 
+    # Hard cap on one voice WebSocket session (Gemini Live audio sessions are
+    # limited to 15 minutes without context compression anyway).
     voice_ws_max_seconds: int = 900
     voice_ws_max_payload_kb: int = 256
     voice_audio_sample_rate_hz: int = 16000

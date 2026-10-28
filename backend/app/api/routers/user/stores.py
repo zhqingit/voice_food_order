@@ -121,10 +121,10 @@ def check_delivery_range(
     store = db.get(Store, store_id)
     if store is None or not store.is_active or not store.is_approved or not store.is_published:
         raise AppError(status_code=404, code="store_not_found", detail="Store not found")
-    in_range, distance_km, reason = delivery_service.is_within_delivery_range(store, payload.address)
+    check = delivery_service.is_within_delivery_range(store, payload.address)
     return DeliveryRangeCheckOut(
-        in_range=in_range,
-        distance_km=round(distance_km, 2) if distance_km is not None else None,
+        in_range=check.in_range,
+        distance_km=round(check.distance_km, 2) if check.distance_km is not None else None,
         max_km=float(store.delivery_radius_km) if store.delivery_radius_km is not None else None,
-        reason=reason,
+        reason=check.reason,
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 logger = logging.getLogger(__name__)
@@ -14,9 +15,12 @@ if TYPE_CHECKING:
     from app.voice.monitor import ConversationMonitor
 
 try:
+    import numpy as np
     from pipecat.adapters.schemas.tools_schema import AdapterType, ToolsSchema
     from pipecat.frames.frames import (
+        BotStoppedSpeakingFrame,
         FunctionCallCancelFrame,
+        InputAudioRawFrame,
         LLMMessagesAppendFrame,
         LLMRunFrame,
     )
@@ -37,9 +41,12 @@ try:
     from pipecat.services.google.gemini_live.vertex.llm import GeminiLiveVertexLLMService
     from google.genai.types import StartSensitivity, EndSensitivity
 except ImportError:  # pragma: no cover - optional dependency
+    np = None
     AdapterType = None
     ToolsSchema = None
+    BotStoppedSpeakingFrame = None
     FunctionCallCancelFrame = None
+    InputAudioRawFrame = None
     LLMMessagesAppendFrame = None
     LLMRunFrame = None
     FrameDirection = None
@@ -62,6 +69,12 @@ except ImportError:  # pragma: no cover - optional dependency
     EndSensitivity = None
 
 
+def _rms(pcm16: bytes) -> float:
+    """Root-mean-square level of a 16-bit PCM chunk (0–32768)."""
+    samples = np.frombuffer(pcm16[: len(pcm16) // 2 * 2], dtype=np.int16).astype(np.float32)
+    return float(np.sqrt(np.mean(samples * samples))) if samples.size else 0.0
+
+
 def create_voice_pipeline_task(
     *,
     transport: Any,
@@ -72,6 +85,7 @@ def create_voice_pipeline_task(
     tool_handlers: dict[str, Callable[[Any], Awaitable[Any]]] | None = None,
     on_transcript: Callable[[str, str], Awaitable[None]] | None = None,
     on_interruption: Callable[[], Awaitable[None]] | None = None,
+    on_bot_stopped_speaking: Callable[[], None] | None = None,
     monitor: "ConversationMonitor | None" = None,
     usage: UsageAccumulator | None = None,
     enable_metrics: bool = True,
@@ -214,12 +228,35 @@ def create_voice_pipeline_task(
                     cancel_events.put_nowait(getattr(frame, "tool_call_id", "") or "unknown")
                 except Exception:
                     pass
+            # The output transport emits this when the bot's audio finishes
+            # playing (sent both ways; only the upstream copy passes here).
+            # Feeds the checkout name-confirmation gate.
+            if (
+                on_bot_stopped_speaking is not None
+                and BotStoppedSpeakingFrame is not None
+                and isinstance(frame, BotStoppedSpeakingFrame)
+            ):
+                on_bot_stopped_speaking()
             await self.push_frame(frame, direction)
 
     cancel_observer = _FunctionCallCancelObserver()
 
+    # Gemini Live only sends the user's transcription once they finish
+    # speaking, so turn events can't tell the silence nudge that the customer
+    # is mid-sentence (e.g. spelling a long address). Track mic level instead.
+    last_voice_at = 0.0
+
+    class _UserVoiceDetector(FrameProcessor):
+        async def process_frame(self, frame: Any, direction: Any) -> None:
+            nonlocal last_voice_at
+            await super().process_frame(frame, direction)
+            if isinstance(frame, InputAudioRawFrame) and _rms(frame.audio) >= settings.voice_speech_rms_threshold:
+                last_voice_at = time.monotonic()
+            await self.push_frame(frame, direction)
+
     pipeline = Pipeline([
         transport.input(),
+        _UserVoiceDetector(),
         user_agg,
         llm,
         cancel_observer,
@@ -245,10 +282,18 @@ def create_voice_pipeline_task(
     # ── Silence nudge: if user doesn't speak within 5s after bot finishes, ──
     # ── prompt the LLM to follow up. ──────────────────────────────────────
     SILENCE_TIMEOUT = settings.voice_silence_nudge_seconds
+    MAX_NUDGES = settings.voice_silence_max_nudges
     _nudge_timer: asyncio.Task[None] | None = None
+    _nudges_sent = 0
 
     async def _nudge_after_silence() -> None:
-        await asyncio.sleep(SILENCE_TIMEOUT)
+        nonlocal _nudges_sent
+        # Count silence from the later of the bot finishing and the customer's
+        # last audible audio, so talking keeps pushing the nudge back.
+        started = time.monotonic()
+        while (wait := max(started, last_voice_at) + SILENCE_TIMEOUT - time.monotonic()) > 0:
+            await asyncio.sleep(wait)
+        _nudges_sent += 1
         logger.info("Silence nudge: user silent for %.1fs, prompting bot follow-up", SILENCE_TIMEOUT)
         # Push directly to the LLM processor, bypassing transport/aggregator
         # which may not forward LLMMessagesAppendFrame.
@@ -266,13 +311,21 @@ def create_voice_pipeline_task(
     def _start_nudge() -> None:
         nonlocal _nudge_timer
         _cancel_nudge()
+        if _nudges_sent >= MAX_NUDGES:
+            logger.info("Silence nudge: %d sent with no reply, waiting for idle timeout", _nudges_sent)
+            return
         _nudge_timer = asyncio.create_task(_nudge_after_silence())
+
+    def _reset_nudges() -> None:
+        nonlocal _nudges_sent
+        _nudges_sent = 0
+        _cancel_nudge()
 
     # Notify client of interruptions so it can clear its audio buffer.
     @user_agg.event_handler("on_user_turn_started")
     async def _on_user_turn_started(agg: Any, strategy: Any) -> None:
         logger.debug("User turn started (barge-in detected)")
-        _cancel_nudge()
+        _reset_nudges()
         if on_interruption is not None:
             await on_interruption()
 
@@ -280,7 +333,7 @@ def create_voice_pipeline_task(
     @user_agg.event_handler("on_user_turn_stopped")
     async def _on_user_turn(agg: Any, strategy: Any, message: UserTurnStoppedMessage) -> None:
         logger.debug("User turn stopped, cancelling silence nudge timer")
-        _cancel_nudge()
+        _reset_nudges()
         if monitor is not None:
             monitor.record_user(message.content)
         if on_transcript is not None:
