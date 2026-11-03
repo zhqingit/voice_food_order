@@ -27,3 +27,10 @@ def test_explicit_cors_origins_are_parsed():
     s = _settings(cors_origins="https://a.example, https://b.example ,")
     assert s.cors_origin_list == ["https://a.example", "https://b.example"]
     assert _settings().cors_origin_list == []
+
+
+def test_telephony_secret_is_optional_but_strong_when_set():
+    assert _settings().telephony_shared_secret is None
+    assert _settings(telephony_shared_secret="").telephony_shared_secret is None
+    with pytest.raises(ValidationError):
+        _settings(telephony_shared_secret="short")
