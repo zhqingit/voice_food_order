@@ -10,6 +10,7 @@ services:
   api:
     environment:
       COOKIE_SECURE: "false"
+      SEED_DEMO_DATA: "true"
       GOOGLE_APPLICATION_CREDENTIALS: /gcp/adc.json
       WEB_RELOAD: "true"
     # !override replaces the base 127.0.0.1-only binding instead of appending.

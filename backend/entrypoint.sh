@@ -4,8 +4,10 @@ set -euo pipefail
 # Run migrations (safe to re-run)
 alembic upgrade head
 
-# Seed test data (idempotent)
-python -m app.seed
+# Demo store with a well-known password: local dev only (idempotent).
+if [ "${SEED_DEMO_DATA:-false}" = "true" ]; then
+  python -m app.seed
+fi
 
 # WEB_RELOAD=true  → single-worker uvicorn with --reload (dev)
 # WEB_RELOAD=false → gunicorn with N uvicorn workers (production)
