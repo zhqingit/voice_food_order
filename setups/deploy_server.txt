@@ -1,0 +1,170 @@
+Deploying the vertex branch to voxeats-server
+=============================================
+VM: voxeats-server (us-central1-a), project: voxeats, repo on VM: ~/voxeats
+Service account: voxeats-vertex@voxeats.iam.gserviceaccount.com
+
+Traffic model: only 80/443 are public. nginx proxies to the API on
+127.0.0.1:8000. Vertex auth comes from the service account attached to the VM,
+so there is no credentials file on the server and nothing expires.
+docker-compose.override.yml is for laptops only; it must not exist on the VM.
+
+Do the steps in order. Steps 1, 7 run on your laptop; the rest on the VM.
+Use a gcloud account with access to the voxeats project
+(gcloud config set account ... / add --account=...).
+
+
+1. Attach the service account (laptop)
+--------------------------------------
+Check the current state:
+
+  gcloud compute instances describe voxeats-server --zone=us-central1-a --project=voxeats \
+    --format="yaml(serviceAccounts)"
+
+  gcloud projects get-iam-policy voxeats \
+    --flatten="bindings[].members" \
+    --filter="bindings.members:voxeats-vertex@voxeats.iam.gserviceaccount.com" \
+    --format="value(bindings.role)"
+
+Expected: email voxeats-vertex@..., scope cloud-platform, role roles/aiplatform.user.
+Only if something differs (the stop/start below causes about a minute of downtime):
+
+  gcloud projects add-iam-policy-binding voxeats \
+    --member="serviceAccount:voxeats-vertex@voxeats.iam.gserviceaccount.com" \
+    --role="roles/aiplatform.user"
+
+  gcloud compute instances stop voxeats-server --zone=us-central1-a --project=voxeats
+  gcloud compute instances set-service-account voxeats-server \
+    --zone=us-central1-a --project=voxeats \
+    --service-account=voxeats-vertex@voxeats.iam.gserviceaccount.com \
+    --scopes=https://www.googleapis.com/auth/cloud-platform
+  gcloud compute instances start voxeats-server --zone=us-central1-a --project=voxeats
+
+
+2. Back up the database (VM)
+----------------------------
+  cd ~/voxeats/backend
+  docker compose exec -T db pg_dump -U postgres auth_template | gzip > ~/voxeats-$(date +%Y%m%d-%H%M).sql.gz
+  ls -lh ~/voxeats-*.sql.gz      # must not be a few bytes
+
+
+3. Update the code (VM)
+-----------------------
+Older notes suggested hand-editing docker-compose.yml with assume-unchanged.
+That is no longer needed. Undo it, and save anything you still want first:
+
+  cd ~/voxeats
+  git update-index --no-assume-unchanged backend/docker-compose.yml
+  git status
+  git diff backend/docker-compose.yml        # review before discarding
+  git checkout -- backend/docker-compose.yml
+  git fetch origin && git checkout vertex && git pull origin vertex
+  ls backend/docker-compose.override.yml     # should say "No such file"
+
+
+4. Configure backend/.env (VM)
+------------------------------
+Compose refuses to start without the two secrets. New values log everyone out
+once (store portal and app); passwords are not affected. Generate each one
+separately and keep existing STRIPE_* values:
+
+  python3 -c "import secrets; print(secrets.token_urlsafe(48))"
+
+  JWT_SECRET=<generated>
+  REFRESH_TOKEN_PEPPER=<generated>
+  STRIPE_SECRET_KEY=...
+  STRIPE_PUBLISHABLE_KEY=...
+  STRIPE_WEBHOOK_SECRET=...
+  CORS_ORIGINS=                  # empty: the portal is same-origin behind nginx
+  TELEPHONY_SHARED_SECRET=       # empty: phone endpoint stays off (returns 404)
+
+Do NOT set GOOGLE_APPLICATION_CREDENTIALS or SEED_DEMO_DATA here.
+
+  chmod 600 backend/.env
+
+
+5. Deploy (VM)
+--------------
+Never add -v to "down": it deletes the database and uploaded logos.
+Migrations run automatically on container start.
+
+  cd ~/voxeats/backend
+  docker compose up -d --build --remove-orphans
+  docker compose logs --tail=50 api
+  docker compose exec api alembic current    # expect 0026_active_menu_size_variants (head)
+
+Store portal (static files served by nginx):
+
+  cd ~/voxeats/store-portal && npm ci && npm run build
+  sudo cp -r dist/. /var/www/store-portal/
+
+nginx (copy the config from setups/setup_all.txt if it changed):
+
+  sudo vim /etc/nginx/sites-available/restoai
+  sudo nginx -t && sudo systemctl reload nginx
+
+
+6. Verify (VM)
+--------------
+  docker compose exec api printenv GOOGLE_APPLICATION_CREDENTIALS    # prints nothing
+  docker compose exec api python -c "
+  from google import genai
+  import os
+  c = genai.Client(vertexai=True, project=os.environ['GOOGLE_CLOUD_PROJECT'], location=os.environ['GOOGLE_CLOUD_LOCATION'])
+  print(c.models.generate_content(model='google/gemini-2.5-flash', contents='ping').text)
+  "
+  sudo ss -tlnp | grep -E ':8000|:5174|:5432'    # only 127.0.0.1:8000
+
+Then place one real voice order from the app, and log in to the store portal.
+
+
+7. Close the public ports (laptop)
+----------------------------------
+Before this, make sure no client still uses :8000. App builds must point at the
+domain (see "Mobile app" below); older test builds that use the raw IP stop working.
+
+  gcloud compute firewall-rules list --project=voxeats \
+    --format="table(name,sourceRanges.list(),allowed[].map().firewall_rule().list(),targetTags.list())"
+
+  gcloud compute firewall-rules delete allow-voxeats --project=voxeats
+
+Delete any other rule that opens 8000, 5174 or 5432. Keep 80, 443 and SSH.
+Then, from outside the server:
+
+  curl -m 5 http://voxeats.rest-oai.com:8000/health      # must time out
+  curl -m 5 http://voxeats.rest-oai.com:5174/            # must time out
+  curl -s https://voxeats.rest-oai.com/user/stores       # store list JSON
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST https://voxeats.rest-oai.com/voice/telephony/daily/start \
+    -H 'content-type: application/json' -d '{}'          # 404
+
+
+Remove the demo store (VM, once only)
+-------------------------------------
+Deleting a store cascades to its menus, items, orders and voice sessions.
+Look first; delete only if orders is 0:
+
+  docker compose exec db psql -U postgres -d auth_template -c "select s.id, s.is_approved, (select count(*) from orders o where o.store_id = s.id) as orders from stores s where s.email = 'test@example.com';"
+  docker compose exec db psql -U postgres -d auth_template -c "delete from stores where email = 'test@example.com' and (select count(*) from orders o where o.store_id = stores.id) = 0;"
+
+
+Mobile app
+----------
+The default API_BASE_URL in app_config.dart is a LAN address, so always pass it:
+
+  flutter build appbundle --dart-define=API_BASE_URL=https://voxeats.rest-oai.com
+  flutter build ipa       --dart-define=API_BASE_URL=https://voxeats.rest-oai.com
+
+
+Admin portal
+------------
+nginx has no public route for admin-api.local. Reach it over an SSH tunnel and
+run the portal on your laptop (its dev server proxies to localhost:8000):
+
+  gcloud compute ssh voxeats-server --zone=us-central1-a --project=voxeats -- -N -L 8000:127.0.0.1:8000
+  cd admin-portal && npm run dev
+
+
+Later deploys
+-------------
+  cd ~/voxeats/backend && git pull origin vertex
+  docker compose up -d --build --remove-orphans
+  docker compose logs --tail=50 api

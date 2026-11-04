@@ -1,3 +1,6 @@
+OUTDATED: follow setups/deploy_server.txt. The compose hand-edits below are no longer
+needed, and the service account is voxeats-vertex, not restoai-vertex.
+
 On voxeats-server, don't ship the credentials file at all. Use the service account attached to the VM:
 
   1. Confirm the SA is attached:

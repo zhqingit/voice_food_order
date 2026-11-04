@@ -61,11 +61,8 @@ gcloud services enable compute.googleapis.com
 
  Step 3: Open Firewall Ports
 
-  # API (8000) and store portal (5174)
-  gcloud compute firewall-rules create allow-voxeats \
-    --allow=tcp:8000,tcp:5174 \
-    --target-tags=http-server \
-    --description="VoxEats API and store portal"
+  # Do NOT open 8000/5174 publicly: only nginx on 80/443 is exposed.
+  # See setups/deploy_server.txt.
 
 
   Step 4: SSH into the VM and Install Docker
