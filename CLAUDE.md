@@ -145,6 +145,6 @@ Backend (`backend/.env`):
 - `JWT_SECRET`, `REFRESH_TOKEN_PEPPER` — Auth secrets
 - `CORS_ORIGINS` — Allowed origins
 - `VOICE_PROVIDER_STT`, `VOICE_PROVIDER_TTS`, `VOICE_PROVIDER_LLM` — Voice providers (default: google)
-- `VOICE_LLM_MODEL` — LLM model (default: gemini-3.0-flash-preview)
+- `VOICE_LLM_MODEL`, `VOICE_LLM_MODEL_VERTEX` — Live model for the Gemini API / Vertex (default: gemini-3.8-live)
 - `GOOGLE_API_KEY` or `GEMINI_API_KEY` — For voice services
 - `TELEPHONY_DAILY_API_KEY`, `TELEPHONY_DAILY_ROOM_URL` — For phone ordering

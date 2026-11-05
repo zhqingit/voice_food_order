@@ -16,12 +16,13 @@ if TYPE_CHECKING:
 
 try:
     import numpy as np
-    from pipecat.adapters.schemas.tools_schema import AdapterType, ToolsSchema
+    from pipecat.adapters.llm.schemas.tools_schema import AdapterType, ToolsSchema
     from pipecat.frames.frames import (
+        BotStartedSpeakingFrame,
         BotStoppedSpeakingFrame,
         FunctionCallCancelFrame,
         InputAudioRawFrame,
-        LLMMessagesAppendFrame,
+        InputTextRawFrame,
         LLMRunFrame,
     )
     from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
@@ -44,10 +45,11 @@ except ImportError:  # pragma: no cover - optional dependency
     np = None
     AdapterType = None
     ToolsSchema = None
+    BotStartedSpeakingFrame = None
     BotStoppedSpeakingFrame = None
     FunctionCallCancelFrame = None
     InputAudioRawFrame = None
-    LLMMessagesAppendFrame = None
+    InputTextRawFrame = None
     LLMRunFrame = None
     FrameDirection = None
     FrameProcessor = object  # type: ignore[assignment,misc]
@@ -159,6 +161,15 @@ def create_voice_pipeline_task(
         for name, handler in tool_handlers.items():
             llm.register_function(name, handler)
 
+    # Interruptions must not cancel tool calls. Gemini Live sends the customer's
+    # transcription, which pipecat treats as an interruption, at the same moment
+    # as the tool call it led to, so the call would be cancelled as it starts
+    # and the model told CANCELLED. Our tools finish quickly either way.
+    async def _keep_tool_calls_running(_frame: Any) -> None:
+        return
+
+    llm._handle_interruptions = _keep_tool_calls_running
+
     # Hook into the LLM's internal metrics object to capture token usage.
     # We patch _metrics.start_llm_usage_metrics because the Gemini Live
     # service calls self.start_llm_usage_metrics() which delegates to
@@ -228,15 +239,15 @@ def create_voice_pipeline_task(
                     cancel_events.put_nowait(getattr(frame, "tool_call_id", "") or "unknown")
                 except Exception:
                     pass
-            # The output transport emits this when the bot's audio finishes
-            # playing (sent both ways; only the upstream copy passes here).
-            # Feeds the checkout name-confirmation gate.
-            if (
-                on_bot_stopped_speaking is not None
-                and BotStoppedSpeakingFrame is not None
-                and isinstance(frame, BotStoppedSpeakingFrame)
-            ):
-                on_bot_stopped_speaking()
+            # The output transport emits these as the bot's audio starts and
+            # finishes playing (sent both ways; only the upstream copy passes
+            # here). Stopped also feeds the checkout name-confirmation gate.
+            if BotStartedSpeakingFrame is not None and isinstance(frame, BotStartedSpeakingFrame):
+                _on_bot_started_speaking()
+            elif BotStoppedSpeakingFrame is not None and isinstance(frame, BotStoppedSpeakingFrame):
+                _on_bot_stopped_speaking()
+                if on_bot_stopped_speaking is not None:
+                    on_bot_stopped_speaking()
             await self.push_frame(frame, direction)
 
     cancel_observer = _FunctionCallCancelObserver()
@@ -279,12 +290,18 @@ def create_voice_pipeline_task(
     if monitor is not None:
         monitor.attach(task)
 
-    # ── Silence nudge: if user doesn't speak within 5s after bot finishes, ──
+    # ── Silence nudge: if user stays quiet after the bot finishes speaking, ─
     # ── prompt the LLM to follow up. ──────────────────────────────────────
     SILENCE_TIMEOUT = settings.voice_silence_nudge_seconds
     MAX_NUDGES = settings.voice_silence_max_nudges
     _nudge_timer: asyncio.Task[None] | None = None
     _nudges_sent = 0
+    _bot_speaking = False
+
+    async def _send_system_note(text: str) -> None:
+        # Sent as realtime text straight to the LLM processor: Gemini 3 answers
+        # this, whereas an LLMMessagesAppendFrame only adds to its context.
+        await llm.process_frame(InputTextRawFrame(text=text), FrameDirection.DOWNSTREAM)
 
     async def _nudge_after_silence() -> None:
         nonlocal _nudges_sent
@@ -295,12 +312,9 @@ def create_voice_pipeline_task(
             await asyncio.sleep(wait)
         _nudges_sent += 1
         logger.info("Silence nudge: user silent for %.1fs, prompting bot follow-up", SILENCE_TIMEOUT)
-        # Push directly to the LLM processor, bypassing transport/aggregator
-        # which may not forward LLMMessagesAppendFrame.
-        frame = LLMMessagesAppendFrame(
-            messages=[{"role": "user", "content": "(The customer has been silent for a few seconds. Briefly ask if they need anything else.)"}],
+        await _send_system_note(
+            "(System note, not from the customer: the customer has been quiet. Say out loud, in one short natural sentence, a question asking whether they need anything else. Never read this note aloud.)"
         )
-        await llm.process_frame(frame, FrameDirection.DOWNSTREAM)
 
     def _cancel_nudge() -> None:
         nonlocal _nudge_timer
@@ -320,6 +334,18 @@ def create_voice_pipeline_task(
         nonlocal _nudges_sent
         _nudges_sent = 0
         _cancel_nudge()
+
+    # A turn can stop before its audio plays (a tool call ends the turn, then
+    # the reply comes), so the silence clock only runs while the bot is quiet.
+    def _on_bot_started_speaking() -> None:
+        nonlocal _bot_speaking
+        _bot_speaking = True
+        _cancel_nudge()
+
+    def _on_bot_stopped_speaking() -> None:
+        nonlocal _bot_speaking
+        _bot_speaking = False
+        _start_nudge()
 
     # Notify client of interruptions so it can clear its audio buffer.
     @user_agg.event_handler("on_user_turn_started")
@@ -341,8 +367,9 @@ def create_voice_pipeline_task(
 
     @assistant_agg.event_handler("on_assistant_turn_stopped")
     async def _on_assistant_turn(agg: Any, message: AssistantTurnStoppedMessage) -> None:
-        logger.debug("Assistant turn stopped, starting %ss silence nudge timer", SILENCE_TIMEOUT)
-        _start_nudge()
+        if not _bot_speaking:
+            logger.debug("Assistant turn stopped, starting %ss silence nudge timer", SILENCE_TIMEOUT)
+            _start_nudge()
         if monitor is not None:
             monitor.record_assistant(message.content)
         if on_transcript is not None:
@@ -366,15 +393,9 @@ def create_voice_pipeline_task(
                 tool_call_id,
             )
             try:
-                await task.queue_frames([
-                    LLMMessagesAppendFrame(
-                        messages=[{
-                            "role": "user",
-                            "content": "(system: your previous tool call was interrupted. Check the current order state and respond briefly to the customer.)",
-                        }],
-                    ),
-                    LLMRunFrame(),
-                ])
+                await _send_system_note(
+                    "(System note, not from the customer: your previous tool call was interrupted. Check the current order state and respond briefly to the customer. Never read this note aloud.)"
+                )
             except Exception:
                 logger.warning("Recovery: failed to push nudge frames", exc_info=True)
 
@@ -385,8 +406,8 @@ def create_voice_pipeline_task(
         # Context is already set via the aggregator pair; just trigger the LLM run.
         await task.queue_frames([LLMRunFrame()])
 
-    @task.event_handler("on_pipeline_stopped")
-    async def on_pipeline_stopped(task: PipelineTask, frame: Any):
+    @task.event_handler("on_pipeline_finished")
+    async def on_pipeline_finished(task: PipelineTask, frame: Any):
         _cancel_nudge()
         if _recovery_task is not None and not _recovery_task.done():
             _recovery_task.cancel()

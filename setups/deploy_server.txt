@@ -46,6 +46,8 @@ Only if something differs (the stop/start below causes about a minute of downtim
   docker compose exec -T db pg_dump -U postgres auth_template | gzip > ~/voxeats-$(date +%Y%m%d-%H%M).sql.gz
   ls -lh ~/voxeats-*.sql.gz      # must not be a few bytes
 
+#enter the VM
+gcloud compute ssh voxeats-server --zone=us-central1-a --project=voxeats
 
 3. Update the code (VM)
 -----------------------
@@ -65,7 +67,9 @@ That is no longer needed. Undo it, and save anything you still want first:
 ------------------------------
 Compose refuses to start without the two secrets. New values log everyone out
 once (store portal and app); passwords are not affected. Generate each one
-separately and keep existing STRIPE_* values:
+separately and keep existing STRIPE_* values. An existing .env may still hold
+CORS_ORIGINS=* from the old setup; the API refuses to start until it is cleared.
+Write the lines without the indentation or the # comments shown here:
 
   python3 -c "import secrets; print(secrets.token_urlsafe(48))"
 
@@ -94,8 +98,13 @@ Migrations run automatically on container start.
 
 Store portal (static files served by nginx):
 
-  cd ~/voxeats/store-portal && npm ci && npm run build
-  sudo cp -r dist/. /var/www/store-portal/
+  cd ~/voxeats/store-portal
+  cat .env 2>/dev/null                 # VITE_STORE_API_BASE_URL must be unset (same origin)
+  docker run --rm -v "$PWD":/app -w /app node:20-alpine sh -c "npm ci && npm run build" \
+  && sudo cp -r dist/. /var/www/store-portal/
+
+  #docker run --rm -v "$PWD":/app -w /app node:20-alpine sh -c "npm ci && npm run build" \
+    #&& sudo cp -r dist/. /var/www/store-portal/
 
 nginx (copy the config from setups/setup_all.txt if it changed):
 
@@ -106,13 +115,15 @@ nginx (copy the config from setups/setup_all.txt if it changed):
 6. Verify (VM)
 --------------
   docker compose exec api printenv GOOGLE_APPLICATION_CREDENTIALS    # prints nothing
-  docker compose exec api python -c "
-  from google import genai
-  import os
-  c = genai.Client(vertexai=True, project=os.environ['GOOGLE_CLOUD_PROJECT'], location=os.environ['GOOGLE_CLOUD_LOCATION'])
-  print(c.models.generate_content(model='google/gemini-2.5-flash', contents='ping').text)
-  "
+  docker compose exec api python -c "from google import genai; import os; c = genai.Client(vertexai=True, project=os.environ['GOOGLE_CLOUD_PROJECT'], location=os.environ['GOOGLE_CLOUD_LOCATION']); print(c.models.generate_content(model='gemini-2.5-flash', contents='ping').text)"
   sudo ss -tlnp | grep -E ':8000|:5174|:5432'    # only 127.0.0.1:8000
+
+Migration 0025 added stores.is_approved with default false, so existing stores
+disappear from /user/stores until approved. List them, then approve each real
+one (the app only shows stores that are active, approved and published):
+
+  docker compose exec db psql -U postgres -d auth_template -c "select name, email, is_active, is_approved, is_published from stores order by created_at;"
+  docker compose exec db psql -U postgres -d auth_template -c "update stores set is_approved = true where email = '<store email>';"
 
 Then place one real voice order from the app, and log in to the store portal.
 
@@ -134,7 +145,8 @@ Then, from outside the server:
   curl -m 5 http://voxeats.rest-oai.com:5174/            # must time out
   curl -s https://voxeats.rest-oai.com/user/stores       # store list JSON
   curl -s -o /dev/null -w "%{http_code}\n" -X POST https://voxeats.rest-oai.com/voice/telephony/daily/start \
-    -H 'content-type: application/json' -d '{}'          # 404
+    -H 'content-type: application/json' \
+    -d '{"room_url":"https://example.invalid/none","token":"none-none","store_id":"00000000-0000-0000-0000-000000000000"}'    # 404 (an empty body gets 422 first)
 
 
 Remove the demo store (VM, once only)

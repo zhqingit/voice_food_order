@@ -3,12 +3,12 @@ from __future__ import annotations
 try:
     from pipecat.audio.vad.silero import SileroVADAnalyzer, VADParams
     from pipecat.transports.base_transport import BaseTransport
-    from pipecat.transports.services.daily import DailyTransport, DailyTransportParams
+    from pipecat.transports.daily.transport import DailyParams, DailyTransport
 except Exception:  # pragma: no cover - pipecat raises Exception (not ImportError) when daily is missing
     SileroVADAnalyzer = None
     VADParams = None
     DailyTransport = None
-    DailyTransportParams = None
+    DailyParams = None
     BaseTransport = object
 
 
@@ -28,7 +28,7 @@ def create_daily_transport(*, room_url: str, token: str) -> BaseTransport:
         room_url=room_url,
         token=token,
         bot_name="OrderBot",
-        params=DailyTransportParams(
+        params=DailyParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
             camera_out_enabled=False,

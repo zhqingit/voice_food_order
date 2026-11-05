@@ -6,8 +6,6 @@ import logging
 from dataclasses import dataclass
 from decimal import Decimal
 
-from app.core.config import settings
-
 logger = logging.getLogger(__name__)
 
 try:
@@ -34,16 +32,10 @@ class LivePricing:
 # https://ai.google.dev/gemini-api/docs/pricing
 # https://cloud.google.com/vertex-ai/generative-ai/pricing
 #
-# Audio costs 6x text on input and 6x (Vertex) / 2.7x (API) on output, and a
-# voice session is almost entirely audio — so pricing everything at the text
-# rate understates the true cost by roughly an order of magnitude.
-_PRICING_VERTEX_2_5 = LivePricing(  # google/gemini-live-2.5-flash-native-audio
-    text_input=Decimal("0.50"),
-    audio_input=Decimal("3.00"),
-    text_output=Decimal("2.00"),
-    audio_output=Decimal("12.00"),
-)
-_PRICING_API_3_1 = LivePricing(  # gemini-3.1-flash-live-preview
+# Audio costs 4x text on input and 2.7x on output, and a voice session is
+# almost entirely audio — so pricing everything at the text rate understates
+# the true cost several times over.
+_PRICING_LIVE = LivePricing(  # gemini-3.8-live (same list price assumed on Vertex and the API)
     text_input=Decimal("0.75"),
     audio_input=Decimal("3.00"),
     text_output=Decimal("4.50"),
@@ -54,11 +46,6 @@ _PRICING_API_3_1 = LivePricing(  # gemini-3.1-flash-live-preview
 # which is text-only.
 _MONITOR_INPUT_PRICE_PER_M = Decimal("0.30")
 _MONITOR_OUTPUT_PRICE_PER_M = Decimal("2.50")
-
-
-def live_pricing() -> LivePricing:
-    """Pricing for whichever Live model the pipeline is configured to run."""
-    return _PRICING_VERTEX_2_5 if settings.voice_use_vertex else _PRICING_API_3_1
 
 
 def estimate_cost(
@@ -73,7 +60,7 @@ def estimate_cost(
     so the text portion is the remainder. The subtraction is clamped at zero in
     case a turn ever reports an audio count above its own total.
     """
-    pricing = live_pricing()
+    pricing = _PRICING_LIVE
     text_input_tokens = max(prompt_tokens - input_audio_tokens, 0)
     text_output_tokens = max(completion_tokens - output_audio_tokens, 0)
     total = (

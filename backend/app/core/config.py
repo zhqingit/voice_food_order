@@ -53,10 +53,10 @@ class Settings(BaseSettings):
     voice_provider_stt: str = "google"
     voice_provider_tts: str = "google"
     voice_provider_llm: str = "google"
-    voice_llm_model: str = "gemini-3.1-flash-live-preview"
-    # Live voice model when running on Vertex AI. GA native-audio model; the
-    # `google/` prefix is required by pipecat's GeminiLiveVertexLLMService.
-    voice_llm_model_vertex: str = "google/gemini-live-2.5-flash-native-audio"
+    voice_llm_model: str = "gemini-3.8-live"
+    # Live voice model when running on Vertex AI. The `google/` prefix is
+    # required by pipecat's GeminiLiveVertexLLMService.
+    voice_llm_model_vertex: str = "google/gemini-3.8-live"
 
     voice_monitor_model: str = "gemini-2.5-flash"
     voice_monitor_enabled: bool = True
@@ -76,11 +76,9 @@ class Settings(BaseSettings):
     # the background text/image calls can pick different surfaces:
     #   * Background tasks: set GEMINI_USE_VERTEX=true for GA 2.5-flash
     #     reliability (prompt gen, image extract, note verify, monitor).
-    #   * Live voice: set VOICE_USE_VERTEX=true to run GA 2.5-native-audio via
-    #     Vertex (reliable but lower voice quality), or leave false to use the
-    #     preview 3.1-flash-live on the Gemini API (better voice, occasional
-    #     503s). Models for each surface are `voice_llm_model` /
-    #     `voice_llm_model_vertex` below.
+    #   * Live voice: set VOICE_USE_VERTEX=true to run the GA Live model via
+    #     Vertex, or leave false to run it on the Gemini API. Models for each
+    #     surface are `voice_llm_model` / `voice_llm_model_vertex` above.
     gemini_use_vertex: bool = False
     voice_use_vertex: bool = False
     google_cloud_project: str = ""
