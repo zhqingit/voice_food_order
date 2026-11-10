@@ -202,12 +202,23 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
                 },
             },
             {
+                "name": "ask_to_place_order",
+                "description": (
+                    "Call when the customer has nothing more to add and the name has been read back. Returns `say`: "
+                    "say it word for word, then stop and wait for the customer's answer. Refuses until the name was "
+                    "read back and, for delivery, the address was confirmed."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+            {
                 "name": "checkout",
                 "description": (
-                    "Finalize the order. Refuses unless set_customer_name was called, the name was read back, "
-                    "and the customer has answered since. For DELIVERY orders it also refuses unless "
-                    "confirm_delivery_address has been called after the customer verbally confirmed the saved "
-                    "delivery address — there is no way to bypass either check."
+                    "Place the order. Call only after ask_to_place_order and the customer's clear yes. The server "
+                    "checks the customer's own words and refuses anything else, such as a question or a change — "
+                    "there is no way to bypass this check."
                 ),
                 "parameters": {
                     "type": "object",
@@ -217,6 +228,9 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
         ]
     }
 ]
+
+
+_TRANSCRIPT_SETTLE_SECONDS = 0.3
 
 
 def _extract_args(params: Any) -> dict:
@@ -450,12 +464,28 @@ def create_voice_tool_handlers(
 
         return await _run_shielded("set_customer_name", params, _work)
 
+    async def ask_to_place_order(params: Any):
+        args = _extract_args(params)
+        if monitor is not None:
+            monitor.record_tool_call("ask_to_place_order", args)
+
+        async def _work() -> dict:
+            result = await asyncio.to_thread(router.ask_to_place_order)
+            if monitor is not None:
+                monitor.record_tool_result("ask_to_place_order", result)
+            return result
+
+        return await _run_shielded("ask_to_place_order", params, _work)
+
     async def checkout(params: Any):
         args = _extract_args(params)
         if monitor is not None:
             monitor.record_tool_call("checkout", args)
 
         async def _work() -> dict:
+            # The transcription of the customer's answer can land just after the
+            # tool call it triggered; checkout needs to read it.
+            await asyncio.sleep(_TRANSCRIPT_SETTLE_SECONDS)
             result = await asyncio.to_thread(router.checkout)
             if monitor is not None:
                 monitor.record_tool_result("checkout", result)
@@ -522,6 +552,7 @@ def create_voice_tool_handlers(
         "set_fulfillment": set_fulfillment,
         "confirm_delivery_address": confirm_delivery_address,
         "set_customer_name": set_customer_name,
+        "ask_to_place_order": ask_to_place_order,
         "checkout": checkout,
     }
 

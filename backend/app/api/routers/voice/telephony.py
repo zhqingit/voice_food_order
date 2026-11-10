@@ -91,7 +91,9 @@ async def start_daily_call(
         system_prompt=system_prompt,
         tool_schema=GEMINI_VOICE_TOOLS_SCHEMA,
         tool_handlers=tool_handlers,
+        on_bot_started_speaking=tool_context.mark_bot_started_speaking,
         on_bot_stopped_speaking=tool_context.mark_bot_stopped_speaking,
+        on_customer_said=tool_context.mark_customer_said,
     )
 
     runner = PipelineRunner()

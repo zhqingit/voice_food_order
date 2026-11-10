@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 import time
 import uuid
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from typing import Any, Callable
 
 from app.core.time import utcnow_naive
@@ -39,16 +41,66 @@ class VoiceToolContext:
     # was captured. checkout requires the bot to have spoken (the read-back)
     # after the name was captured, plus a pause for the customer to answer.
     name_set_at: float | None = None
+    name_confirmed: bool = False
     bot_speech_ended_at: float | None = None
+    # Order approval gate. ask_to_place_order arms it; checkout only passes if
+    # the very next thing the bot said was that question and the customer's own
+    # words after it are an explicit yes. Any change to the order disarms it.
+    order_ask_total: Decimal | None = None
+    bot_turns_since_ask: int = 0
+    bot_speaking: bool = False
+    customer_reply: str = ""
+
+    def mark_bot_started_speaking(self) -> None:
+        self.bot_speaking = True
+        self.bot_turns_since_ask += 1
+        self.customer_reply = ""
 
     def mark_bot_stopped_speaking(self) -> None:
+        self.bot_speaking = False
         self.bot_speech_ended_at = time.monotonic()
+
+    def mark_customer_said(self, text: str) -> None:
+        if not self.bot_speaking:
+            self.customer_reply = f"{self.customer_reply} {text}".strip()
+
+    def arm_order_approval(self, total: Decimal) -> None:
+        self.order_ask_total = total
+        self.bot_turns_since_ask = 0
+        self.customer_reply = ""
+
+    def disarm_order_approval(self) -> None:
+        self.order_ask_total = None
 
 
 # Seconds between the bot finishing the name read-back and checkout. A checkout
 # issued in the same model response as the read-back lands within milliseconds;
 # one triggered by the customer's "yes" comes seconds later.
 _NAME_CONFIRM_MIN_GAP_SECONDS = 1.0
+
+_APPROVAL_RE = re.compile(
+    r"\b(yes|yeah|yep|yup|sure|ok|okay|confirm|absolutely|definitely"
+    r"|go ahead|place it|place the order|place my order|place order|do it|sounds good|please do)\b"
+)
+# A reply mentioning any of these is a question or a change of mind, even if it
+# also says "yes" ("yes, but add a Coke", "okay, what else do you have").
+_NOT_APPROVAL_RE = re.compile(
+    r"\b(no|nope|not|dont|wait|hold|stop|cancel|change|add|remove|actually|but|before|maybe"
+    r"|what|whats|how|why|where|when|which|who|more|another|else|also)\b"
+)
+_APPROVAL_ZH = ("是的", "好的", "可以", "确认", "下单", "没问题")
+_NOT_APPROVAL_ZH = ("不", "别", "等", "吗", "什么", "还要", "再加", "取消", "？")
+
+
+def is_explicit_order_approval(reply: str) -> bool:
+    """Whether the customer's own words clearly agree to placing the order."""
+    text = (reply or "").strip().lower()
+    if not text or "?" in text or any(word in text for word in _NOT_APPROVAL_ZH):
+        return False
+    normalized = text.replace("'", "").replace("\u2019", "")
+    if _NOT_APPROVAL_RE.search(normalized):
+        return False
+    return bool(_APPROVAL_RE.search(normalized)) or any(word in text for word in _APPROVAL_ZH)
 
 _SPOKEN_WORDS = {
     "n": "North", "s": "South", "e": "East", "w": "West",
@@ -316,6 +368,7 @@ class VoiceToolRouter:
         "2 Liter", "10 inch"). ``size`` is the legacy S/M/L arg — kept for
         back-compat; maps onto a variant row if one matches by name.
         """
+        self._context.disarm_order_approval()
         if quantity <= 0:
             return {"ok": False, "message": "Quantity must be at least 1."}
 
@@ -404,6 +457,7 @@ class VoiceToolRouter:
         menu_item_id: uuid.UUID | None,
         item_name: str | None,
     ) -> dict[str, Any]:
+        self._context.disarm_order_approval()
         with self._context.db_factory() as db:
             order = self._get_order(db, for_update=True)
             if order is None:
@@ -452,6 +506,7 @@ class VoiceToolRouter:
 
     def set_customer_name(self, *, name: str) -> dict[str, Any]:
         """Record the name for the order and start the read-back gate."""
+        self._context.disarm_order_approval()
         clean = " ".join((name or "").split())
         if not clean:
             return {"ok": False, "message": "Name is required."}
@@ -462,11 +517,12 @@ class VoiceToolRouter:
             order.customer_name = clean
             db.commit()
             self._context.name_set_at = time.monotonic()
+            self._context.name_confirmed = False
             return {
                 "ok": True,
                 "message": (
                     "Name saved. Read it back exactly as read_back, then ask if anything else is needed "
-                    "before placing the order. Wait for the customer to answer before calling checkout."
+                    "before placing the order. Wait for the customer to answer before calling ask_to_place_order."
                 ),
                 "read_back": _spell_out(clean),
                 "order": self._build_summary(db, order),
@@ -474,52 +530,102 @@ class VoiceToolRouter:
 
     def _name_confirmation_error(self) -> str | None:
         ctx = self._context
+        if ctx.name_confirmed:
+            return None
         if ctx.name_set_at is None:
             return "No name on the order yet. Ask for the customer's name and call set_customer_name first."
         spoke_after = ctx.bot_speech_ended_at is not None and ctx.bot_speech_ended_at > ctx.name_set_at
         if not spoke_after or time.monotonic() - ctx.bot_speech_ended_at < _NAME_CONFIRM_MIN_GAP_SECONDS:
             return (
                 "The customer has not confirmed the name yet. Read the name back, ask if they need anything "
-                "else, and wait for their answer before calling checkout."
+                "else, and wait for their answer before calling ask_to_place_order."
+            )
+        ctx.name_confirmed = True
+        return None
+
+    def _order_not_ready_error(self, db: Session, order: Order | None) -> str | None:
+        if order is None:
+            return "Order is empty."
+        if order.status != "draft":
+            return self._NOT_EDITABLE
+        has_items = db.execute(
+            select(OrderItem.id).where(OrderItem.order_id == order.id).limit(1)
+        ).first()
+        if has_items is None:
+            return "Order is empty. Add items before checkout."
+        if not order.fulfillment_type:
+            return "Pickup or delivery is not set. Ask the customer and call set_fulfillment first."
+        # Tool-layer gate: delivery orders MUST have a verbal confirmation
+        # (recorded by confirm_delivery_address) before checkout. This is
+        # enforced server-side so the bot cannot skip the read-back step
+        # even under prompt-instruction pressure.
+        if order.fulfillment_type == "delivery" and order.delivery_confirmed_at is None:
+            return (
+                "Delivery address has not been confirmed by the customer yet. "
+                "Read the saved delivery_address back letter-by-letter and, when the customer says yes, "
+                "call confirm_delivery_address. Only then continue."
             )
         return None
 
-    def checkout(self) -> dict[str, Any]:
+    def _arm_and_ask(self, order: Order, message: str) -> dict[str, Any]:
+        self._context.arm_order_approval(order.total)
+        return {
+            "ok": False,
+            "message": f"{message} Say `say` word for word, then stop and wait for the customer's answer.",
+            "say": f"Your total is ${order.total:.2f}. Should I place your order now?",
+        }
+
+    def ask_to_place_order(self) -> dict[str, Any]:
+        """Arm the approval gate; the bot must then ask the returned question."""
         name_error = self._name_confirmation_error()
         if name_error is not None:
             return {"ok": False, "message": name_error}
         with self._context.db_factory() as db:
             order = self._get_order(db, for_update=True)
+            not_ready = self._order_not_ready_error(db, order)
+            if not_ready is not None:
+                return {"ok": False, "message": not_ready}
+            order_service.recalc_totals(db, order=order)
+            db.commit()
+            return {**self._arm_and_ask(order, "Ask the customer now."), "ok": True}
 
-            if order is None:
-                return {"ok": False, "message": "Order is empty."}
-            if order.status != "draft":
-                return {"ok": False, "message": self._NOT_EDITABLE}
-            has_items = db.execute(
-                select(OrderItem.id).where(OrderItem.order_id == order.id).limit(1)
-            ).first()
-            if has_items is None:
-                return {"ok": False, "message": "Order is empty. Add items before checkout."}
-            if not order.fulfillment_type:
-                return {
-                    "ok": False,
-                    "message": "Pickup or delivery is not set. Ask the customer and call set_fulfillment first.",
-                }
+    def _approval_refusal(self, order: Order) -> dict[str, Any] | None:
+        """Refuse checkout unless the customer's own words approved this order."""
+        ctx = self._context
+        # Not armed, or something else was said after the question (so a later
+        # "yes" may be answering that instead): the bot has to ask now.
+        changed = ctx.order_ask_total is not None and ctx.order_ask_total != order.total
+        if ctx.order_ask_total is None or changed or ctx.bot_turns_since_ask > 1:
+            name_error = self._name_confirmation_error()
+            if name_error is not None:
+                return {"ok": False, "message": name_error}
+            reason = "The order changed since the customer was asked." if changed else "The customer has not approved the order."
+            return self._arm_and_ask(order, reason)
+        if ctx.bot_turns_since_ask != 1 or ctx.bot_speaking or not ctx.customer_reply:
+            return {
+                "ok": False,
+                "message": "The customer has not answered yet. Finish asking, then wait for their answer. Do not retry.",
+            }
+        if not is_explicit_order_approval(ctx.customer_reply):
+            reply = ctx.customer_reply
+            ctx.disarm_order_approval()
+            return {
+                "ok": False,
+                "message": (
+                    f'The customer did not clearly agree (they said: "{reply}"). Do NOT place the order. '
+                    "Respond to what they said. When they are ready, call ask_to_place_order."
+                ),
+            }
+        return None
 
-            # Tool-layer gate: delivery orders MUST have a verbal confirmation
-            # (recorded by confirm_delivery_address) before checkout. This is
-            # enforced server-side so the bot cannot skip the read-back step
-            # even under prompt-instruction pressure.
+    def checkout(self) -> dict[str, Any]:
+        with self._context.db_factory() as db:
+            order = self._get_order(db, for_update=True)
+            not_ready = self._order_not_ready_error(db, order)
+            if not_ready is not None:
+                return {"ok": False, "message": not_ready}
+
             if order.fulfillment_type == "delivery":
-                if order.delivery_confirmed_at is None:
-                    return {
-                        "ok": False,
-                        "message": (
-                            "Delivery address has not been confirmed by the customer yet. "
-                            "Read the saved delivery_address back letter-by-letter and, when the customer says yes, "
-                            "call confirm_delivery_address. Only then call checkout."
-                        ),
-                    }
                 # Re-check delivery range at checkout — the address may have been
                 # edited (or the store may have tightened its radius) after the
                 # earlier set_fulfillment call.
@@ -529,9 +635,15 @@ class VoiceToolRouter:
                     if range_error is not None:
                         return range_error
 
-            order.status = "submitted"
             order_service.recalc_totals(db, order=order)
+            refusal = self._approval_refusal(order)
+            if refusal is not None:
+                db.commit()
+                return refusal
+
+            order.status = "submitted"
             db.commit()
+            self._context.disarm_order_approval()
 
             return {"ok": True, "message": "Order submitted.", "order": self._build_summary(db, order)}
 
@@ -552,6 +664,7 @@ class VoiceToolRouter:
         ``ok=False`` with an explanation so the bot can tell the customer
         instead of silently "succeeding" and re-trying in a loop.
         """
+        self._context.disarm_order_approval()
         with self._context.db_factory() as db:
             order = self._get_order(db, for_update=True)
             if order is None:
@@ -626,6 +739,7 @@ class VoiceToolRouter:
         return self.update_item(order_item_id=order_item_id, note=note)
 
     def set_order_note(self, *, note: str) -> dict[str, Any]:
+        self._context.disarm_order_approval()
         with self._context.db_factory() as db:
             order = self._get_order(db, for_update=True)
             if order is None:
@@ -639,6 +753,7 @@ class VoiceToolRouter:
             return {"ok": True, "message": f"Order note set: {note}", "order": self._build_summary(db, order)}
 
     def set_fulfillment(self, *, type: str, delivery_address: str | None = None) -> dict[str, Any]:
+        self._context.disarm_order_approval()
         t = (type or "").strip().lower()
         if t not in ("pickup", "delivery"):
             return {"ok": False, "message": "type must be 'pickup' or 'delivery'."}
@@ -699,6 +814,7 @@ class VoiceToolRouter:
         this. Any subsequent change to the address (via set_fulfillment or the
         client UI) clears this flag and requires another confirmation.
         """
+        self._context.disarm_order_approval()
         with self._context.db_factory() as db:
             order = self._get_order(db, for_update=True)
             if order is None:

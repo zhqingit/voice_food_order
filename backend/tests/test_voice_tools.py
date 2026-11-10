@@ -11,7 +11,7 @@ from app.models.user import User
 from app.schemas.menu.menu import MenuItemCreate
 from app.schemas.order.order import OrderCreate
 from app.services import menu_service, order_service, voice_session_service
-from app.voice.tool_router import VoiceToolContext, VoiceToolRouter
+from app.voice.tool_router import VoiceToolContext, VoiceToolRouter, is_explicit_order_approval
 
 
 @pytest.fixture()
@@ -55,6 +55,25 @@ def _confirm_name(router, name="Alice"):
     ctx.bot_speech_ended_at = ctx.name_set_at + 1
 
 
+def _ask_and_hear(router, reply="Yes, place it."):
+    """ask_to_place_order, then the bot says the question and the customer answers."""
+    asked = router.ask_to_place_order()
+    assert asked["ok"], asked
+    ctx = router._context
+    ctx.mark_bot_started_speaking()
+    ctx.mark_bot_stopped_speaking()
+    ctx.mark_customer_said(reply)
+    return asked
+
+
+def _ready_pickup_order(db_factory, world):
+    router = _router(db_factory, world, user="alice")
+    assert router.add_item(menu_item_id=world["item_id"], item_name=None, quantity=1)["ok"]
+    assert router.set_fulfillment(type="pickup")["ok"]
+    _confirm_name(router)
+    return router
+
+
 def _draft_order(db, world, *, user):
     return order_service.create_draft_order(
         db,
@@ -91,6 +110,7 @@ def test_tools_ignore_another_users_order(db_factory, world, session_factory):
     assert alice_router.get_summary()["order"] is None
     assert alice_router.remove_item(order_item_id=None, menu_item_id=world["item_id"], item_name=None)["ok"] is False
     alice_router._context.name_set_at = alice_router._context.bot_speech_ended_at = time.monotonic() - 5
+    assert alice_router.ask_to_place_order()["ok"] is False
     assert alice_router.checkout()["ok"] is False
 
     with session_factory() as db:
@@ -115,6 +135,8 @@ def test_checkout_requires_items_and_fulfillment(db_factory, world):
     assert no_fulfillment["ok"] is False and "set_fulfillment" in no_fulfillment["message"]
 
     assert router2.set_fulfillment(type="pickup")["ok"]
+    _confirm_name(router2)
+    _ask_and_hear(router2)
     assert router2.checkout()["ok"]
 
 
@@ -124,6 +146,7 @@ def test_submitted_order_cannot_be_changed(db_factory, world, session_factory):
     order_item_id = uuid.UUID(added["order"]["items"][0]["order_item_id"])
     assert router.set_fulfillment(type="pickup")["ok"]
     _confirm_name(router)
+    _ask_and_hear(router)
     assert router.checkout()["ok"]
 
     attempts = [
@@ -134,6 +157,7 @@ def test_submitted_order_cannot_be_changed(db_factory, world, session_factory):
         router.set_fulfillment(type="pickup"),
         router.confirm_delivery_address(),
         router.set_customer_name(name="Alice again"),
+        router.ask_to_place_order(),
         router.checkout(),
     ]
     for result in attempts:
@@ -147,24 +171,25 @@ def test_submitted_order_cannot_be_changed(db_factory, world, session_factory):
         assert order.customer_name == "Alice"
 
 
-def test_checkout_waits_for_answer_to_name_read_back(db_factory, world, session_factory):
+def test_asking_to_place_waits_for_answer_to_name_read_back(db_factory, world, session_factory):
     router = _router(db_factory, world, user="alice")
     assert router.add_item(menu_item_id=world["item_id"], item_name=None, quantity=1)["ok"]
     assert router.set_fulfillment(type="pickup")["ok"]
     ctx = router._context
 
-    assert "set_customer_name" in router.checkout()["message"]
+    assert "set_customer_name" in router.ask_to_place_order()["message"]
 
     named = router.set_customer_name(name="  Alan ")
     assert named["read_back"] == "A, L, A, N"
     # Same model response as the read-back: the bot has not finished speaking.
-    assert router.checkout()["ok"] is False
-    # Bot finished the read-back just now: checkout chained right after it.
+    assert router.ask_to_place_order()["ok"] is False
+    # Bot finished the read-back just now: chained right after it.
     ctx.mark_bot_stopped_speaking()
-    assert router.checkout()["ok"] is False
-    # Customer answered: the read-back ended a few seconds before checkout.
+    assert router.ask_to_place_order()["ok"] is False
+    # Customer answered: the read-back ended a few seconds before.
     ctx.name_set_at -= 3
     ctx.bot_speech_ended_at -= 3
+    _ask_and_hear(router)
     assert router.checkout()["ok"]
 
     with session_factory() as db:
@@ -179,7 +204,134 @@ def test_renaming_restarts_the_read_back_gate(db_factory, world):
     _confirm_name(router, "Aram")
 
     assert router.set_customer_name(name="Alan")["ok"]  # customer corrected the name
+    assert router.ask_to_place_order()["ok"] is False
+
+
+@pytest.mark.parametrize(
+    "reply,approved",
+    [
+        ("Yes.", True),
+        ("Yeah, go ahead.", True),
+        ("Okay, place the order.", True),
+        ("Sure, thanks.", True),
+        ("好的，下单吧", True),
+        ("", False),
+        ("No.", False),
+        ("That's all.", False),
+        ("What else do you have?", False),
+        ("Yes, but add a Coke.", False),
+        ("Okay, what else do you have", False),
+        ("Yes, wait a second.", False),
+        ("I don't think so, yes.", False),
+        ("Alan.", False),
+        ("540 North Mammoth Way.", False),
+        ("Yesterday.", False),
+        ("好的，还要一个可乐", False),
+        ("可以吗", False),
+    ],
+)
+def test_order_approval_needs_the_customers_clear_yes(reply, approved):
+    assert is_explicit_order_approval(reply) is approved
+
+
+def _assert_still_draft(session_factory, router):
+    with session_factory() as db:
+        assert db.get(Order, router._context.order_id).status == "draft"
+
+
+def test_checkout_refused_without_asking(db_factory, world, session_factory):
+    router = _ready_pickup_order(db_factory, world)
+    router._context.mark_customer_said("Yes.")
+
+    result = router.checkout()
+
+    assert result["ok"] is False and "Should I place your order now?" in result["say"]
+    _assert_still_draft(session_factory, router)
+
+    # The refusal itself asked, so the bot saying it and a yes are enough.
+    router._context.mark_bot_started_speaking()
+    router._context.mark_bot_stopped_speaking()
+    router._context.mark_customer_said("Yes.")
+    assert router.checkout()["ok"]
+
+
+def test_checkout_refused_before_the_customer_answers(db_factory, world, session_factory):
+    router = _ready_pickup_order(db_factory, world)
+    ctx = router._context
+    assert router.ask_to_place_order()["ok"]
+
+    assert router.checkout()["ok"] is False  # same model response as the question
+    ctx.mark_bot_started_speaking()
+    assert router.checkout()["ok"] is False  # still asking
+    ctx.mark_customer_said("Yes.")  # talking over the question doesn't count
+    ctx.mark_bot_stopped_speaking()
     assert router.checkout()["ok"] is False
+    _assert_still_draft(session_factory, router)
+
+    ctx.mark_customer_said("Yes.")
+    assert router.checkout()["ok"]
+
+
+def test_question_instead_of_yes_does_not_place_order(db_factory, world, session_factory):
+    router = _ready_pickup_order(db_factory, world)
+    _ask_and_hear(router, reply="What else do you have?")
+
+    result = router.checkout()
+    assert result["ok"] is False and "What else do you have?" in result["message"]
+
+    # A later "yes" doesn't count until the bot has asked again.
+    router._context.mark_customer_said("Yes.")
+    assert router.checkout()["ok"] is False
+    _assert_still_draft(session_factory, router)
+
+    _ask_and_hear(router)
+    assert router.checkout()["ok"]
+
+
+def test_yes_to_something_said_after_the_question_does_not_count(db_factory, world, session_factory):
+    router = _ready_pickup_order(db_factory, world)
+    ctx = router._context
+    assert router.ask_to_place_order()["ok"]
+    ctx.mark_bot_started_speaking()
+    ctx.mark_bot_stopped_speaking()
+    # Silence nudge: "Anything else I can get you?"
+    ctx.mark_bot_started_speaking()
+    ctx.mark_bot_stopped_speaking()
+    ctx.mark_customer_said("Yes.")
+
+    assert router.checkout()["ok"] is False
+    _assert_still_draft(session_factory, router)
+
+
+@pytest.mark.parametrize("change", ["add_item", "set_fulfillment", "set_customer_name"])
+def test_changing_the_order_requires_asking_again(db_factory, world, session_factory, change):
+    router = _ready_pickup_order(db_factory, world)
+    _ask_and_hear(router)
+
+    if change == "add_item":
+        assert router.add_item(menu_item_id=world["item_id"], item_name=None, quantity=2, variant="Large")["ok"]
+    elif change == "set_fulfillment":
+        assert router.set_fulfillment(type="pickup")["ok"]
+    else:
+        assert router.set_customer_name(name="Bob")["ok"]
+
+    assert router.checkout()["ok"] is False
+    _assert_still_draft(session_factory, router)
+
+
+def test_total_changed_outside_the_call_requires_asking_again(db_factory, world, session_factory):
+    from app.models.order_item import OrderItem
+
+    router = _ready_pickup_order(db_factory, world)
+    _ask_and_hear(router)
+    with session_factory() as db:  # e.g. edited in the app while on the call
+        item = db.query(OrderItem).filter(OrderItem.order_id == router._context.order_id).one()
+        item.quantity = 3
+        db.commit()
+
+    result = router.checkout()
+    assert result["ok"] is False and "changed" in result["message"]
+    _assert_still_draft(session_factory, router)
 
 
 def test_ws_ownership_checks(session_factory, world):

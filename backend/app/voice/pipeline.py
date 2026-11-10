@@ -24,6 +24,7 @@ try:
         InputAudioRawFrame,
         InputTextRawFrame,
         LLMRunFrame,
+        TranscriptionFrame,
     )
     from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
     from pipecat.pipeline.pipeline import Pipeline
@@ -51,6 +52,7 @@ except ImportError:  # pragma: no cover - optional dependency
     InputAudioRawFrame = None
     InputTextRawFrame = None
     LLMRunFrame = None
+    TranscriptionFrame = None
     FrameDirection = None
     FrameProcessor = object  # type: ignore[assignment,misc]
     Pipeline = None
@@ -87,7 +89,9 @@ def create_voice_pipeline_task(
     tool_handlers: dict[str, Callable[[Any], Awaitable[Any]]] | None = None,
     on_transcript: Callable[[str, str], Awaitable[None]] | None = None,
     on_interruption: Callable[[], Awaitable[None]] | None = None,
+    on_bot_started_speaking: Callable[[], None] | None = None,
     on_bot_stopped_speaking: Callable[[], None] | None = None,
+    on_customer_said: Callable[[str], None] | None = None,
     monitor: "ConversationMonitor | None" = None,
     usage: UsageAccumulator | None = None,
     enable_metrics: bool = True,
@@ -241,9 +245,11 @@ def create_voice_pipeline_task(
                     pass
             # The output transport emits these as the bot's audio starts and
             # finishes playing (sent both ways; only the upstream copy passes
-            # here). Stopped also feeds the checkout name-confirmation gate.
+            # here). They also feed the checkout name and approval gates.
             if BotStartedSpeakingFrame is not None and isinstance(frame, BotStartedSpeakingFrame):
                 _on_bot_started_speaking()
+                if on_bot_started_speaking is not None:
+                    on_bot_started_speaking()
             elif BotStoppedSpeakingFrame is not None and isinstance(frame, BotStoppedSpeakingFrame):
                 _on_bot_stopped_speaking()
                 if on_bot_stopped_speaking is not None:
@@ -265,10 +271,20 @@ def create_voice_pipeline_task(
                 last_voice_at = time.monotonic()
             await self.push_frame(frame, direction)
 
+    # Sits right next to the LLM: the customer's words feed the checkout approval
+    # gate as soon as Gemini reports them, ahead of the aggregator's turn events.
+    class _CustomerTranscriptTap(FrameProcessor):
+        async def process_frame(self, frame: Any, direction: Any) -> None:
+            await super().process_frame(frame, direction)
+            if on_customer_said is not None and isinstance(frame, TranscriptionFrame) and frame.text:
+                on_customer_said(frame.text)
+            await self.push_frame(frame, direction)
+
     pipeline = Pipeline([
         transport.input(),
         _UserVoiceDetector(),
         user_agg,
+        _CustomerTranscriptTap(),
         llm,
         cancel_observer,
         transport.output(),
