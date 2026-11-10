@@ -221,7 +221,13 @@
     "llmCost": "Costo",
     "failedLoadOrders": "Error al cargar pedidos",
     "failedLoadItems": "Error al cargar artículos del pedido",
-    "failedUpdateOrder": "Error al actualizar el pedido"
+    "failedUpdateOrder": "Error al actualizar el pedido",
+    "newOrderAlert": "¡Nuevo pedido!",
+    "newOrdersWaiting": "{{count}} esperando ser aceptados",
+    "accept": "Aceptar",
+    "enableNotifications": "Activar notificaciones de escritorio",
+    "notificationsBlocked": "Las notificaciones de escritorio están bloqueadas en la configuración del sitio de este navegador.",
+    "newOrderNotification": "Nuevo pedido #{{code}}"
   },
   "profile": {
     "title": "Perfil y Configuración",
@@ -286,5 +292,9 @@
     "unpublished": "No publicada",
     "publishedOn": "Tu tienda ahora es visible para los clientes.",
     "publishedOff": "Tu tienda ahora está oculta para los clientes."
+  },
+  "payments": {
+    "paid": "Pagado",
+    "unpaid": "No pagado"
   }
 }

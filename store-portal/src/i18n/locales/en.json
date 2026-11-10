@@ -222,7 +222,13 @@
     "llmCost": "Cost",
     "failedLoadOrders": "Failed to load orders",
     "failedLoadItems": "Failed to load order items",
-    "failedUpdateOrder": "Failed to update order"
+    "failedUpdateOrder": "Failed to update order",
+    "newOrderAlert": "New order!",
+    "newOrdersWaiting": "{{count}} waiting to be accepted",
+    "accept": "Accept",
+    "enableNotifications": "Enable desktop notifications",
+    "notificationsBlocked": "Desktop notifications are blocked in this browser's site settings.",
+    "newOrderNotification": "New order #{{code}}"
   },
   "profile": {
     "title": "Profile & Settings",

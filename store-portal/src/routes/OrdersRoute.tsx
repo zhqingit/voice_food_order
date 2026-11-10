@@ -13,6 +13,15 @@ import {
 
 const COMMON_STATUSES = ['draft', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const POLL_INTERVAL_MS = 10_000
+// Orders arrive as "submitted"; accepting one moves it to "confirmed".
+const NEW_STATUS = 'submitted'
+const ACCEPTED_STATUS = 'confirmed'
+
+type NotificationState = NotificationPermission | 'unsupported'
+
+function currentNotificationState(): NotificationState {
+  return typeof Notification === 'undefined' ? 'unsupported' : Notification.permission
+}
 
 let _audioCtx: AudioContext | null = null
 function getAudioCtx(): AudioContext {
@@ -83,8 +92,8 @@ function paymentBadge(paymentStatus: string, t: TFunction): React.JSX.Element {
         fontWeight: 700,
         padding: '2px 8px',
         borderRadius: 999,
-        background: paid ? '#dcfce7' : '#f3f4f6',
-        color: paid ? '#16a34a' : '#6b7280',
+        background: paid ? '#dcfce7' : '#fee2e2',
+        color: paid ? '#15803d' : '#b91c1c',
       }}
     >
       {paid ? t('payments.paid') : t('payments.unpaid')}
@@ -141,21 +150,80 @@ export function OrdersRoute(): React.JSX.Element {
   const [items, setItems] = useState<OrderItemOut[]>([])
   const [usage, setUsage] = useState<OrderUsage | null>(null)
   const knownStatuses = useRef<Map<string, string> | null>(null)
+  const [notificationState, setNotificationState] = useState<NotificationState>(currentNotificationState)
+  const openNotifications = useRef(new Map<string, Notification>())
+
+  const notifyNewOrder = useCallback((order: OrderOut): void => {
+    if (currentNotificationState() !== 'granted') return
+    try {
+      const n = new Notification(t('orders.newOrderNotification', { code: order.short_code }), {
+        body: `$${String(order.total)}${order.customer_name ? ` · ${order.customer_name}` : ''}`,
+        tag: order.id,
+        requireInteraction: true,
+      })
+      n.onclick = () => {
+        window.focus()
+        setSelectedOrderId(order.id)
+        n.close()
+      }
+      openNotifications.current.set(order.id, n)
+    } catch { /* notifications not available */ }
+  }, [t])
 
   const reloadOrders = useCallback(async (selectId?: string): Promise<void> => {
     const data = await listOrders()
     if (knownStatuses.current !== null) {
-      const shouldBeep = data.some((o) => {
+      // New non-draft order, or status changed from draft to something else
+      const fresh = data.filter((o) => {
         const prev = knownStatuses.current!.get(o.id)
-        // New non-draft order, or status changed from draft to something else
         return o.status !== 'draft' && (prev === undefined || prev === 'draft')
       })
-      if (shouldBeep) playBeep()
+      if (fresh.length) playBeep()
+      fresh.filter((o) => o.status === NEW_STATUS).forEach(notifyNewOrder)
     }
     knownStatuses.current = new Map(data.map((o) => [o.id, o.status]))
     setOrders(data)
     setSelectedOrderId((prev) => selectId ?? prev ?? (data[0]?.id ?? null))
-  }, [])
+  }, [notifyNewOrder])
+
+  // Oldest first: the order waiting longest is accepted first.
+  const newOrders = useMemo(
+    () => orders.filter((o) => o.status === NEW_STATUS).sort((a, b) => a.created_at.localeCompare(b.created_at)),
+    [orders],
+  )
+
+  // Flash the tab title while orders wait, so it shows from another tab too.
+  useEffect(() => {
+    if (!newOrders.length) return
+    const baseTitle = document.title
+    let flash = false
+    const id = setInterval(() => {
+      flash = !flash
+      document.title = flash ? `🔔 (${newOrders.length}) ${t('orders.newOrderAlert')}` : baseTitle
+    }, 1000)
+    return () => {
+      clearInterval(id)
+      document.title = baseTitle
+    }
+  }, [newOrders.length, t])
+
+  async function requestNotifications(): Promise<void> {
+    if (typeof Notification === 'undefined') return
+    setNotificationState(await Notification.requestPermission())
+  }
+
+  async function handleAccept(order: OrderOut): Promise<void> {
+    setError(null)
+    try {
+      const updated = await updateOrderStatus(order.id, ACCEPTED_STATUS)
+      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
+      setSelectedOrderId(order.id)
+      openNotifications.current.get(order.id)?.close()
+      openNotifications.current.delete(order.id)
+    } catch {
+      setError(t('orders.failedUpdateOrder'))
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -263,9 +331,45 @@ export function OrdersRoute(): React.JSX.Element {
 
   return (
     <>
+      {newOrders.length > 0 && (
+        <div className="new-order-overlay" role="alertdialog" aria-modal="true" aria-labelledby="new-order-title">
+          <div className="new-order-card">
+            <h2 id="new-order-title">{t('orders.newOrderAlert')}</h2>
+            <p style={{ margin: '0 0 12px', color: 'var(--color-text-secondary)' }}>
+              {t('orders.newOrdersWaiting', { count: newOrders.length })}
+            </p>
+            {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
+            {newOrders.map((o) => (
+              <div key={o.id} className="new-order-row">
+                <div>
+                  <div className="mono" style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1 }}>#{o.short_code}</div>
+                  <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                    {localTime(o.created_at)}
+                    {o.fulfillment_type && <span style={{ textTransform: 'capitalize' }}> · {o.fulfillment_type}</span>}
+                    {o.customer_name && <> · {o.customer_name}</>}
+                  </div>
+                  <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>${String(o.total)}</div>
+                </div>
+                <button className="btn btn-primary" onClick={() => void handleAccept(o)}>
+                  {t('orders.accept')}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="page-header">
         <h1>{t('orders.title')}</h1>
         <p>{t('orders.subtitle')}</p>
+        {notificationState === 'default' && (
+          <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => void requestNotifications()}>
+            {t('orders.enableNotifications')}
+          </button>
+        )}
+        {notificationState === 'denied' && (
+          <p style={{ marginTop: 8, fontSize: 12 }}>{t('orders.notificationsBlocked')}</p>
+        )}
       </div>
 
       {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}

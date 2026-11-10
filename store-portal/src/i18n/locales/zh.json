@@ -221,7 +221,13 @@
     "llmCost": "费用",
     "failedLoadOrders": "加载订单失败",
     "failedLoadItems": "加载订单菜品失败",
-    "failedUpdateOrder": "更新订单失败"
+    "failedUpdateOrder": "更新订单失败",
+    "newOrderAlert": "新订单！",
+    "newOrdersWaiting": "{{count}} 个订单等待接单",
+    "accept": "接单",
+    "enableNotifications": "开启桌面通知",
+    "notificationsBlocked": "桌面通知已在浏览器的网站设置中被屏蔽。",
+    "newOrderNotification": "新订单 #{{code}}"
   },
   "profile": {
     "title": "店铺资料与设置",
@@ -316,5 +322,9 @@
     "failedSave": "保存 AI 设置失败。",
     "failedGenerate": "生成规则失败。",
     "rawRequired": "请先输入您的要求。"
+  },
+  "payments": {
+    "paid": "已付款",
+    "unpaid": "未付款"
   }
 }

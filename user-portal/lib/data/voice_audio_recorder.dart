@@ -45,6 +45,10 @@ class VoiceAudioRecorder {
         encoder: AudioEncoder.pcm16bits,
         sampleRate: 16000,
         numChannels: 1,
+        // Without echo cancellation the mic picks up the bot's own voice from
+        // the speaker, and Gemini hears it as the customer talking.
+        echoCancel: true,
+        noiseSuppress: true,
         // On iOS, prevent the record package from pausing/stopping AVAudioEngine
         // when flutter_pcm_sound's AudioUnit starts/stops (which sends
         // iOS audio session interruption notifications).
