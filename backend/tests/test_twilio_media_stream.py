@@ -107,8 +107,33 @@ def test_valid_stream_starts_a_phone_session(user_client, store, monkeypatch):
 
     ctx = captured["context"]
     assert (ctx.store_id, ctx.user_id, ctx.channel, ctx.customer_phone) == (store["id"], None, "phone", CALLER)
-    assert captured["transport"] == {"stream_sid": "MZ123", "call_sid": "CA123"}
-    assert "Hot Wok" in captured["task_kwargs"]["system_prompt"]
+    assert captured["transport"] == {"stream_sid": "MZ123"}
+    kwargs = captured["task_kwargs"]
+    assert "Hot Wok" in kwargs["greeting"] and "## Phone call" in kwargs["system_prompt"]
+    assert "already on the order" in kwargs["system_prompt"]  # caller ID came through
+    tools = {t["name"] for t in kwargs["tool_schema"][0]["function_declarations"]}
+    assert "set_callback_number" in tools
+    assert "transfer_to_staff" not in tools  # no staff number to hand calls to
+
+
+def test_transfer_tool_offered_when_store_has_staff_number(user_client, session_factory, store, monkeypatch):
+    with session_factory() as db:
+        db.get(Store, store["id"]).phone_staff_number = "+16025559999"
+        db.commit()
+    captured = {}
+
+    def fake_task(**kwargs):
+        captured.update(kwargs)
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(twilio_module, "create_twilio_transport", lambda ws, **kw: None)
+    monkeypatch.setattr(twilio_module, "create_voice_pipeline_task", fake_task)
+
+    _close_code(user_client, _start_messages(_token(store["id"])))
+
+    tools = {t["name"] for t in captured["tool_schema"][0]["function_declarations"]}
+    assert "transfer_to_staff" in tools
+    assert "press 0" in captured["system_prompt"]
 
 
 def test_phone_order_has_no_account_and_keeps_caller_number(db_factory, session_factory, store):
@@ -126,3 +151,38 @@ def test_phone_order_has_no_account_and_keeps_caller_number(db_factory, session_
         order = orders[0]
         assert (order.user_id, order.channel, order.customer_phone) == (None, "phone", CALLER)
         assert order.id == ctx.order_id and isinstance(order.id, uuid.UUID)
+
+
+def _phone_router(db_factory, store, *, caller=None):
+    ctx = VoiceToolContext(
+        db_factory=db_factory, store_id=store["id"], user_id=None, channel="phone", customer_phone=caller
+    )
+    return VoiceToolRouter(ctx)
+
+
+def test_hidden_caller_must_give_a_callback_number(db_factory, session_factory, store):
+    router = _phone_router(db_factory, store)
+    assert router.add_item(menu_item_id=store["item_id"], item_name=None, quantity=1)["ok"]
+    assert router.set_fulfillment(type="pickup")["ok"]
+    assert router.set_customer_name(name="Ann")["ok"]
+    ctx = router._context
+    ctx.name_set_at -= 5
+    ctx.bot_speech_ended_at = ctx.name_set_at + 1
+
+    refused = router.ask_to_place_order()
+    assert not refused["ok"] and "set_callback_number" in refused["message"]
+
+    assert not router.set_callback_number(phone="555-1234")["ok"]
+    saved = router.set_callback_number(phone="(480) 555-1234")
+    assert saved["ok"] and saved["read_back"] == "four eight zero, five five five, one two three four"
+    assert router.ask_to_place_order()["ok"]
+    with session_factory() as db:
+        assert db.get(Order, ctx.order_id).customer_phone == CALLER
+
+
+def test_transfer_to_staff_flags_the_call(db_factory, store):
+    router = _phone_router(db_factory, store, caller=CALLER)
+
+    result = router.transfer_to_staff()
+
+    assert result["ok"] and result["say"] and router._context.transfer_requested

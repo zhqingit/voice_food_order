@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from datetime import time
 
 import pytest
 
@@ -6,6 +7,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.core.twilio import compute_twilio_signature, create_stream_token, decode_stream_token
 from app.models.store import Store
+from app.models.store_hours import StoreHours
 
 BASE = "https://voxeats.example.com"
 AUTH_TOKEN = "twilio-test-auth-token"
@@ -147,3 +149,35 @@ def test_stream_token_is_not_an_access_token():
         decode_access_token(token)
     with pytest.raises(ValueError):
         decode_stream_token(token + "x")
+
+
+def test_after_the_agent_the_call_falls_through_to_staff(user_client, session_factory):
+    _make_store(session_factory, phone_staff_number="+16025559999")
+
+    root = _twiml(_call(user_client))
+
+    # Verbs after <Connect> run once we close the stream (transfer / time limit).
+    assert [child.tag for child in root] == ["Connect", "Dial"]
+    assert root.find("Dial").text == "+16025559999"
+
+
+def test_without_staff_the_call_ends_politely_after_the_agent(user_client, session_factory):
+    _make_store(session_factory)
+
+    root = _twiml(_call(user_client))
+
+    assert [child.tag for child in root] == ["Connect", "Say", "Hangup"]
+
+
+def test_closed_store_reads_todays_hours_and_hangs_up(user_client, session_factory):
+    store_id = _make_store(session_factory)
+    with session_factory() as db:
+        for day in range(7):
+            db.add(StoreHours(store_id=store_id, day_of_week=day, open_time=time(9), close_time=time(17), is_closed=True))
+        db.commit()
+
+    root = _twiml(_call(user_client))
+
+    assert root.find("Connect") is None
+    assert "closed right now" in root.find("Say").text and "closed today" in root.find("Say").text
+    assert root.find("Hangup") is not None

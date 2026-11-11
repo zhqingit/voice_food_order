@@ -87,7 +87,7 @@ Key voice files:
 - `backend/app/api/routers/voice/twilio.py` — Twilio phone line (incoming webhook + media stream)
 - `backend/app/voice/session_setup.py` — Per-store prompt/voice setup shared by app and phone
 
-Phone calls use Twilio: `POST /voice/telephony/twilio/incoming` (signature-checked webhook, looks up the store by its admin-assigned `phone_ai_number`) returns TwiML that streams audio to `/voice/telephony/twilio/ws` (8kHz μ-law, short-lived signed token bound to the CallSid). Phone orders have no user account (`user_id` NULL, `channel="phone"`, `customer_phone` = caller ID).
+Phone calls use Twilio: `POST /voice/telephony/twilio/incoming` (signature-checked webhook, looks up the store by its admin-assigned `phone_ai_number`) returns TwiML that streams audio to `/voice/telephony/twilio/ws` (8kHz μ-law, short-lived signed token bound to the CallSid). Phone orders have no user account (`user_id` NULL, `channel="phone"`, `customer_phone` = caller ID). Calls get phone-only tools (`set_callback_number`, `transfer_to_staff`); outside the store's hours (`store_hours_service`, store timezone or `STORE_DEFAULT_TIMEZONE`) the webhook says closed. A transfer (tool or keypad 0) just closes the media stream: Twilio then runs the `<Dial>` to `phone_staff_number` placed after `<Connect>` in the TwiML.
 
 ### Database Schema
 

@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from fastapi import WebSocket
 
-from app.core.config import settings
-
 try:
     from pipecat.serializers.twilio import TwilioFrameSerializer
     from pipecat.transports.base_transport import BaseTransport
@@ -18,20 +16,19 @@ except ImportError:  # pragma: no cover - optional dependency
     BaseTransport = object
 
 
-def create_twilio_transport(websocket: WebSocket, *, stream_sid: str, call_sid: str) -> BaseTransport:
+def create_twilio_transport(websocket: WebSocket, *, stream_sid: str) -> BaseTransport:
     """Transport for a Twilio Media Stream (8 kHz mu-law, resampled by the serializer).
 
-    When the pipeline ends the serializer hangs up the call through Twilio's
-    REST API, so the caller isn't left on a silent line.
+    No auto hang-up: when the stream closes, Twilio runs the TwiML after
+    <Connect> (forward to staff, or say goodbye), which is how calls get
+    transferred. Hanging up via the REST API would cut that off.
     """
     if FastAPIWebsocketTransport is None:
         raise RuntimeError("pipecat is required for the Twilio transport")
 
     serializer = TwilioFrameSerializer(
         stream_sid=stream_sid,
-        call_sid=call_sid,
-        account_sid=settings.telephony_twilio_account_sid,
-        auth_token=settings.telephony_twilio_auth_token,
+        params=TwilioFrameSerializer.InputParams(auto_hang_up=False),
     )
     return FastAPIWebsocketTransport(
         websocket=websocket,

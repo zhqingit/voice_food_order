@@ -230,6 +230,43 @@ GEMINI_VOICE_TOOLS_SCHEMA = [
 ]
 
 
+_SET_CALLBACK_NUMBER_TOOL = {
+    "name": "set_callback_number",
+    "description": (
+        "Phone calls only. Save the phone number the restaurant should call back about this order. Use it when "
+        "the caller's number is unknown, or when they give a different number. Returns `read_back`: say it and "
+        "ask if it's correct; call again with the corrected number if not."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "phone": {"type": "string", "description": "The full phone number including area code."},
+        },
+        "required": ["phone"],
+    },
+}
+
+_TRANSFER_TO_STAFF_TOOL = {
+    "name": "transfer_to_staff",
+    "description": (
+        "Phone calls only. Connect the caller to a person at the restaurant. Use when they ask for a person, "
+        "staff or a manager, or need help you can't give (catering, complaints, an existing order). Returns "
+        "`say`: say it word for word; the call is transferred right after."
+    ),
+    "parameters": {"type": "object", "properties": {}},
+}
+
+
+def build_voice_tools_schema(*, phone: bool = False, can_transfer: bool = False) -> list[dict]:
+    """The app's tools, plus the phone-only ones for calls."""
+    declarations = list(GEMINI_VOICE_TOOLS_SCHEMA[0]["function_declarations"])
+    if phone:
+        declarations.append(_SET_CALLBACK_NUMBER_TOOL)
+        if can_transfer:
+            declarations.append(_TRANSFER_TO_STAFF_TOOL)
+    return [{"function_declarations": declarations}]
+
+
 _TRANSCRIPT_SETTLE_SECONDS = 0.3
 
 
@@ -325,6 +362,7 @@ def create_voice_tool_handlers(
     context: VoiceToolContext,
     monitor: "ConversationMonitor | None" = None,
     on_order_update: Callable[[dict], Awaitable[None]] | None = None,
+    on_transfer_requested: Callable[[], None] | None = None,
 ) -> dict[str, Callable[[Any], Awaitable[Any]]]:
     """Create async tool handler functions for voice interactions, using the provided context to perform actions."""
     router = VoiceToolRouter(context)
@@ -543,7 +581,35 @@ def create_voice_tool_handlers(
 
         return await _run_shielded("confirm_delivery_address", params, _work)
 
+    async def set_callback_number(params: Any):
+        args = _extract_args(params)
+        if monitor is not None:
+            monitor.record_tool_call("set_callback_number", args)
+
+        async def _work() -> dict:
+            result = await asyncio.to_thread(router.set_callback_number, phone=str(args.get("phone") or ""))
+            if monitor is not None:
+                monitor.record_tool_result("set_callback_number", result)
+            await _notify_order(result)
+            return result
+
+        return await _run_shielded("set_callback_number", params, _work)
+
+    async def transfer_to_staff(params: Any):
+        if monitor is not None:
+            monitor.record_tool_call("transfer_to_staff", {})
+
+        async def _work() -> dict:
+            result = router.transfer_to_staff()
+            if on_transfer_requested is not None:
+                on_transfer_requested()
+            return result
+
+        return await _run_shielded("transfer_to_staff", params, _work)
+
     return {
+        "set_callback_number": set_callback_number,
+        "transfer_to_staff": transfer_to_staff,
         "add_item": add_item,
         "update_item": update_item,
         "remove_item": remove_item,

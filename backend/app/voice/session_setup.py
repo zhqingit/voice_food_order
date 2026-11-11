@@ -9,7 +9,8 @@ from app.core.config import settings
 from app.models.store import Store
 from app.voice.menu import load_menu_for_store
 from app.voice.monitor import ConversationMonitor, MonitorConfig
-from app.voice.prompts import build_system_prompt
+from app.services.store_hours_service import store_open_status
+from app.voice.prompts import PhoneCallInfo, build_system_prompt
 
 _VOICE_TONE_MAP = {
     "male": "Puck",
@@ -37,7 +38,7 @@ def _clean(value: str | None) -> str | None:
     return (value or "").strip() or None
 
 
-def load_store_voice_setup(db: Session, store: Store) -> StoreVoiceSetup:
+def load_store_voice_setup(db: Session, store: Store, *, phone: PhoneCallInfo | None = None) -> StoreVoiceSetup:
     """Read everything the agent needs from the DB, so the session can close before the call runs."""
     menu = load_menu_for_store(db, store.id)
     addr_parts = [store.address_line1, store.address_line2, store.city, store.state, store.postal_code]
@@ -53,6 +54,8 @@ def load_store_voice_setup(db: Session, store: Store) -> StoreVoiceSetup:
         store_city=_clean(store.city),
         store_state=_clean(store.state),
         store_country=_clean(store.country),
+        hours_today=store_open_status(db, store).today_text,
+        phone=phone,
     )
     return StoreVoiceSetup(
         system_prompt=system_prompt,

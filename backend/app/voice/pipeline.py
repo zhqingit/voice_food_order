@@ -22,6 +22,7 @@ try:
         BotStoppedSpeakingFrame,
         FunctionCallCancelFrame,
         InputAudioRawFrame,
+        InputDTMFFrame,
         InputTextRawFrame,
         LLMRunFrame,
         TranscriptionFrame,
@@ -50,6 +51,7 @@ except ImportError:  # pragma: no cover - optional dependency
     BotStoppedSpeakingFrame = None
     FunctionCallCancelFrame = None
     InputAudioRawFrame = None
+    InputDTMFFrame = None
     InputTextRawFrame = None
     LLMRunFrame = None
     TranscriptionFrame = None
@@ -96,6 +98,8 @@ def create_voice_pipeline_task(
     usage: UsageAccumulator | None = None,
     enable_metrics: bool = True,
     voice_id: str = "Puck",
+    greeting: str = "Greet me and ask what I want to order.",
+    on_dtmf: Callable[[str], None] | None = None,
 ) -> Any:
     """
     Build a pipecat PipelineTask for a single voice session.
@@ -200,7 +204,7 @@ def create_voice_pipeline_task(
 
     # Create context with greeting message for the aggregator pair.
     context = LLMContext(
-        messages=[{"role": "user", "content": "Greet me and ask what I want to order."}],
+        messages=[{"role": "user", "content": greeting}],
     )
 
     # Use context aggregators for transcript capture + interruption handling.
@@ -269,6 +273,8 @@ def create_voice_pipeline_task(
             await super().process_frame(frame, direction)
             if isinstance(frame, InputAudioRawFrame) and _rms(frame.audio) >= settings.voice_speech_rms_threshold:
                 last_voice_at = time.monotonic()
+            elif on_dtmf is not None and isinstance(frame, InputDTMFFrame):
+                on_dtmf(str(frame.button.value))  # phone keypad (Twilio)
             await self.push_frame(frame, direction)
 
     # Sits right next to the LLM: the customer's words feed the checkout approval

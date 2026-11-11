@@ -11,6 +11,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Callable
 
+from app.core.phone import normalize_phone
 from app.core.time import utcnow_naive
 
 from sqlalchemy import select
@@ -38,6 +39,9 @@ class VoiceToolContext:
     session_id: uuid.UUID | None = None
     # Caller ID on phone orders, saved on the order so staff can call back.
     customer_phone: str | None = None
+    # Phone calls only: set when the caller asked for a person; the call
+    # handler hands the line to staff once the bot finishes speaking.
+    transfer_requested: bool = False
     # Name read-back gate (time.monotonic() values). The pipeline records when
     # the bot last finished speaking; set_customer_name records when the name
     # was captured. checkout requires the bot to have spoken (the read-back)
@@ -134,6 +138,18 @@ def _spell_out(text: str) -> str:
             words.append(", ".join(token.upper()))
     spoken = " ".join(words)
     return f"{spoken}, {parts[1]}" if len(parts) > 1 else spoken
+
+
+_DIGIT_WORDS = "zero one two three four five six seven eight nine".split()
+
+
+def _spell_phone(number: str) -> str:
+    """"+14805551234" → "four eight zero, five five five, one two three four"."""
+    digits = number.lstrip("+")
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    groups = [digits[:3], digits[3:6], digits[6:]] if len(digits) == 10 else [digits]
+    return ", ".join(" ".join(_DIGIT_WORDS[int(d)] for d in group) for group in groups)
 
 
 class VoiceToolRouter:
@@ -568,6 +584,12 @@ class VoiceToolRouter:
                 "Read the saved delivery_address back letter-by-letter and, when the customer says yes, "
                 "call confirm_delivery_address. Only then continue."
             )
+        # Staff need a way to reach a phone customer (their caller ID was hidden).
+        if self._context.channel == "phone" and not order.customer_phone:
+            return (
+                "No callback number for this order. Ask for the best phone number to reach the customer "
+                "and call set_callback_number."
+            )
         return None
 
     def _arm_and_ask(self, order: Order, message: str) -> dict[str, Any]:
@@ -808,6 +830,38 @@ class VoiceToolRouter:
                 "read_back": _spell_out(addr),
                 "order": self._build_summary(db, order),
             }
+
+    def set_callback_number(self, *, phone: str) -> dict[str, Any]:
+        """Phone orders: the number staff should call back (caller ID is used by default)."""
+        try:
+            number = normalize_phone(phone)
+        except ValueError:
+            return {
+                "ok": False,
+                "message": "That isn't a complete phone number. Ask for the full number including area code.",
+            }
+        with self._context.db_factory() as db:
+            order = self._ensure_order(db)
+            if order.status != "draft":
+                return {"ok": False, "message": self._NOT_EDITABLE}
+            order.customer_phone = number
+            db.commit()
+            self._context.customer_phone = number
+            return {
+                "ok": True,
+                "message": "Callback number saved. Read it back as read_back and ask if it's correct.",
+                "read_back": _spell_phone(number),
+                "order": self._build_summary(db, order),
+            }
+
+    def transfer_to_staff(self) -> dict[str, Any]:
+        """Phone calls: hand the caller to the restaurant's staff after the bot's next line."""
+        self._context.transfer_requested = True
+        return {
+            "ok": True,
+            "message": "The call will be transferred right after you speak. Say `say` word for word and nothing else.",
+            "say": "Sure, I'll connect you to the restaurant now. One moment.",
+        }
 
     def confirm_delivery_address(self) -> dict[str, Any]:
         """Record that the customer verbally confirmed the saved delivery address.

@@ -101,6 +101,9 @@ class Settings(BaseSettings):
     # signs webhooks against this URL, so it must match what Twilio requested,
     # not the internal address nginx proxies to.
     public_base_url: str = ""
+    # Opening hours are checked in the store's timezone; stores that never set
+    # one use this.
+    store_default_timezone: str = "America/Phoenix"
     telephony_twilio_account_sid: str | None = None
     telephony_twilio_auth_token: str | None = None
 

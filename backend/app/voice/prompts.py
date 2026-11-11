@@ -1,6 +1,62 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterable
+
+
+@dataclass(frozen=True)
+class PhoneCallInfo:
+    """Set when the agent is answering the restaurant's phone line."""
+
+    caller_known: bool  # caller ID came through, so it's already on the order
+    can_transfer: bool  # the store has a staff number to hand calls to
+
+
+def phone_greeting(store_name: str | None) -> str:
+    """First instruction to the model on a phone call (it speaks first)."""
+    name = store_name or "the restaurant"
+    return (
+        f"A caller just dialed {name}. Answer the phone: say \"Thanks for calling {name}! I'm the automated "
+        "ordering assistant. What can I get for you?\""
+    )
+
+
+def _phone_section(phone: PhoneCallInfo) -> str:
+    lines = [
+        "## Phone call",
+        "You are answering the restaurant's phone. The audio is phone quality, so listen carefully; if you're unsure "
+        "of an item, a name or a number, ask the caller to repeat it, and ask them to spell names and street names.",
+        "- **Payment:** customers pay at the restaurant when they pick up, or pay the driver on delivery. Tell them "
+        "this once, after the order is placed. NEVER ask for card details. If a caller starts reading out a card "
+        "number, stop them politely and say they'll pay at pickup or on delivery.",
+    ]
+    if phone.caller_known:
+        lines.append(
+            "- **Callback number:** the caller's number is already on the order — do NOT ask for it. If they want "
+            "the restaurant to use a different number, call set_callback_number with it and read back its `read_back`."
+        )
+    else:
+        lines.append(
+            "- **Callback number:** the caller's number is hidden. After the name is confirmed and before "
+            "ask_to_place_order, ask \"What's the best number to reach you?\", call set_callback_number, say its "
+            "`read_back` and ask if it's correct. The order can't be placed without it."
+        )
+    if phone.can_transfer:
+        lines.append(
+            "- **Talking to a person:** if the caller asks for a person, staff or a manager, or needs something you "
+            "can't help with (catering, complaints, an order placed earlier), call transfer_to_staff and say its "
+            "`say`. Callers can also press 0 at any time."
+        )
+    else:
+        lines.append(
+            "- **Talking to a person:** nobody is available on this line. If the caller asks for a person, apologise, "
+            "offer to take their order, or suggest they call back later."
+        )
+    lines.append(
+        "- **After checkout:** give the order number as usual, say when to come by (pickup) or that it's on the way "
+        "(delivery), mention payment, and say \"Thanks for calling!\""
+    )
+    return "\n".join(lines)
 
 
 def build_system_prompt(
@@ -13,6 +69,8 @@ def build_system_prompt(
     store_city: str | None = None,
     store_state: str | None = None,
     store_country: str | None = None,
+    hours_today: str | None = None,
+    phone: PhoneCallInfo | None = None,
 ) -> str:
     menu_text = ""
     if menu_lines:
@@ -197,7 +255,12 @@ You MUST verbally confirm the customer's name BEFORE you call the `checkout` too
         store_lines.append("- This store does not currently offer pickup or delivery. Politely tell the customer you cannot take the order.")
     if store_address:
         store_lines.append(f"- Pickup address (read this to the customer for pickup orders): {store_address}")
+    if hours_today:
+        store_lines.append(f"- Today's opening hours: {hours_today}.")
     prompt = f"{prompt}\n\n## Store info\n" + "\n".join(store_lines)
+
+    if phone is not None:
+        prompt = f"{prompt}\n\n{_phone_section(phone)}"
 
     if locality:
         prompt = (
