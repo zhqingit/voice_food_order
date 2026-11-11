@@ -31,6 +31,7 @@ from app.api.routers.voice.sessions import router as voice_sessions_router
 from app.api.routers.voice.orders import router as voice_orders_router
 from app.api.routers.voice.ws import router as voice_ws_router
 from app.api.routers.voice.telephony import router as voice_telephony_router
+from app.api.routers.voice.twilio import router as voice_twilio_router
 from app.core.config import settings
 from app.core.errors import AppError, app_error_handler
 
@@ -64,6 +65,7 @@ app.include_router(voice_sessions_router)
 app.include_router(voice_orders_router)
 app.include_router(voice_ws_router)
 app.include_router(voice_telephony_router)
+app.include_router(voice_twilio_router)
 
 
 @app.get("/health")
