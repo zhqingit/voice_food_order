@@ -5,7 +5,7 @@ from app.voice.events import VoiceEvent, VoiceEventType, log_voice_event, new_vo
 from app.voice.guards import TokenBucket, ensure_max_duration
 from app.voice.tool_router import VoiceToolContext, VoiceToolRouter
 from app.voice.tools import GEMINI_VOICE_TOOLS_SCHEMA, create_voice_tool_handlers
-from app.voice.transports import create_daily_transport, create_websocket_transport
+from app.voice.transports import create_twilio_transport, create_websocket_transport
 
 __all__ = [
     "GoogleVoiceConfig",
@@ -19,7 +19,7 @@ __all__ = [
     "GEMINI_VOICE_TOOLS_SCHEMA",
     "create_voice_tool_handlers",
     "create_websocket_transport",
-    "create_daily_transport",
+    "create_twilio_transport",
     "VoiceEvent",
     "VoiceEventType",
     "new_voice_event",

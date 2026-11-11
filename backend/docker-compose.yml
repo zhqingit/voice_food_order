@@ -34,8 +34,6 @@ services:
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      # Empty disables the phone-call start endpoint.
-      TELEPHONY_SHARED_SECRET: ${TELEPHONY_SHARED_SECRET:-}
       # Phone ordering (Twilio). Empty account SID keeps the phone line off.
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       TELEPHONY_TWILIO_ACCOUNT_SID: ${TELEPHONY_TWILIO_ACCOUNT_SID:-}

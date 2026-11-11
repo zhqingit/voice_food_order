@@ -80,7 +80,9 @@ Write the lines without the indentation or the # comments shown here:
   STRIPE_PUBLISHABLE_KEY=...
   STRIPE_WEBHOOK_SECRET=...
   CORS_ORIGINS=                  # empty: the portal is same-origin behind nginx
-  TELEPHONY_SHARED_SECRET=       # empty: phone endpoint stays off (returns 404)
+  PUBLIC_BASE_URL=https://voxeats.rest-oai.com   # Twilio signs webhooks against this
+  TELEPHONY_TWILIO_ACCOUNT_SID=  # empty: phone line stays off (returns 404)
+  TELEPHONY_TWILIO_AUTH_TOKEN=
 
 Do NOT set GOOGLE_APPLICATION_CREDENTIALS or SEED_DEMO_DATA here.
 
@@ -145,9 +147,8 @@ Then, from outside the server:
   curl -m 5 http://voxeats.rest-oai.com:8000/health      # must time out
   curl -m 5 http://voxeats.rest-oai.com:5174/            # must time out
   curl -s https://voxeats.rest-oai.com/user/stores       # store list JSON
-  curl -s -o /dev/null -w "%{http_code}\n" -X POST https://voxeats.rest-oai.com/voice/telephony/daily/start \
-    -H 'content-type: application/json' \
-    -d '{"room_url":"https://example.invalid/none","token":"none-none","store_id":"00000000-0000-0000-0000-000000000000"}'    # 404 (an empty body gets 422 first)
+  curl -s -o /dev/null -w "%{http_code}\n" -X POST https://voxeats.rest-oai.com/voice/telephony/twilio/incoming
+      # 404 while Twilio isn't configured; 403 (bad signature) once it is
 
 
 Remove the demo store (VM, once only)

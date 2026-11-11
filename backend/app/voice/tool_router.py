@@ -36,6 +36,8 @@ class VoiceToolContext:
     channel: str = "voice"
     order_id: uuid.UUID | None = None
     session_id: uuid.UUID | None = None
+    # Caller ID on phone orders, saved on the order so staff can call back.
+    customer_phone: str | None = None
     # Name read-back gate (time.monotonic() values). The pipeline records when
     # the bot last finished speaking; set_customer_name records when the name
     # was captured. checkout requires the bot to have spoken (the read-back)
@@ -303,6 +305,7 @@ class VoiceToolRouter:
             items=[],
         )
         order = order_service.create_draft_order(db, payload=payload)
+        order.customer_phone = self._context.customer_phone
         self._context.order_id = order.id
 
         if self._context.session_id is not None:

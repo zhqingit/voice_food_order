@@ -20,15 +20,12 @@ from app.schemas.common import Audience, PrincipalType
 from app.voice import (
     GEMINI_VOICE_TOOLS_SCHEMA,
     VoiceToolContext,
-    build_system_prompt,
     create_voice_pipeline_task,
     create_voice_tool_handlers,
     load_google_voice_config,
     load_voice_runtime_config,
 )
-from app.voice.menu import load_menu_for_store
-from app.core.config import settings
-from app.voice.monitor import ConversationMonitor, MonitorConfig
+from app.voice.session_setup import create_monitor, load_store_voice_setup
 from app.voice.transports.websocket import create_websocket_transport
 from app.voice.usage import UsageAccumulator, estimate_monitor_cost
 
@@ -121,38 +118,7 @@ async def voice_ws(
                 voice_session_service.get_owned_draft_order(
                     db, order_id=order_id, user_id=current_user_id, store_id=store_id
                 )
-            store_name = store.name
-            custom_prompt = None
-            if store.custom_prompts:
-                generated_parts = [
-                    (p.get("generated") or "").strip()
-                    for p in store.custom_prompts
-                    if isinstance(p, dict) and (p.get("generated") or "").strip()
-                ]
-                if generated_parts:
-                    custom_prompt = "\n\n".join(generated_parts)
-
-            # Fulfillment context for the voice bot.
-            allow_pickup_flag = bool(store.allow_pickup)
-            allow_delivery_flag = bool(store.allow_delivery)
-            addr_parts = [
-                (store.address_line1 or "").strip(),
-                (store.address_line2 or "").strip(),
-                (store.city or "").strip(),
-                (store.state or "").strip(),
-                (store.postal_code or "").strip(),
-            ]
-            store_address = ", ".join(p for p in addr_parts if p) or None
-            store_city = (store.city or "").strip() or None
-            store_state = (store.state or "").strip() or None
-            store_country = (store.country or "").strip() or None
-
-            _VOICE_TONE_MAP = {
-                "male": "Puck",
-                "female": "Kore",
-            }
-            voice_id = _VOICE_TONE_MAP.get(store.voice_tone, "Puck")
-            menu = load_menu_for_store(db, store_id)
+            setup = load_store_voice_setup(db, store)
         # db is now closed — connection returned to pool
     except AppError:
         await websocket.close(code=1008)
@@ -163,17 +129,6 @@ async def voice_ws(
 
     runtime = load_voice_runtime_config()
     google_config = load_google_voice_config()
-    system_prompt = build_system_prompt(
-        menu_lines=menu,
-        store_name=store_name,
-        custom_prompt=custom_prompt,
-        store_address=store_address,
-        allow_pickup=allow_pickup_flag,
-        allow_delivery=allow_delivery_flag,
-        store_city=store_city,
-        store_state=store_state,
-        store_country=store_country,
-    )
 
     # Tool context uses db_factory so each tool call gets its own short-lived session.
     tool_context = VoiceToolContext(
@@ -185,15 +140,8 @@ async def voice_ws(
         channel="voice",
     )
 
-    # Create the async conversation monitor (Gemini Pro checks each bot turn).
-    menu_text = "\n".join(menu) if menu else ""
-    monitor = ConversationMonitor(
-        menu_text=menu_text,
-        config=MonitorConfig(
-            model=settings.voice_monitor_model,
-            enabled=settings.voice_monitor_enabled,
-        ),
-    )
+    # Async conversation monitor (Gemini Pro checks each bot turn).
+    monitor = create_monitor(setup)
 
     transport = create_websocket_transport(websocket)
     ws_send_lock = asyncio.Lock()
@@ -232,7 +180,7 @@ async def voice_ws(
             transport=transport,
             runtime=runtime,
             google_config=google_config,
-            system_prompt=system_prompt,
+            system_prompt=setup.system_prompt,
             tool_schema=GEMINI_VOICE_TOOLS_SCHEMA,
             tool_handlers=tool_handlers,
             on_bot_started_speaking=tool_context.mark_bot_started_speaking,
@@ -242,7 +190,7 @@ async def voice_ws(
             on_interruption=send_interruption,
             monitor=monitor,
             usage=usage,
-            voice_id=voice_id,
+            voice_id=setup.voice_id,
         )
     except Exception:
         # e.g. expired Google credentials: close cleanly instead of an unhandled ASGI error.

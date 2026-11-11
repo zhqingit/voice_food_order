@@ -97,21 +97,12 @@ class Settings(BaseSettings):
     voice_audio_sample_rate_hz: int = 16000
 
     # Telephony / WebRTC providers
-    telephony_provider: str = "daily"
-    # POST /voice/telephony/daily/start is disabled (404) unless this is set;
-    # callers must send it in the X-Telephony-Secret header. Without it anyone
-    # could start billed Gemini sessions and place orders on any store.
-    telephony_shared_secret: str | None = None
-    telephony_daily_api_key: str | None = None
-    telephony_daily_room_url: str | None = None
-
     # Public origin Twilio reaches us at (https://voxeats.rest-oai.com). Twilio
     # signs webhooks against this URL, so it must match what Twilio requested,
     # not the internal address nginx proxies to.
     public_base_url: str = ""
     telephony_twilio_account_sid: str | None = None
     telephony_twilio_auth_token: str | None = None
-    telephony_twilio_app_sid: str | None = None
 
     # Payments (Stripe Connect). Platform-level keys shared by all stores; each
     # store links its own Express account via Stripe-hosted onboarding and is
@@ -124,11 +115,9 @@ class Settings(BaseSettings):
     # a store may override via stores.platform_fee_bps.
     platform_fee_bps: int = 1000
 
-    @field_validator("jwt_secret", "refresh_token_pepper", "telephony_shared_secret")
+    @field_validator("jwt_secret", "refresh_token_pepper")
     @classmethod
-    def _reject_weak_secret(cls, value: str | None, info) -> str | None:
-        if value is None or (value == "" and info.field_name == "telephony_shared_secret"):
-            return None  # optional secret: unset/empty means the feature is off
+    def _reject_weak_secret(cls, value: str, info) -> str:
         if value.strip().lower() in _PLACEHOLDER_SECRETS or len(value) < _MIN_SECRET_LENGTH:
             raise ValueError(
                 f"{info.field_name.upper()} must be a random string of at least "

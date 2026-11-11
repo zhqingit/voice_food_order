@@ -1,29 +1,63 @@
-"""Twilio voice webhook: answers calls to a store's AI number.
+"""Twilio phone line: answers calls to a store's AI number.
 
-Twilio POSTs here when someone calls (or a restaurant line forwards to) a
-number we own. We reply with TwiML that either streams the call audio to the
-voice agent (/voice/telephony/twilio/ws) or forwards it to the store's staff.
+1. Twilio POSTs /incoming when someone calls (or a restaurant line forwards
+   to) a number we own. We reply with TwiML that either streams the call audio
+   to the voice agent or forwards it to the store's staff.
+2. For the agent, Twilio opens the /ws media stream and we run the same voice
+   pipeline as the app, with 8 kHz telephone audio.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import xml.etree.ElementTree as ET
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Request, Response, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.errors import AppError
 from app.core.phone import normalize_phone
-from app.core.twilio import create_stream_token, is_valid_twilio_signature
-from app.db.session import get_db
+from app.core.twilio import StreamGrant, create_stream_token, decode_stream_token, is_valid_twilio_signature
+from app.db.session import get_db, get_db_session
 from app.models.store import Store
+from app.services import voice_session_service
+from app.voice import (
+    GEMINI_VOICE_TOOLS_SCHEMA,
+    VoiceToolContext,
+    create_voice_pipeline_task,
+    create_voice_tool_handlers,
+    load_google_voice_config,
+    load_voice_runtime_config,
+)
+from app.voice.session_setup import create_monitor, load_store_voice_setup
+from app.voice.transports.twilio import create_twilio_transport
+from app.voice.usage import UsageAccumulator, estimate_monitor_cost
+
+try:
+    from pipecat.pipeline.runner import PipelineRunner
+except ImportError:  # pragma: no cover - optional dependency
+    PipelineRunner = None
+
+logger = logging.getLogger("voice.twilio")
 
 router = APIRouter(prefix="/voice/telephony/twilio", tags=["voice-telephony"])
 
 _STREAM_PATH = "/voice/telephony/twilio/ws"
 _SAY_ATTRS = {"voice": "Polly.Joanna", "language": "en-US"}
 _DIAL_TIMEOUT_SECONDS = "25"
+# Twilio sends "connected" then "start" right after the socket opens.
+_START_TIMEOUT_SECONDS = 10
+
+
+def _twilio_configured() -> bool:
+    return bool(
+        settings.telephony_twilio_auth_token
+        and settings.telephony_twilio_account_sid
+        and settings.public_base_url
+    )
 
 
 def _public_url(path: str, query: str = "") -> str:
@@ -82,15 +116,16 @@ def _connect_agent(store: Store, *, call_sid: str, caller: str | None) -> Respon
 
 @router.post("/incoming")
 async def incoming_call(request: Request, db: Session = Depends(get_db)) -> Response:
-    auth_token = settings.telephony_twilio_auth_token
-    if not auth_token or not settings.telephony_twilio_account_sid or not settings.public_base_url:
+    if not _twilio_configured():
         raise AppError(status_code=404, code="not_found", detail="Not found")
 
     form = await request.form()
     params = {key: str(value) for key, value in form.items()}
     # Twilio signs the public URL it called, not the address nginx proxies to.
     signed_url = _public_url(request.url.path, request.url.query)
-    if not is_valid_twilio_signature(signed_url, params, request.headers.get("X-Twilio-Signature"), auth_token):
+    if not is_valid_twilio_signature(
+        signed_url, params, request.headers.get("X-Twilio-Signature"), settings.telephony_twilio_auth_token
+    ):
         raise AppError(status_code=403, code="invalid_signature", detail="Invalid signature")
 
     if params.get("AccountSid") != settings.telephony_twilio_account_sid:
@@ -110,3 +145,107 @@ async def incoming_call(request: Request, db: Session = Depends(get_db)) -> Resp
     if not agent_ready:
         return _forward_to_staff(store, caller)
     return _connect_agent(store, call_sid=call_sid, caller=caller)
+
+
+async def _read_stream_start(websocket: WebSocket) -> dict:
+    """Return the media stream's "start" payload (skipping "connected")."""
+    while True:
+        message = json.loads(await websocket.receive_text())
+        event = message.get("event")
+        if event == "start":
+            return message.get("start") or {}
+        if event != "connected":
+            raise ValueError(f"unexpected Twilio event before start: {event}")
+
+
+def _authorize_stream(start: dict) -> StreamGrant:
+    token = (start.get("customParameters") or {}).get("token") or ""
+    grant = decode_stream_token(token)
+    # The token was minted for this exact call; refuse it on any other stream.
+    if grant.call_sid != start.get("callSid") or not start.get("streamSid"):
+        raise ValueError("stream does not match token")
+    return grant
+
+
+@router.websocket("/ws")
+async def media_stream(websocket: WebSocket) -> None:
+    if PipelineRunner is None or not _twilio_configured():
+        await websocket.close(code=1011)
+        return
+
+    # Twilio only sends the call details (and our token) after the socket is open.
+    await websocket.accept()
+    try:
+        start = await asyncio.wait_for(_read_stream_start(websocket), timeout=_START_TIMEOUT_SECONDS)
+        grant = _authorize_stream(start)
+        with get_db_session() as db:
+            store = voice_session_service.get_orderable_store(db, store_id=grant.store_id)
+            if not store.phone_ai_enabled:
+                raise AppError(status_code=409, code="phone_ai_disabled", detail="Phone ordering is off")
+            setup = load_store_voice_setup(db, store)
+    except (AppError, ValueError, TimeoutError, WebSocketDisconnect) as exc:
+        logger.warning("Rejected Twilio media stream: %s", exc)
+        await websocket.close(code=1008)
+        return
+
+    store_id = grant.store_id
+    call_sid = grant.call_sid
+    runtime = load_voice_runtime_config()
+    tool_context = VoiceToolContext(
+        db_factory=get_db_session,
+        store_id=store_id,
+        user_id=None,
+        channel="phone",
+        customer_phone=grant.caller,
+    )
+    monitor = create_monitor(setup)
+    tool_handlers = create_voice_tool_handlers(tool_context, monitor=monitor)
+    usage = UsageAccumulator()
+
+    try:
+        transport = create_twilio_transport(websocket, stream_sid=start["streamSid"], call_sid=call_sid)
+        task = create_voice_pipeline_task(
+            transport=transport,
+            runtime=runtime,
+            google_config=load_google_voice_config(),
+            system_prompt=setup.system_prompt,
+            tool_schema=GEMINI_VOICE_TOOLS_SCHEMA,
+            tool_handlers=tool_handlers,
+            on_bot_started_speaking=tool_context.mark_bot_started_speaking,
+            on_bot_stopped_speaking=tool_context.mark_bot_stopped_speaking,
+            on_customer_said=tool_context.mark_customer_said,
+            monitor=monitor,
+            usage=usage,
+            voice_id=setup.voice_id,
+        )
+    except Exception:
+        logger.exception("Failed to start phone pipeline: store=%s call=%s", store_id, call_sid)
+        await websocket.close(code=1011)
+        return
+
+    @transport.event_handler("on_client_disconnected")
+    async def _on_disconnect(transport_ref, ws):
+        await task.cancel(reason="caller_hung_up")
+
+    async def _enforce_max_duration() -> None:
+        await asyncio.sleep(runtime.ws_max_seconds)
+        logger.info("Phone call hit %ss limit: store=%s call=%s", runtime.ws_max_seconds, store_id, call_sid)
+        await task.cancel(reason="max_duration")  # the serializer hangs up the call
+
+    logger.info("Phone call started: store=%s call=%s", store_id, call_sid)
+    watchdog = asyncio.create_task(_enforce_max_duration())
+    try:
+        await PipelineRunner().run(task)
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        logger.exception("Phone pipeline error: store=%s call=%s", store_id, call_sid)
+    finally:
+        watchdog.cancel()
+        prompt = usage.prompt_tokens + monitor.prompt_tokens
+        completion = usage.completion_tokens + monitor.completion_tokens
+        cost = usage.cost + estimate_monitor_cost(monitor.prompt_tokens, monitor.completion_tokens)
+        logger.warning(
+            "Phone call ended: store=%s call=%s order=%s tokens=%d/%d cost=$%s",
+            store_id, call_sid, tool_context.order_id, prompt, completion, cost,
+        )

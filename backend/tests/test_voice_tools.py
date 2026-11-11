@@ -418,39 +418,3 @@ def test_delivery_saves_googles_spelling_and_read_back(db_factory, world, sessio
     assert result["read_back"] == "540 North M, A, M, M, O, T, H Way, Chandler"
     with session_factory() as db:
         assert db.get(Order, router._context.order_id).delivery_address == "540 N Mammoth Way, Chandler, AZ 85225"
-
-
-def _start_call(client, world, *, secret=None, **overrides):
-    payload = {"room_url": "https://example.daily.co/room", "token": "daily-token", "store_id": str(world["store_id"]), **overrides}
-    headers = {"X-Telephony-Secret": secret} if secret else {}
-    return client.post("/voice/telephony/daily/start", json=payload, headers=headers)
-
-
-def test_telephony_start_is_disabled_without_secret(user_client, world, monkeypatch):
-    from app.core.config import settings
-
-    monkeypatch.setattr(settings, "telephony_shared_secret", None)
-    assert _start_call(user_client, world, secret="anything").status_code == 404
-
-
-def test_telephony_start_requires_secret_and_orderable_store(user_client, session_factory, db_factory, world, monkeypatch):
-    from app.api.routers.voice import telephony
-    from app.core.config import settings
-
-    secret = "t" * 40
-    monkeypatch.setattr(settings, "telephony_shared_secret", secret)
-    monkeypatch.setattr(telephony, "get_db_session", db_factory)
-
-    assert _start_call(user_client, world).status_code == 401
-    assert _start_call(user_client, world, secret="wrong" * 8).status_code == 401
-
-    with session_factory() as db:
-        bobs_order_id = _draft_order(db, world, user="bob").id
-        db.commit()
-    foreign = _start_call(user_client, world, secret=secret, user_id=str(world["alice"]), order_id=str(bobs_order_id))
-    assert foreign.status_code == 404
-
-    with session_factory() as db:
-        db.get(Store, world["store_id"]).is_published = False
-        db.commit()
-    assert _start_call(user_client, world, secret=secret).status_code == 410

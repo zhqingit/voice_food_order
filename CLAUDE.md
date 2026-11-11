@@ -84,9 +84,10 @@ Key voice files:
 - `backend/app/voice/tool_router.py` — Tool dispatch to order service
 - `backend/app/voice/tools.py` — Tool schemas for Gemini
 - `backend/app/api/routers/voice/ws.py` — WebSocket endpoint
-- `backend/app/api/routers/voice/telephony.py` — Daily.co phone integration
+- `backend/app/api/routers/voice/twilio.py` — Twilio phone line (incoming webhook + media stream)
+- `backend/app/voice/session_setup.py` — Per-store prompt/voice setup shared by app and phone
 
-Telephony (phone calls) uses Daily.co WebRTC via `POST /voice/telephony/daily/start`.
+Phone calls use Twilio: `POST /voice/telephony/twilio/incoming` (signature-checked webhook, looks up the store by its admin-assigned `phone_ai_number`) returns TwiML that streams audio to `/voice/telephony/twilio/ws` (8kHz μ-law, short-lived signed token bound to the CallSid). Phone orders have no user account (`user_id` NULL, `channel="phone"`, `customer_phone` = caller ID).
 
 ### Database Schema
 
@@ -147,4 +148,4 @@ Backend (`backend/.env`):
 - `VOICE_PROVIDER_STT`, `VOICE_PROVIDER_TTS`, `VOICE_PROVIDER_LLM` — Voice providers (default: google)
 - `VOICE_LLM_MODEL`, `VOICE_LLM_MODEL_VERTEX` — Live model for the Gemini API / Vertex (default: gemini-3.8-live)
 - `GOOGLE_API_KEY` or `GEMINI_API_KEY` — For voice services
-- `TELEPHONY_DAILY_API_KEY`, `TELEPHONY_DAILY_ROOM_URL` — For phone ordering
+- `PUBLIC_BASE_URL`, `TELEPHONY_TWILIO_ACCOUNT_SID`, `TELEPHONY_TWILIO_AUTH_TOKEN` — Twilio phone ordering (all three required, else the endpoints are off)
