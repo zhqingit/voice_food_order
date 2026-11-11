@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { formatPhone } from '../phone'
 import {
   type OrderItemOut,
   type OrderOut,
@@ -83,6 +84,17 @@ function sortIndicator(col: SortKey, active: SortKey, dir: SortDir): string {
   return dir === 'asc' ? ' ↑' : ' ↓'
 }
 
+function channelLabel(channel: string, t: TFunction): React.JSX.Element | string {
+  return channel === 'phone' ? <span className="badge badge-phone">📞 {t('orders.channelPhone')}</span> : channel
+}
+
+// Who placed the order: app account email, or the caller's number for phone orders.
+function accountCell(order: OrderOut): React.JSX.Element | string {
+  if (order.user_email) return order.user_email
+  if (order.customer_phone) return <a href={`tel:${order.customer_phone}`}>{formatPhone(order.customer_phone)}</a>
+  return '—'
+}
+
 function paymentBadge(paymentStatus: string, t: TFunction): React.JSX.Element {
   const paid = paymentStatus === 'paid'
   return (
@@ -157,7 +169,9 @@ export function OrdersRoute(): React.JSX.Element {
     if (currentNotificationState() !== 'granted') return
     try {
       const n = new Notification(t('orders.newOrderNotification', { code: order.short_code }), {
-        body: `$${String(order.total)}${order.customer_name ? ` · ${order.customer_name}` : ''}`,
+        body: `$${String(order.total)}${order.customer_name ? ` · ${order.customer_name}` : ''}${
+          order.customer_phone ? ` · 📞 ${formatPhone(order.customer_phone)}` : ''
+        }`,
         tag: order.id,
         requireInteraction: true,
       })
@@ -297,6 +311,7 @@ export function OrdersRoute(): React.JSX.Element {
         Status: ${escapeHtml(selectedOrder.status)} &nbsp; Channel: ${escapeHtml(selectedOrder.channel)}
         ${selectedOrder.customer_name ? `<br/>Customer: <strong>${escapeHtml(selectedOrder.customer_name)}</strong>` : ''}
         ${selectedOrder.user_email ? `<br/>Account: ${escapeHtml(selectedOrder.user_email)}` : ''}
+        ${selectedOrder.customer_phone ? `<br/>Phone: <strong>${escapeHtml(formatPhone(selectedOrder.customer_phone))}</strong>` : ''}
       </div>
       <table>
         <thead><tr>
@@ -347,6 +362,7 @@ export function OrdersRoute(): React.JSX.Element {
                     {localTime(o.created_at)}
                     {o.fulfillment_type && <span style={{ textTransform: 'capitalize' }}> · {o.fulfillment_type}</span>}
                     {o.customer_name && <> · {o.customer_name}</>}
+                    {o.customer_phone && <> · 📞 {formatPhone(o.customer_phone)}</>}
                   </div>
                   <div style={{ fontWeight: 700, color: 'var(--color-primary)' }}>${String(o.total)}</div>
                 </div>
@@ -412,8 +428,8 @@ export function OrdersRoute(): React.JSX.Element {
                 >
                   <td style={tdStyle}><span className={`badge badge-${o.status}`}>{o.status}</span></td>
                   <td style={tdStyle}>{localTime(o.created_at)}</td>
-                  <td style={tdStyle}>{o.channel}</td>
-                  <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>{o.user_email ?? '—'}</td>
+                  <td style={tdStyle}>{channelLabel(o.channel, t)}</td>
+                  <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>{accountCell(o)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.subtotal)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>${String(o.tax)}</td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: 'var(--color-primary)' }}>${String(o.total)}</td>
@@ -444,7 +460,7 @@ export function OrdersRoute(): React.JSX.Element {
               </div>
               <div className="form-group">
                 <span className="meta-label">Account</span>
-                <span>{selectedOrder.user_email ?? '—'}</span>
+                <span>{selectedOrder.channel === 'phone' ? channelLabel('phone', t) : (selectedOrder.user_email ?? '—')}</span>
               </div>
               <div className="form-group">
                 <span className="meta-label">{t('orders.created')}</span>
@@ -468,6 +484,15 @@ export function OrdersRoute(): React.JSX.Element {
               <div className="form-group" style={{ marginTop: 12 }}>
                 <span className="meta-label">Customer</span>
                 <span style={{ fontWeight: 600 }}>{selectedOrder.customer_name}</span>
+              </div>
+            )}
+
+            {selectedOrder.customer_phone && (
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <span className="meta-label">{t('orders.callbackPhone')}</span>
+                <a href={`tel:${selectedOrder.customer_phone}`} style={{ fontWeight: 600 }}>
+                  {formatPhone(selectedOrder.customer_phone)}
+                </a>
               </div>
             )}
 

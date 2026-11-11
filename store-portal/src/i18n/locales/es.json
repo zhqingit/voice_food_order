@@ -227,7 +227,9 @@
     "accept": "Aceptar",
     "enableNotifications": "Activar notificaciones de escritorio",
     "notificationsBlocked": "Las notificaciones de escritorio están bloqueadas en la configuración del sitio de este navegador.",
-    "newOrderNotification": "Nuevo pedido #{{code}}"
+    "newOrderNotification": "Nuevo pedido #{{code}}",
+    "channelPhone": "Teléfono",
+    "callbackPhone": "Teléfono de contacto"
   },
   "profile": {
     "title": "Perfil y Configuración",
@@ -296,5 +298,28 @@
   "payments": {
     "paid": "Pagado",
     "unpaid": "No pagado"
+  },
+  "phone": {
+    "title": "Pedidos por teléfono (IA)",
+    "notSetUp": "Deja que la IA conteste el teléfono de tu restaurante cuando estés ocupado. Contáctanos para obtener tu número de IA.",
+    "aiNumber": "Tu número de teléfono de IA",
+    "on": "Activado",
+    "off": "Desactivado",
+    "onDesc": "La IA contesta las llamadas a este número y toma pedidos.",
+    "offDesc": "Los pedidos por teléfono están desactivados. Las llamadas a este número van al teléfono del personal (si está configurado).",
+    "turnedOn": "Pedidos por teléfono activados.",
+    "turnedOff": "Pedidos por teléfono desactivados.",
+    "staffNumber": "Teléfono del personal (para transferencias)",
+    "staffDesc": "Las personas que pidan hablar con alguien o marquen 0 se conectan aquí. Usa un celular u otra línea, no el número del restaurante que desvía a la IA.",
+    "staffSaved": "Teléfono del personal guardado.",
+    "staffSameAsAi": "El teléfono del personal debe ser distinto del número de IA.",
+    "invalidNumber": "Ingresa un número completo, p. ej. +1 480 555 1234.",
+    "noNumberYet": "Aún no tienes un número de teléfono de IA.",
+    "saveFailed": "No se pudo guardar. Inténtalo de nuevo.",
+    "setupTitle": "Conecta la línea de tu restaurante",
+    "setupForward": "Pide a tu proveedor telefónico que desvíe las llamadas no contestadas (y cuando la línea esté ocupada) a {{number}}.",
+    "setupTurnOn": "Activa los pedidos por teléfono arriba.",
+    "setupTest": "Llama a tu restaurante y deja que suene: la IA debería contestar.",
+    "paymentNote": "Los pedidos por teléfono se pagan al recoger o al entregar. Aparecen en Pedidos con la etiqueta Teléfono y el número de quien llamó."
   }
 }

@@ -25,6 +25,10 @@ export type StoreMe = {
   // Admin-controlled, read-only. Drives the status banner.
   is_approved: boolean
   is_active: boolean
+  // Phone ordering. The AI number is assigned by the platform (read-only here).
+  phone_ai_number: string | null
+  phone_ai_enabled: boolean
+  phone_staff_number: string | null
   email: string
   created_at: string
 }
@@ -49,6 +53,8 @@ export type StoreMeUpdate = Partial<
     | 'voice_tone'
     | 'logo_url'
     | 'is_published'
+    | 'phone_ai_enabled'
+    | 'phone_staff_number'
   >
 >
 

@@ -227,7 +227,9 @@
     "accept": "接单",
     "enableNotifications": "开启桌面通知",
     "notificationsBlocked": "桌面通知已在浏览器的网站设置中被屏蔽。",
-    "newOrderNotification": "新订单 #{{code}}"
+    "newOrderNotification": "新订单 #{{code}}",
+    "channelPhone": "电话",
+    "callbackPhone": "回电号码"
   },
   "profile": {
     "title": "店铺资料与设置",
@@ -326,5 +328,28 @@
   "payments": {
     "paid": "已付款",
     "unpaid": "未付款"
+  },
+  "phone": {
+    "title": "电话点餐（AI）",
+    "notSetUp": "忙不过来时让 AI 接听餐厅电话。请联系我们获取专属 AI 电话号码。",
+    "aiNumber": "您的 AI 电话号码",
+    "on": "已开启",
+    "off": "已关闭",
+    "onDesc": "AI 会接听打到这个号码的电话并下单。",
+    "offDesc": "电话点餐已关闭。打到这个号码的电话会转到员工电话（如已设置）。",
+    "turnedOn": "电话点餐已开启。",
+    "turnedOff": "电话点餐已关闭。",
+    "staffNumber": "员工电话（用于转接）",
+    "staffDesc": "顾客要求找人或按 0 时会转接到这里。请填手机或其他线路，不要填会转接给 AI 的餐厅座机。",
+    "staffSaved": "员工电话已保存。",
+    "staffSameAsAi": "员工电话不能和 AI 号码相同。",
+    "invalidNumber": "请输入完整的电话号码，例如 +1 480 555 1234。",
+    "noNumberYet": "您还没有 AI 电话号码。",
+    "saveFailed": "保存失败，请重试。",
+    "setupTitle": "连接餐厅电话",
+    "setupForward": "请联系您的电话运营商，设置无人接听（以及占线）时转接到 {{number}}。",
+    "setupTurnOn": "在上方开启电话点餐。",
+    "setupTest": "拨打餐厅电话并让它一直响：AI 应该会接听。",
+    "paymentNote": "电话订单在取餐或送达时付款。它们会出现在订单页，带有“电话”标记和来电号码。"
   }
 }

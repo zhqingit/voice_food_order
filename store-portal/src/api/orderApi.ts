@@ -14,6 +14,8 @@ export type OrderOut = {
   tax: Money
   total: Money
   customer_name: string | null
+  // Phone orders: the caller's number (E.164) for call-backs.
+  customer_phone: string | null
   user_email: string | null
   notes: string | null
   fulfillment_type: string | null

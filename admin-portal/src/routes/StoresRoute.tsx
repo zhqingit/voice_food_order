@@ -24,6 +24,18 @@ function pill(label: string, color: 'green' | 'gray' | 'amber' | 'red'): React.J
   )
 }
 
+// "+14805551234" → "(480) 555-1234"; other countries shown as stored.
+function formatPhone(e164: string): string {
+  const m = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(e164)
+  return m ? `(${m[1]}) ${m[2]}-${m[3]}` : e164
+}
+
+function errorCode(err: unknown): string | null {
+  const res = (err as { response?: { status?: number; data?: { code?: string } } }).response
+  if (res?.status === 422) return 'invalid'
+  return res?.data?.code ?? null
+}
+
 function localTime(iso: string): string {
   const s = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
   return new Date(s).toLocaleString()
@@ -39,6 +51,7 @@ export function StoresRoute(): React.JSX.Element {
   const [detail, setDetail] = useState<AdminStoreDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [feeInput, setFeeInput] = useState('')
+  const [aiNumberInput, setAiNumberInput] = useState('')
   const [saving, setSaving] = useState(false)
 
   const selected = useMemo(() => stores.find((s) => s.id === selectedId) ?? null, [stores, selectedId])
@@ -73,6 +86,7 @@ export function StoresRoute(): React.JSX.Element {
         const d = await getStore(selectedId)
         setDetail(d)
         setFeeInput(d.platform_fee_bps != null ? String(d.platform_fee_bps / 100) : '')
+        setAiNumberInput(d.phone_ai_number ?? '')
       } catch {
         setError('Failed to load store detail.')
       } finally {
@@ -91,10 +105,15 @@ export function StoresRoute(): React.JSX.Element {
     setError(null)
     setMessage(null)
     try {
-      applyUpdated(await updateStore(id, body))
+      const updated = await updateStore(id, body)
+      applyUpdated(updated)
+      setAiNumberInput(updated.phone_ai_number ?? '')
       setMessage(okMsg)
-    } catch {
-      setError('Update failed.')
+    } catch (err) {
+      const code = errorCode(err)
+      if (code === 'phone_number_taken') setError('That number is already assigned to another store.')
+      else if (code === 'invalid') setError('Enter a full phone number, e.g. +1 623 294 3370.')
+      else setError('Update failed.')
     } finally {
       setSaving(false)
     }
@@ -142,6 +161,7 @@ export function StoresRoute(): React.JSX.Element {
                 <th style={thStyle}>Published</th>
                 <th style={thStyle}>Payments</th>
                 <th style={{ ...thStyle, textAlign: 'right' }}>Fee</th>
+                <th style={thStyle}>AI phone</th>
                 <th style={thStyle}>Created</th>
               </tr>
             </thead>
@@ -172,6 +192,16 @@ export function StoresRoute(): React.JSX.Element {
                     {s.effective_fee_bps / 100}%
                     {s.platform_fee_bps == null && (
                       <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--color-text-secondary)' }}>(default)</span>
+                    )}
+                  </td>
+                  <td style={tdStyle}>
+                    {s.phone_ai_number ? (
+                      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                        <span className="mono">{formatPhone(s.phone_ai_number)}</span>
+                        {s.phone_ai_enabled ? pill('On', 'green') : pill('Off', 'gray')}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-secondary)' }}>—</span>
                     )}
                   </td>
                   <td style={{ ...tdStyle, color: 'var(--color-text-secondary)' }}>{localTime(s.created_at)}</td>
@@ -267,6 +297,44 @@ export function StoresRoute(): React.JSX.Element {
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
                   Leave blank to use the platform default. Effective: {selected.effective_fee_bps / 100}%
+                </p>
+              </div>
+
+              <div>
+                <span className="meta-label">AI phone number</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input
+                    className="form-input"
+                    value={aiNumberInput}
+                    onChange={(e) => setAiNumberInput(e.target.value)}
+                    inputMode="tel"
+                    placeholder="+1 623 294 3370"
+                    style={{ width: 170 }}
+                  />
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={saving || !aiNumberInput.trim()}
+                    onClick={() => void patch(selected.id, { phone_ai_number: aiNumberInput.trim() }, 'AI phone number assigned.')}
+                  >
+                    Assign
+                  </button>
+                  {selected.phone_ai_number && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={saving}
+                      onClick={() => {
+                        if (window.confirm(`Remove ${formatPhone(selected.phone_ai_number ?? '')} from ${selected.name}? Phone ordering will turn off.`)) {
+                          void patch(selected.id, { phone_ai_number: null }, 'AI phone number removed.')
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
+                  A Twilio number you bought for this store (its voice webhook must point at /voice/telephony/twilio/incoming).
+                  {selected.phone_ai_number && <> Store has phone ordering {selected.phone_ai_enabled ? 'on' : 'off'}.</>}
                 </p>
               </div>
             </div>

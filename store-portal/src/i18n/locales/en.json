@@ -228,7 +228,9 @@
     "accept": "Accept",
     "enableNotifications": "Enable desktop notifications",
     "notificationsBlocked": "Desktop notifications are blocked in this browser's site settings.",
-    "newOrderNotification": "New order #{{code}}"
+    "newOrderNotification": "New order #{{code}}",
+    "channelPhone": "Phone",
+    "callbackPhone": "Callback phone"
   },
   "profile": {
     "title": "Profile & Settings",
@@ -340,5 +342,28 @@
     "unpaid": "Unpaid",
     "loadError": "Couldn't load payment status.",
     "connectError": "Couldn't start Stripe onboarding. Please try again."
+  },
+  "phone": {
+    "title": "Phone ordering (AI)",
+    "notSetUp": "Let the AI answer your restaurant's phone when you're busy. Contact us to get your AI phone number.",
+    "aiNumber": "Your AI phone number",
+    "on": "On",
+    "off": "Off",
+    "onDesc": "The AI answers calls to this number and takes orders.",
+    "offDesc": "Phone ordering is off. Calls to this number go to your staff phone (if set).",
+    "turnedOn": "Phone ordering turned on.",
+    "turnedOff": "Phone ordering turned off.",
+    "staffNumber": "Staff phone (for transfers)",
+    "staffDesc": "Callers who ask for a person or press 0 are connected here. Use a cell phone or another line, not the restaurant number that forwards to the AI.",
+    "staffSaved": "Staff phone saved.",
+    "staffSameAsAi": "The staff phone must be different from the AI number.",
+    "invalidNumber": "Enter a full phone number, e.g. +1 480 555 1234.",
+    "noNumberYet": "You don't have an AI phone number yet.",
+    "saveFailed": "Couldn't save. Please try again.",
+    "setupTitle": "Connect your restaurant line",
+    "setupForward": "Ask your phone provider to forward calls you don't answer (and when the line is busy) to {{number}}.",
+    "setupTurnOn": "Turn phone ordering on above.",
+    "setupTest": "Call your restaurant and let it ring: the AI should pick up.",
+    "paymentNote": "Phone orders are paid at pickup or on delivery. They show up in Orders with a Phone badge and the caller's number."
   }
 }

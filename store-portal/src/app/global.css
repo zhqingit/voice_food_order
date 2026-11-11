@@ -372,6 +372,7 @@ textarea.form-input {
 .badge-cancelled { background: #fef2f2; color: #dc2626; }
 .badge-active { background: #f0fdf4; color: #16a34a; }
 .badge-inactive { background: #f3f4f6; color: #6b7280; }
+.badge-phone { background: #f5f3ff; color: #7c3aed; }
 
 /* --- List items --- */
 .list-item {

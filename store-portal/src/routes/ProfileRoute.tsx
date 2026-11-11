@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getMe, updateMe, uploadLogo, getHours, updateHours, type StoreMe, type DayHours } from '../api/storeApi'
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_SIZE_LABEL } from '../config'
 import { PaymentsCard } from '../components/PaymentsCard'
+import { PhoneOrderingCard } from '../components/PhoneOrderingCard'
 
 // The radius is stored in km (delivery_radius_km) but stores are US-based, so
 // the form shows and accepts miles.
@@ -475,6 +476,9 @@ export function ProfileRoute(): React.JSX.Element {
           </div>
         </div>
       )}
+
+      {/* Phone ordering Card */}
+      {!loading && me && <PhoneOrderingCard me={me} onUpdated={setMe} />}
 
       {/* Payments Card */}
       {!loading && me && <PaymentsCard />}

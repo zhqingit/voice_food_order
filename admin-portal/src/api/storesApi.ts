@@ -12,6 +12,8 @@ export type AdminStore = {
   stripe_charges_enabled: boolean
   platform_fee_bps: number | null // store override; null = platform default
   effective_fee_bps: number // resolved commission actually applied
+  phone_ai_number: string | null // Twilio number answered by the AI (E.164)
+  phone_ai_enabled: boolean // store's own on/off switch for phone ordering
   created_at: string
 }
 
@@ -27,6 +29,8 @@ export type AdminStoreUpdate = {
   // Send null to clear the override (fall back to the platform default);
   // omit to leave unchanged.
   platform_fee_bps?: number | null
+  // Send null to take the number away (also turns phone ordering off).
+  phone_ai_number?: string | null
 }
 
 export async function listStores(): Promise<AdminStore[]> {
