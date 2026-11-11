@@ -33,6 +33,8 @@ class Order(Base):
     total: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False, default=Decimal("0.00"))
 
     customer_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Caller's number (E.164) for phone orders, so the store can call back.
+    customer_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # "pickup" | "delivery" | None (not yet chosen)
     fulfillment_type: Mapped[str | None] = mapped_column(String(16), nullable=True)

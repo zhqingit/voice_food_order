@@ -105,6 +105,10 @@ class Settings(BaseSettings):
     telephony_daily_api_key: str | None = None
     telephony_daily_room_url: str | None = None
 
+    # Public origin Twilio reaches us at (https://voxeats.rest-oai.com). Twilio
+    # signs webhooks against this URL, so it must match what Twilio requested,
+    # not the internal address nginx proxies to.
+    public_base_url: str = ""
     telephony_twilio_account_sid: str | None = None
     telephony_twilio_auth_token: str | None = None
     telephony_twilio_app_sid: str | None = None

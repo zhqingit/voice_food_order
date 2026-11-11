@@ -45,6 +45,7 @@ def _order_out(order: Order, db: Session) -> OrderOut:
         tax=order.tax,
         total=order.total,
         customer_name=order.customer_name,
+        customer_phone=order.customer_phone,
         user_email=user_email,
         notes=order.notes,
         fulfillment_type=order.fulfillment_type,

@@ -84,3 +84,12 @@ def store_client(session_factory):
             yield c
         finally:
             app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def admin_client(session_factory):
+    with _make_client(session_factory, base_url="http://admin-api.local") as c:
+        try:
+            yield c
+        finally:
+            app.dependency_overrides.clear()

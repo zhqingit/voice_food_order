@@ -31,6 +31,7 @@ class OrderOut(BaseModel):
     tax: Decimal
     total: Decimal
     customer_name: str | None = None
+    customer_phone: str | None = None
     user_email: str | None = None
     notes: str | None
     fulfillment_type: str | None = None

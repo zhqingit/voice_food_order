@@ -54,6 +54,14 @@ class Store(Base):
     # falls back to the platform default (settings.platform_fee_bps).
     platform_fee_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    # Phone ordering. phone_ai_number (E.164) is the Twilio number whose calls
+    # reach this store's voice bot; admin-assigned so a store can't claim
+    # another store's line. phone_staff_number is where callers asking for a
+    # person are transferred; it must not forward back to phone_ai_number.
+    phone_ai_number: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True)
+    phone_ai_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    phone_staff_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 

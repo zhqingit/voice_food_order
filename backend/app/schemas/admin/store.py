@@ -3,7 +3,9 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.core.phone import normalize_phone
 
 
 class AdminStoreOut(BaseModel):
@@ -20,6 +22,9 @@ class AdminStoreOut(BaseModel):
     stripe_charges_enabled: bool
     platform_fee_bps: int | None  # store override; None = platform default
     effective_fee_bps: int  # resolved commission actually applied
+    # Phone ordering
+    phone_ai_number: str | None
+    phone_ai_enabled: bool
     created_at: datetime
 
 
@@ -35,3 +40,10 @@ class AdminStoreUpdate(BaseModel):
     # Send null to clear the override (fall back to the platform default);
     # omit the field to leave it unchanged.
     platform_fee_bps: int | None = Field(default=None, ge=0, le=10000)
+    # The Twilio number routed to this store. Send null to unassign it.
+    phone_ai_number: str | None = Field(default=None, max_length=32)
+
+    @field_validator("phone_ai_number")
+    @classmethod
+    def _normalize_ai_number(cls, value: str | None) -> str | None:
+        return normalize_phone(value) if value and value.strip() else None

@@ -36,6 +36,10 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       # Empty disables the phone-call start endpoint.
       TELEPHONY_SHARED_SECRET: ${TELEPHONY_SHARED_SECRET:-}
+      # Phone ordering (Twilio). Empty account SID keeps the phone line off.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      TELEPHONY_TWILIO_ACCOUNT_SID: ${TELEPHONY_TWILIO_ACCOUNT_SID:-}
+      TELEPHONY_TWILIO_AUTH_TOKEN: ${TELEPHONY_TWILIO_AUTH_TOKEN:-}
       GOOGLE_CLOUD_PROJECT: voxeats
       GOOGLE_CLOUD_LOCATION: us-central1
       GEMINI_USE_VERTEX: "true"

@@ -53,6 +53,9 @@ def _store_out(s: Store) -> StoreOut:
         is_published=s.is_published,
         is_approved=s.is_approved,
         is_active=s.is_active,
+        phone_ai_number=s.phone_ai_number,
+        phone_ai_enabled=s.phone_ai_enabled,
+        phone_staff_number=s.phone_staff_number,
         email=s.email,
         created_at=s.created_at,
     )
@@ -88,6 +91,19 @@ def update_me(
     address_changed = any(key in updates for key in _ADDRESS_FIELDS)
     for key, value in updates.items():
         setattr(current_store, key, value)
+
+    if current_store.phone_ai_enabled and not current_store.phone_ai_number:
+        raise AppError(
+            status_code=409,
+            code="phone_ai_number_missing",
+            detail="Phone ordering needs an AI phone number. Contact support to get one.",
+        )
+    if current_store.phone_staff_number and current_store.phone_staff_number == current_store.phone_ai_number:
+        raise AppError(
+            status_code=400,
+            code="phone_staff_number_invalid",
+            detail="The staff number must be a different line from the AI phone number.",
+        )
 
     if address_changed:
         composed = _compose_address(current_store)

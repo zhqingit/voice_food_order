@@ -39,6 +39,8 @@ def _store_out(s: Store) -> AdminStoreOut:
         stripe_charges_enabled=s.stripe_charges_enabled,
         platform_fee_bps=s.platform_fee_bps,
         effective_fee_bps=payment_service.resolve_fee_bps(s),
+        phone_ai_number=s.phone_ai_number,
+        phone_ai_enabled=s.phone_ai_enabled,
         created_at=s.created_at,
     )
 
@@ -96,8 +98,18 @@ def update_store(
     store = _get_store_or_404(db, store_id)
 
     updates = payload.model_dump(exclude_unset=True)
+    if updates.get("phone_ai_number"):
+        taken = db.execute(
+            select(Store.id).where(Store.phone_ai_number == updates["phone_ai_number"], Store.id != store.id)
+        ).first()
+        if taken is not None:
+            raise AppError(
+                status_code=409, code="phone_number_taken", detail="That number is assigned to another store."
+            )
     for key, value in updates.items():
         setattr(store, key, value)
+    if not store.phone_ai_number:
+        store.phone_ai_enabled = False
 
     db.add(store)
     db.commit()

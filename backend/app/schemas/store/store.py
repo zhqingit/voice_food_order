@@ -4,8 +4,9 @@ import uuid
 from decimal import Decimal
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.core.phone import normalize_phone
 from app.schemas.store.hours import DayHours
 
 
@@ -55,6 +56,10 @@ class StoreOut(BaseModel):
     # a status banner (pending approval / suspended).
     is_approved: bool = False
     is_active: bool = True
+    # Phone ordering. phone_ai_number is admin-assigned, read-only here.
+    phone_ai_number: str | None = None
+    phone_ai_enabled: bool = False
+    phone_staff_number: str | None = None
     email: EmailStr
     created_at: datetime
 
@@ -77,3 +82,10 @@ class StoreUpdate(BaseModel):
     voice_tone: str | None = Field(default=None, max_length=32)
     logo_url: str | None = Field(default=None, max_length=512)
     is_published: bool | None = None
+    phone_ai_enabled: bool | None = None
+    phone_staff_number: str | None = Field(default=None, max_length=32)
+
+    @field_validator("phone_staff_number")
+    @classmethod
+    def _normalize_staff_number(cls, value: str | None) -> str | None:
+        return normalize_phone(value) if value and value.strip() else None
