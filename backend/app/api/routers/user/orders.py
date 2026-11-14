@@ -13,6 +13,7 @@ from app.db.session import get_db
 from app.models.menu_item import MenuItem
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemOut, OrderOut
@@ -25,14 +26,24 @@ router = APIRouter(
 )
 
 
-def _order_out(order: Order) -> OrderOut:
+def _order_out(order: Order, store: Store | None = None) -> OrderOut:
+    can_pay_online = (
+        store is not None
+        and order.payment_status != "paid"
+        and order.status in order_service.PAYABLE_STATUSES
+        and bool(store.stripe_account_id)
+        and store.stripe_charges_enabled
+    )
     return OrderOut(
         id=order.id,
         short_code=order.short_code,
         code_day=order.code_day,
         store_id=order.store_id,
+        store_name=store.name if store is not None else None,
+        can_pay_online=can_pay_online,
         user_id=order.user_id,
         status=order.status,
+        payment_status=order.payment_status,
         channel=order.channel,
         subtotal=order.subtotal,
         tax=order.tax,
@@ -63,11 +74,15 @@ def list_orders(
     current_user: User = Depends(get_current_user_mobile),
     db: Session = Depends(get_db),
 ) -> list[OrderOut]:
-    """List orders for the current user, sorted by creation date descending."""
-    orders = db.execute(
-        select(Order).where(Order.user_id == current_user.id).order_by(Order.created_at.desc())
-    ).scalars().all()
-    return [_order_out(order) for order in orders]
+    """List the current user's placed orders (drafts excluded), newest first."""
+    rows = db.execute(
+        select(Order, Store)
+        .join(Store, Store.id == Order.store_id)
+        .where(Order.user_id == current_user.id)
+        .where(Order.status != "draft")
+        .order_by(Order.created_at.desc())
+    ).all()
+    return [_order_out(order, store) for order, store in rows]
 
 
 @router.post("", response_model=OrderOut)

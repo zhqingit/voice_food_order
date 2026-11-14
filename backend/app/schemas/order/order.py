@@ -23,6 +23,9 @@ class OrderOut(BaseModel):
     short_code: str
     code_day: date
     store_id: uuid.UUID
+    store_name: str | None = None
+    # My Orders: unpaid, still open, and the store takes online payment.
+    can_pay_online: bool = False
     user_id: uuid.UUID | None
     status: str
     payment_status: str = "unpaid"

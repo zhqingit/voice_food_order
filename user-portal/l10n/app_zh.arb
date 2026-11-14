@@ -65,5 +65,21 @@
   "themeOcean": "海洋",
   "themeSunset": "日落",
   "themeForest": "森林",
-  "themeContrast": "高对比"
+  "themeContrast": "高对比",
+
+  "myOrders": "我的订单",
+  "noOrdersYet": "还没有订单",
+  "orderNumber": "订单 #{code}",
+  "paid": "已付款",
+  "unpaid": "未付款",
+  "payAmount": "支付 {amount}",
+  "payAtStoreNote": "这家店在取餐或送达时付款。",
+  "paymentFailed": "付款失败，请重试。",
+  "unpaidOrderBanner": "{storeName} 的订单 #{code} 还没付款",
+  "statusSubmitted": "已下单",
+  "statusConfirmed": "已确认",
+  "statusPreparing": "制作中",
+  "statusReady": "可取餐",
+  "statusCompleted": "已完成",
+  "statusCancelled": "已取消"
 }

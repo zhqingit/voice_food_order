@@ -29,6 +29,7 @@ class OrderPatch(BaseModel):
     fulfillment_type: str | None = Field(default=None, pattern="^(pickup|delivery)$")
     customer_name: str | None = Field(default=None, max_length=128)
 
+
 router = APIRouter(
     prefix="/voice/orders",
     tags=["voice-orders"],
@@ -242,6 +243,8 @@ def create_payment_intent(
         raise AppError(status_code=404, code="order_not_found", detail="Order not found")
     if order.payment_status == "paid":
         raise AppError(status_code=409, code="already_paid", detail="Order is already paid")
+    if order.status not in order_service.PAYABLE_STATUSES:
+        raise AppError(status_code=409, code="order_not_payable", detail="This order can't be paid online")
 
     store = db.get(Store, order.store_id)
     if store is None:

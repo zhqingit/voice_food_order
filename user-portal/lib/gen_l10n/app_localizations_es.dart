@@ -183,4 +183,55 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get themeContrast => 'Contraste';
+
+  @override
+  String get myOrders => 'Mis pedidos';
+
+  @override
+  String get noOrdersYet => 'Aún no hay pedidos';
+
+  @override
+  String orderNumber(String code) {
+    return 'Pedido #$code';
+  }
+
+  @override
+  String get paid => 'Pagado';
+
+  @override
+  String get unpaid => 'Sin pagar';
+
+  @override
+  String payAmount(String amount) {
+    return 'Pagar $amount';
+  }
+
+  @override
+  String get payAtStoreNote => 'Esta tienda cobra al recoger o en la entrega.';
+
+  @override
+  String get paymentFailed => 'El pago falló. Inténtalo de nuevo.';
+
+  @override
+  String unpaidOrderBanner(String code, String storeName) {
+    return 'El pedido #$code de $storeName aún no está pagado';
+  }
+
+  @override
+  String get statusSubmitted => 'Realizado';
+
+  @override
+  String get statusConfirmed => 'Confirmado';
+
+  @override
+  String get statusPreparing => 'En preparación';
+
+  @override
+  String get statusReady => 'Listo';
+
+  @override
+  String get statusCompleted => 'Completado';
+
+  @override
+  String get statusCancelled => 'Cancelado';
 }

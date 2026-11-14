@@ -65,5 +65,21 @@
   "themeOcean": "Océano",
   "themeSunset": "Atardecer",
   "themeForest": "Bosque",
-  "themeContrast": "Contraste"
+  "themeContrast": "Contraste",
+
+  "myOrders": "Mis pedidos",
+  "noOrdersYet": "Aún no hay pedidos",
+  "orderNumber": "Pedido #{code}",
+  "paid": "Pagado",
+  "unpaid": "Sin pagar",
+  "payAmount": "Pagar {amount}",
+  "payAtStoreNote": "Esta tienda cobra al recoger o en la entrega.",
+  "paymentFailed": "El pago falló. Inténtalo de nuevo.",
+  "unpaidOrderBanner": "El pedido #{code} de {storeName} aún no está pagado",
+  "statusSubmitted": "Realizado",
+  "statusConfirmed": "Confirmado",
+  "statusPreparing": "En preparación",
+  "statusReady": "Listo",
+  "statusCompleted": "Completado",
+  "statusCancelled": "Cancelado"
 }

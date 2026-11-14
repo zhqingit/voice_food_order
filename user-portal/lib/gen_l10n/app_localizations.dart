@@ -447,6 +447,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Contrast'**
   String get themeContrast;
+
+  /// No description provided for @myOrders.
+  ///
+  /// In en, this message translates to:
+  /// **'My Orders'**
+  String get myOrders;
+
+  /// No description provided for @noOrdersYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No orders yet'**
+  String get noOrdersYet;
+
+  /// No description provided for @orderNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Order #{code}'**
+  String orderNumber(String code);
+
+  /// No description provided for @paid.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid'**
+  String get paid;
+
+  /// No description provided for @unpaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpaid'**
+  String get unpaid;
+
+  /// No description provided for @payAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'Pay {amount}'**
+  String payAmount(String amount);
+
+  /// No description provided for @payAtStoreNote.
+  ///
+  /// In en, this message translates to:
+  /// **'This store takes payment at pickup or on delivery.'**
+  String get payAtStoreNote;
+
+  /// No description provided for @paymentFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment failed. Please try again.'**
+  String get paymentFailed;
+
+  /// No description provided for @unpaidOrderBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'Order #{code} at {storeName} isn\'t paid yet'**
+  String unpaidOrderBanner(String code, String storeName);
+
+  /// No description provided for @statusSubmitted.
+  ///
+  /// In en, this message translates to:
+  /// **'Placed'**
+  String get statusSubmitted;
+
+  /// No description provided for @statusConfirmed.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed'**
+  String get statusConfirmed;
+
+  /// No description provided for @statusPreparing.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing'**
+  String get statusPreparing;
+
+  /// No description provided for @statusReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get statusReady;
+
+  /// No description provided for @statusCompleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Completed'**
+  String get statusCompleted;
+
+  /// No description provided for @statusCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancelled'**
+  String get statusCancelled;
 }
 
 class _AppLocalizationsDelegate

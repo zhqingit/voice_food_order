@@ -65,5 +65,24 @@
   "themeOcean": "Ocean",
   "themeSunset": "Sunset",
   "themeForest": "Forest",
-  "themeContrast": "Contrast"
+  "themeContrast": "Contrast",
+
+  "myOrders": "My Orders",
+  "noOrdersYet": "No orders yet",
+  "orderNumber": "Order #{code}",
+  "@orderNumber": {"placeholders": {"code": {"type": "String"}}},
+  "paid": "Paid",
+  "unpaid": "Unpaid",
+  "payAmount": "Pay {amount}",
+  "@payAmount": {"placeholders": {"amount": {"type": "String"}}},
+  "payAtStoreNote": "This store takes payment at pickup or on delivery.",
+  "paymentFailed": "Payment failed. Please try again.",
+  "unpaidOrderBanner": "Order #{code} at {storeName} isn't paid yet",
+  "@unpaidOrderBanner": {"placeholders": {"code": {"type": "String"}, "storeName": {"type": "String"}}},
+  "statusSubmitted": "Placed",
+  "statusConfirmed": "Confirmed",
+  "statusPreparing": "Preparing",
+  "statusReady": "Ready",
+  "statusCompleted": "Completed",
+  "statusCancelled": "Cancelled"
 }

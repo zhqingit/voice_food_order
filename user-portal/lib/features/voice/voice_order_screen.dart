@@ -3,24 +3,19 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_stripe/flutter_stripe.dart';
 
 import '../../app/providers.dart';
-import '../../core/app_config.dart';
 import '../../data/menu_models.dart';
 import '../../data/menu_repository.dart';
 import '../../data/order_models.dart';
-import '../../data/payment_repository.dart';
 import '../../gen_l10n/app_localizations.dart';
 import '../../ui/style/app_background.dart';
+import '../orders/my_orders_screen.dart';
+import '../orders/pay_for_order.dart';
 import 'voice_controller.dart';
 
 final menuRepositoryProvider = Provider<MenuRepository>((ref) {
   return MenuRepository(ref.watch(apiClientProvider).dio);
-});
-
-final paymentRepositoryProvider = Provider<PaymentRepository>((ref) {
-  return PaymentRepository(ref.watch(apiClientProvider).dio);
 });
 
 const _kOrangeStart = Color(0xFFFF8A2A);
@@ -1558,46 +1553,16 @@ class _PaymentCardState extends ConsumerState<_PaymentCard> {
       _payAtStore = false;
     });
     try {
-      final result = await ref.read(paymentRepositoryProvider).createPaymentIntent(widget.order.id);
-
-      // Store isn't payment-ready → collect at the store instead of charging.
-      if (!result.paymentAvailable || result.clientSecret == null) {
-        if (mounted) setState(() { _payAtStore = true; _busy = false; });
-        return;
-      }
-      final pk = result.publishableKey;
-      if (pk == null || pk.isEmpty) {
-        if (mounted) setState(() { _error = 'Online payment is temporarily unavailable.'; _busy = false; });
-        return;
-      }
-
-      Stripe.publishableKey = pk;
-      Stripe.merchantIdentifier = AppConfig.stripeMerchantIdentifier;
-      await Stripe.instance.applySettings();
-
-      await Stripe.instance.initPaymentSheet(
-        paymentSheetParameters: SetupPaymentSheetParameters(
-          paymentIntentClientSecret: result.clientSecret!,
-          merchantDisplayName: widget.storeName,
-          applePay: const PaymentSheetApplePay(merchantCountryCode: 'US'),
-          // testEnv: true pairs with Stripe test keys; set false for live.
-          googlePay: const PaymentSheetGooglePay(merchantCountryCode: 'US', testEnv: true),
-        ),
-      );
-      // Completes without throwing → the PaymentIntent succeeded. The backend
-      // webhook flips the order to paid; we reflect success locally.
-      await Stripe.instance.presentPaymentSheet();
-
-      if (mounted) setState(() { _paid = true; _busy = false; });
-    } on StripeException catch (e) {
-      // User cancellation is not an error; surface everything else.
-      final canceled = e.error.code == FailureCode.Canceled;
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = canceled ? null : (e.error.localizedMessage ?? 'Payment failed.');
-        });
-      }
+      final outcome = await payForOrder(ref, orderId: widget.order.id, storeName: widget.storeName);
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _paid = outcome == PayOutcome.paid;
+        _payAtStore = outcome == PayOutcome.payAtStore;
+      });
+      if (outcome == PayOutcome.paid) ref.invalidate(myOrdersProvider);
+    } on PaymentFailure catch (e) {
+      if (mounted) setState(() { _busy = false; _error = e.message ?? 'Payment failed. Please try again.'; });
     } catch (_) {
       if (mounted) setState(() { _busy = false; _error = 'Payment failed. Please try again.'; });
     }

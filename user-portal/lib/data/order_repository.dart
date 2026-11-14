@@ -7,6 +7,14 @@ class OrderRepository {
 
   OrderRepository(this._dio);
 
+  /// The signed-in customer's placed orders, newest first.
+  Future<List<OrderOut>> listMyOrders() async {
+    final res = await _dio.get<List<dynamic>>('/user/orders');
+    final json = res.data;
+    if (json == null) throw Exception('Empty response');
+    return json.map((e) => OrderOut.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
   Future<OrderOut> getOrder(String orderId) async {
     final res = await _dio.get<Map<String, dynamic>>('/voice/orders/$orderId');
     final json = res.data;

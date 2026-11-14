@@ -183,4 +183,56 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get themeContrast => 'Contrast';
+
+  @override
+  String get myOrders => 'My Orders';
+
+  @override
+  String get noOrdersYet => 'No orders yet';
+
+  @override
+  String orderNumber(String code) {
+    return 'Order #$code';
+  }
+
+  @override
+  String get paid => 'Paid';
+
+  @override
+  String get unpaid => 'Unpaid';
+
+  @override
+  String payAmount(String amount) {
+    return 'Pay $amount';
+  }
+
+  @override
+  String get payAtStoreNote =>
+      'This store takes payment at pickup or on delivery.';
+
+  @override
+  String get paymentFailed => 'Payment failed. Please try again.';
+
+  @override
+  String unpaidOrderBanner(String code, String storeName) {
+    return 'Order #$code at $storeName isn\'t paid yet';
+  }
+
+  @override
+  String get statusSubmitted => 'Placed';
+
+  @override
+  String get statusConfirmed => 'Confirmed';
+
+  @override
+  String get statusPreparing => 'Preparing';
+
+  @override
+  String get statusReady => 'Ready';
+
+  @override
+  String get statusCompleted => 'Completed';
+
+  @override
+  String get statusCancelled => 'Cancelled';
 }

@@ -10,6 +10,9 @@ class OrderOut {
   final String id;
   final String shortCode;
   final String storeId;
+  final String? storeName;
+  /// Unpaid, still open, and the store takes online payment (My Orders only).
+  final bool canPayOnline;
   final String? userId;
   final String status;
   final String paymentStatus;
@@ -26,6 +29,8 @@ class OrderOut {
     required this.id,
     required this.shortCode,
     required this.storeId,
+    this.storeName,
+    this.canPayOnline = false,
     required this.userId,
     required this.status,
     required this.paymentStatus,
@@ -44,6 +49,8 @@ class OrderOut {
       id: json['id'] as String,
       shortCode: (json['short_code'] as String?) ?? '',
       storeId: json['store_id'] as String,
+      storeName: json['store_name'] as String?,
+      canPayOnline: json['can_pay_online'] as bool? ?? false,
       userId: json['user_id'] as String?,
       status: json['status'] as String,
       paymentStatus: json['payment_status'] as String? ?? 'unpaid',

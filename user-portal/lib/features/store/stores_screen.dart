@@ -8,6 +8,7 @@ import '../../core/settings/settings_controller.dart';
 import '../../data/store_models.dart';
 import '../../gen_l10n/app_localizations.dart';
 import '../../ui/style/app_background.dart';
+import '../orders/my_orders_screen.dart';
 import '../settings/settings_screen.dart';
 import '../voice/voice_order_screen.dart';
 
@@ -89,9 +90,15 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       rethrow;
     }
     if (!mounted) return;
-    Navigator.of(context).push(MaterialPageRoute(
+    await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => VoiceOrderScreen(storeName: storeName, storeId: storeId),
     ));
+    // A new order may be waiting for payment.
+    ref.invalidate(myOrdersProvider);
+  }
+
+  void _openMyOrders() {
+    Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MyOrdersScreen()));
   }
 
   String _greeting(AppLocalizations l10n) {
@@ -113,6 +120,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(settingsControllerProvider).valueOrNull;
+    final unpaid = ref.watch(myOrdersProvider).valueOrNull?.where((o) => o.canPayOnline).firstOrNull;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -122,7 +130,10 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
           bottom: false,
           child: RefreshIndicator(
             color: _warmOrangeStart,
-            onRefresh: _loadStores,
+            onRefresh: () async {
+              ref.invalidate(myOrdersProvider);
+              await _loadStores();
+            },
             child: CustomScrollView(
               physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
               slivers: [
@@ -166,6 +177,11 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                         ),
                         const SizedBox(width: 4),
                         IconButton(
+                          tooltip: l10n.myOrders,
+                          icon: const Icon(Icons.receipt_long_outlined, color: _warmBrown, size: 26),
+                          onPressed: _openMyOrders,
+                        ),
+                        IconButton(
                           tooltip: l10n.settingsTitle,
                           icon: const Icon(Icons.settings_outlined, color: _warmBrown, size: 26),
                           onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingsScreen())),
@@ -184,6 +200,38 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                     ),
                   ),
                 ),
+
+                // Unpaid order reminder
+                if (unpaid != null)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                      child: Material(
+                        color: _chipBg,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: _openMyOrders,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.credit_card_rounded, color: _warmOrangeStart),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    l10n.unpaidOrderBanner(unpaid.shortCode, unpaid.storeName ?? ''),
+                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _warmBrown),
+                                  ),
+                                ),
+                                const Icon(Icons.chevron_right_rounded, color: _warmBrown),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
 
                 // Search
                 SliverToBoxAdapter(

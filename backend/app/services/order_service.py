@@ -16,6 +16,12 @@ from app.models.store import Store
 from app.schemas.order.order import OrderCreate
 
 
+# Orders that can still be paid online: placed and not yet finished or
+# cancelled. Drafts aren't final, and a completed order that is still unpaid
+# was most likely paid at the store.
+PAYABLE_STATUSES = frozenset({"submitted", "confirmed", "preparing", "ready"})
+
+
 # Voice-friendly alphabet — no I, L, O, 0, 1 (sound or look ambiguous when
 # spoken back to a customer). Keep in sync with the Alembic migration
 # `0023_add_order_short_code` which uses the same alphabet for backfill.

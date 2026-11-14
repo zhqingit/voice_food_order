@@ -183,4 +183,55 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get themeContrast => '高对比';
+
+  @override
+  String get myOrders => '我的订单';
+
+  @override
+  String get noOrdersYet => '还没有订单';
+
+  @override
+  String orderNumber(String code) {
+    return '订单 #$code';
+  }
+
+  @override
+  String get paid => '已付款';
+
+  @override
+  String get unpaid => '未付款';
+
+  @override
+  String payAmount(String amount) {
+    return '支付 $amount';
+  }
+
+  @override
+  String get payAtStoreNote => '这家店在取餐或送达时付款。';
+
+  @override
+  String get paymentFailed => '付款失败，请重试。';
+
+  @override
+  String unpaidOrderBanner(String code, String storeName) {
+    return '$storeName 的订单 #$code 还没付款';
+  }
+
+  @override
+  String get statusSubmitted => '已下单';
+
+  @override
+  String get statusConfirmed => '已确认';
+
+  @override
+  String get statusPreparing => '制作中';
+
+  @override
+  String get statusReady => '可取餐';
+
+  @override
+  String get statusCompleted => '已完成';
+
+  @override
+  String get statusCancelled => '已取消';
 }
