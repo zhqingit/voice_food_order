@@ -42,6 +42,10 @@ class VoiceToolContext:
     # Phone calls only: set when the caller asked for a person; the call
     # handler hands the line to staff once the bot finishes speaking.
     transfer_requested: bool = False
+    # Delivery streets (_street_key) the geocoder couldn't find this session.
+    # Resubmitting one is refused so the bot asks for a spelling instead of
+    # repeating a misheard street name.
+    failed_streets: set[str] = field(default_factory=set)
     # Name read-back gate (time.monotonic() values). The pipeline records when
     # the bot last finished speaking; set_customer_name records when the name
     # was captured. checkout requires the bot to have spoken (the read-back)
@@ -138,6 +142,17 @@ def _spell_out(text: str) -> str:
             words.append(", ".join(token.upper()))
     spoken = " ".join(words)
     return f"{spoken}, {parts[1]}" if len(parts) > 1 else spoken
+
+
+def _street_part(address: str) -> str:
+    """The house number and street, without city/state/ZIP."""
+    return address.split(",")[0].strip()
+
+
+def _street_key(address: str) -> str:
+    """Compare streets loosely: "540 N Mamie Way, Chandler" == "540 North Mamie Way"."""
+    words = (token.lower().rstrip(".") for token in _street_part(address).split())
+    return " ".join(_SPOKEN_WORDS.get(word, word).lower() for word in words)
 
 
 _DIGIT_WORDS = "zero one two three four five six seven eight nine".split()
@@ -793,9 +808,22 @@ class VoiceToolRouter:
             # Range check first: it geocodes over the network, which must not
             # happen while the order row is locked.
             if t == "delivery":
+                street_key = _street_key(addr)
+                if street_key in self._context.failed_streets:
+                    return {
+                        "ok": False,
+                        "reason": delivery_service.REASON_GEOCODE_FAILED,
+                        "message": (
+                            f'"{_street_part(addr)}" was already checked and does not exist near the store, so you '
+                            "misheard the street name. Do NOT submit or say it again. Ask the customer to spell the "
+                            "street name letter by letter, then call set_fulfillment using exactly those letters."
+                        ),
+                    }
                 store = db.get(Store, self._context.store_id)
                 range_error, canonical = self._check_delivery_range(store, addr)
                 if range_error is not None:
+                    if range_error.get("reason") == delivery_service.REASON_GEOCODE_FAILED:
+                        self._context.failed_streets.add(street_key)
                     return range_error
                 # Save Google's spelling of the matched address: it fixes
                 # mis-heard street names, and the read-back lets the customer
@@ -933,8 +961,10 @@ class VoiceToolRouter:
                 "ok": False,
                 "reason": reason,
                 "message": (
-                    "I couldn't find that exact address. Ask the customer to repeat the house number and "
-                    "street, and to include the city and ZIP code."
+                    f'No address "{_street_part(delivery_address)}" exists near the store; the street name was '
+                    "most likely misheard. Ask the customer to spell the street name letter by letter, then call "
+                    "set_fulfillment using exactly those letters. Only ask for the city and ZIP code if they say "
+                    "the address is in another town."
                 ),
             }, None
         if reason == delivery_service.REASON_STORE_NO_LOCATION:

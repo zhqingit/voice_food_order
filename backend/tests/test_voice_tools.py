@@ -418,3 +418,28 @@ def test_delivery_saves_googles_spelling_and_read_back(db_factory, world, sessio
     assert result["read_back"] == "540 North M, A, M, M, O, T, H Way, Chandler"
     with session_factory() as db:
         assert db.get(Order, router._context.order_id).delivery_address == "540 N Mammoth Way, Chandler, AZ 85225"
+
+
+def test_misheard_street_is_not_resubmitted(db_factory, world, monkeypatch):
+    from app.services import delivery_service
+
+    checked = []
+
+    def fake_range(store, address):
+        checked.append(address)
+        return delivery_service.RangeCheck(False, None, delivery_service.REASON_GEOCODE_FAILED)
+
+    monkeypatch.setattr(delivery_service, "is_within_delivery_range", fake_range)
+    router = _router(db_factory, world, user="alice")
+
+    first = router.set_fulfillment(type="delivery", delivery_address="540 North Mamie Way, Chandler")
+    assert not first["ok"] and '"540 North Mamie Way"' in first["message"] and "spell" in first["message"]
+
+    # Same street with city/ZIP added or "N" for "North" is refused without another lookup.
+    again = router.set_fulfillment(type="delivery", delivery_address="540 N. Mamie Way, Chandler, AZ 85225")
+    assert not again["ok"] and "already checked" in again["message"]
+    assert checked == ["540 North Mamie Way, Chandler"]
+
+    # A different spelling is looked up.
+    router.set_fulfillment(type="delivery", delivery_address="540 North Mammoth Way")
+    assert checked[-1] == "540 North Mammoth Way"
