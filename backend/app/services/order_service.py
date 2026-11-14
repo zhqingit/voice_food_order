@@ -16,10 +16,11 @@ from app.models.store import Store
 from app.schemas.order.order import OrderCreate
 
 
-# Orders that can still be paid online: placed and not yet finished or
-# cancelled. Drafts aren't final, and a completed order that is still unpaid
-# was most likely paid at the store.
-PAYABLE_STATUSES = frozenset({"submitted", "confirmed", "preparing", "ready"})
+# Placed and not yet finished or cancelled. Staff can edit these orders, and
+# customers can still pay them online. Drafts belong to a live voice session,
+# and a completed order that is still unpaid was most likely paid at the store.
+OPEN_STATUSES = frozenset({"submitted", "confirmed", "preparing", "ready"})
+PAYABLE_STATUSES = OPEN_STATUSES
 
 
 # Voice-friendly alphabet — no I, L, O, 0, 1 (sound or look ambiguous when

@@ -537,6 +537,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancelled'**
   String get statusCancelled;
+
+  /// No description provided for @orderNotPlaced.
+  ///
+  /// In en, this message translates to:
+  /// **'This order wasn\'t placed.'**
+  String get orderNotPlaced;
+
+  /// No description provided for @restaurantOwnerPromo.
+  ///
+  /// In en, this message translates to:
+  /// **'Own a restaurant? Let AI answer your phone orders →'**
+  String get restaurantOwnerPromo;
 }
 
 class _AppLocalizationsDelegate

@@ -12,6 +12,7 @@ from app.core.errors import AppError
 from app.db.session import get_db
 from app.models.menu_item import MenuItem
 from app.models.order import Order
+from app.models.order_event import OrderEvent
 from app.models.order_item import OrderItem
 from app.models.store import Store
 from app.models.user import User
@@ -26,7 +27,7 @@ router = APIRouter(
 )
 
 
-def _order_out(order: Order, store: Store | None = None) -> OrderOut:
+def _order_out(order: Order, store: Store | None = None, *, modified_by_store: bool = False) -> OrderOut:
     can_pay_online = (
         store is not None
         and order.payment_status != "paid"
@@ -41,6 +42,8 @@ def _order_out(order: Order, store: Store | None = None) -> OrderOut:
         store_id=order.store_id,
         store_name=store.name if store is not None else None,
         can_pay_online=can_pay_online,
+        store_phone=store.phone if store is not None else None,
+        modified_by_store=modified_by_store,
         user_id=order.user_id,
         status=order.status,
         payment_status=order.payment_status,
@@ -82,7 +85,14 @@ def list_orders(
         .where(Order.status != "draft")
         .order_by(Order.created_at.desc())
     ).all()
-    return [_order_out(order, store) for order, store in rows]
+    modified = set(
+        db.execute(
+            select(OrderEvent.order_id)
+            .where(OrderEvent.order_id.in_([order.id for order, _ in rows]))
+            .where(OrderEvent.kind.like("item_%"))
+        ).scalars()
+    )
+    return [_order_out(order, store, modified_by_store=order.id in modified) for order, store in rows]
 
 
 @router.post("", response_model=OrderOut)

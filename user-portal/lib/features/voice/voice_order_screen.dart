@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/providers.dart';
 import '../../data/menu_models.dart';
@@ -25,8 +26,6 @@ const _kTextMuted = Color(0xFF6D5D4B);
 const _kCardBg = Color(0xFFFFFBF5);
 const _kUserBubble = Color(0xFFFF8A2A);
 const _kBotBubble = Colors.white;
-const _kStarActive = Color(0xFFFFB15A);
-const _kStarInactive = Color(0xFFE0D6C8);
 
 class VoiceOrderScreen extends ConsumerWidget {
   final String storeName;
@@ -83,6 +82,8 @@ class VoiceOrderScreen extends ConsumerWidget {
         ],
       ),
       body: Container(
+        width: double.infinity,
+        height: double.infinity,
         decoration: AppBackground.decoration(),
         child: SafeArea(
           child: AnimatedSwitcher(
@@ -967,13 +968,18 @@ class _PostSessionView extends ConsumerWidget {
 
   const _PostSessionView({super.key, required this.storeName, required this.storeId});
 
+  static final Uri _ownerSiteUrl = Uri.parse('https://rest-oai.com');
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = AppLocalizations.of(context);
+    final l10n = AppLocalizations.of(context)!;
     final voice = ref.watch(voiceControllerProvider(storeId));
+    final order = voice.orderSummary;
+    final items = voice.orderItems ?? const <OrderItemOut>[];
+    final placed = order != null && order.status != 'draft';
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.of(context).padding.bottom),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -991,194 +997,134 @@ class _PostSessionView extends ConsumerWidget {
                   child: const Icon(Icons.check_rounded, color: Colors.white, size: 36),
                 ),
                 const SizedBox(height: 16),
-                Text(l10n?.sessionComplete ?? 'Session Complete', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _kTextDark)),
+                Text(l10n.sessionComplete, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _kTextDark)),
                 const SizedBox(height: 4),
-                Text(l10n?.thanksForOrdering(storeName) ?? 'Thanks for ordering at $storeName', style: TextStyle(fontSize: 14, color: _kTextMuted.withValues(alpha: 0.8))),
+                Text(l10n.thanksForOrdering(storeName), style: TextStyle(fontSize: 14, color: _kTextMuted.withValues(alpha: 0.8))),
+                if (placed) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    [
+                      l10n.orderNumber(order.shortCode),
+                      if (order.fulfillmentType == 'delivery') l10n.delivery,
+                      if (order.fulfillmentType == 'pickup') l10n.pickup,
+                    ].join(' · '),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.5, color: _kOrangeStart),
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 24),
 
-          // Payment (only when there's an order with a balance to pay)
-          if (voice.orderSummary != null && voice.orderSummary!.total > 0) ...[
-            _PaymentCard(order: voice.orderSummary!, storeName: storeName),
+          if (order != null && !placed && items.isNotEmpty) ...[
+            Text(l10n.orderNotPlaced, textAlign: TextAlign.center, style: const TextStyle(fontSize: 14, color: _kTextMuted)),
             const SizedBox(height: 24),
           ],
 
-          // Review & Rating
-          _ReviewCard(storeName: storeName, storeId: storeId),
-          const SizedBox(height: 24),
+          // Payment (only for a placed order with a balance to pay)
+          if (placed && order.total > 0) ...[
+            _PaymentCard(order: order, storeName: storeName),
+            const SizedBox(height: 16),
+          ],
 
-          // New order button
-          GestureDetector(
-            onTap: () => ref.read(voiceControllerProvider(storeId).notifier).resetSession(),
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: const LinearGradient(colors: [_kOrangeStart, _kOrangeEnd]),
-                boxShadow: [BoxShadow(color: _kOrangeStart.withValues(alpha: 0.35), blurRadius: 16, offset: const Offset(0, 6))],
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.replay_rounded, color: Colors.white, size: 20),
-                  const SizedBox(width: 8),
-                  Text(l10n?.newOrder ?? 'New Order', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
-                ],
+          if (placed && items.isNotEmpty) ...[
+            _OrderSummaryCard(order: order, items: items),
+            const SizedBox(height: 24),
+          ],
+
+          // Platform promo for restaurant owners
+          Center(
+            child: TextButton(
+              onPressed: () => launchUrl(_ownerSiteUrl, mode: LaunchMode.externalApplication),
+              child: Text(
+                l10n.restaurantOwnerPromo,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: _kTextMuted.withValues(alpha: 0.85)),
               ),
             ),
           ),
-          const SizedBox(height: 24),
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Review card (rating + text review)
-// ---------------------------------------------------------------------------
+class _OrderSummaryCard extends StatelessWidget {
+  final OrderOut order;
+  final List<OrderItemOut> items;
 
-class _ReviewCard extends ConsumerStatefulWidget {
-  final String storeName;
+  const _OrderSummaryCard({required this.order, required this.items});
 
-  final String storeId;
-
-  const _ReviewCard({required this.storeName, required this.storeId});
-
-  @override
-  ConsumerState<_ReviewCard> createState() => _ReviewCardState();
-}
-
-class _ReviewCardState extends ConsumerState<_ReviewCard> {
-  final _reviewController = TextEditingController();
-  bool _submitting = false;
-
-  @override
-  void dispose() {
-    _reviewController.dispose();
-    super.dispose();
-  }
+  static String _money(double amount) => '\$${amount.toStringAsFixed(2)}';
 
   @override
   Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context);
-    final voice = ref.watch(voiceControllerProvider(widget.storeId));
-    final allSubmitted = voice.ratingSubmitted && voice.reviewSubmitted;
+    final l10n = AppLocalizations.of(context)!;
+    final muted = TextStyle(fontSize: 13, color: _kTextMuted.withValues(alpha: 0.85));
+
+    Widget totalRow(String label, double amount, {bool bold = false}) => Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label, style: bold ? const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: _kTextDark) : muted),
+              Text(
+                _money(amount),
+                style: TextStyle(
+                  fontSize: bold ? 14 : 13,
+                  fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+                  color: bold ? _kOrangeStart : _kTextDark,
+                ),
+              ),
+            ],
+          ),
+        );
 
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: _kStarActive.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.rate_review_rounded, size: 20, color: _kStarActive),
-              ),
-              const SizedBox(width: 12),
-              Text(l10n?.howWasExperience ?? 'How was your experience?', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _kTextDark)),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // Star rating
-          Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(5, (i) {
-                final starValue = i + 1;
-                final apiValue = starValue * 2;
-                final selected = voice.rating != null && voice.rating! >= apiValue;
-                return GestureDetector(
-                  onTap: allSubmitted ? null : () => ref.read(voiceControllerProvider(widget.storeId).notifier).submitRating(apiValue),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: AnimatedScale(
-                      scale: selected ? 1.2 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Icon(
-                        selected ? Icons.star_rounded : Icons.star_outline_rounded,
-                        size: 40,
-                        color: selected ? _kStarActive : _kStarInactive,
-                      ),
+          Text(l10n.orderSummary, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: _kTextDark)),
+          const SizedBox(height: 12),
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${item.quantity}×  ', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _kTextDark)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.variantName != null ? '${item.name ?? ''} (${item.variantName})' : (item.name ?? ''),
+                          style: const TextStyle(fontSize: 14, color: _kTextDark),
+                        ),
+                        if (item.note != null && item.note!.isNotEmpty)
+                          Text(item.note!, style: muted.copyWith(fontSize: 12, fontStyle: FontStyle.italic)),
+                      ],
                     ),
                   ),
-                );
-              }),
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // Review text field
-          if (allSubmitted)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded, color: Color(0xFF66BB6A), size: 20),
-                  const SizedBox(width: 10),
-                  Text(l10n?.thanksForFeedback ?? 'Thanks for your feedback!', style: const TextStyle(color: Color(0xFF2E7D32), fontWeight: FontWeight.w600, fontSize: 14)),
+                  Text(_money(item.priceSnapshot * item.quantity), style: const TextStyle(fontSize: 14, color: _kTextDark)),
                 ],
               ),
-            )
-          else ...[
-            TextField(
-              controller: _reviewController,
-              maxLines: 3,
-              maxLength: 500,
-              textInputAction: TextInputAction.done,
-              style: const TextStyle(fontSize: 15, color: _kTextDark),
-              decoration: InputDecoration(
-                hintText: 'Tell us about your experience...',
-                hintStyle: TextStyle(color: _kTextMuted.withValues(alpha: 0.5)),
-                filled: true,
-                fillColor: Colors.white,
-                contentPadding: const EdgeInsets.all(16),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _kOrangeStart, width: 1.5)),
-                counterStyle: TextStyle(fontSize: 11, color: _kTextMuted.withValues(alpha: 0.5)),
-              ),
             ),
-            const SizedBox(height: 14),
-
-            // Submit button
-            GestureDetector(
-              onTap: _submitting ? null : () async {
-                setState(() => _submitting = true);
-                final notifier = ref.read(voiceControllerProvider(widget.storeId).notifier);
-                // Submit review if text is provided
-                if (_reviewController.text.trim().isNotEmpty) {
-                  await notifier.submitReview(_reviewController.text);
-                } else {
-                  // If no text but rating exists, just mark review as submitted
-                  if (voice.ratingSubmitted) {
-                    // Already has rating, mark complete
-                  }
-                }
-                setState(() => _submitting = false);
-              },
-              child: Container(
-                width: double.infinity,
-                height: 48,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  gradient: const LinearGradient(colors: [_kOrangeStart, _kOrangeEnd]),
-                  boxShadow: [BoxShadow(color: _kOrangeStart.withValues(alpha: 0.25), blurRadius: 12, offset: const Offset(0, 4))],
-                ),
-                child: Center(
-                  child: _submitting
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                      : Text(
-                          'Submit Review',
-                          style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
-                        ),
-                ),
-              ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: Colors.grey.withValues(alpha: 0.15)),
+          const SizedBox(height: 4),
+          totalRow(l10n.subtotal, order.subtotal),
+          totalRow(l10n.tax, order.tax),
+          totalRow(l10n.total, order.total, bold: true),
+          if (order.fulfillmentType == 'delivery' && (order.deliveryAddress ?? '').isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.location_on_outlined, size: 16, color: _kTextMuted.withValues(alpha: 0.85)),
+                const SizedBox(width: 6),
+                Expanded(child: Text(order.deliveryAddress!, style: muted)),
+              ],
             ),
           ],
         ],

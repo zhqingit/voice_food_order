@@ -234,4 +234,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get statusCancelled => 'Cancelado';
+
+  @override
+  String get orderNotPlaced => 'Este pedido no se realizó.';
+
+  @override
+  String get restaurantOwnerPromo =>
+      '¿Tienes un restaurante? Deja que la IA atienda tus pedidos por teléfono →';
 }

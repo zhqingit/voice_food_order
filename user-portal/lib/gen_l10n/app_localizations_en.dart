@@ -235,4 +235,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statusCancelled => 'Cancelled';
+
+  @override
+  String get orderNotPlaced => 'This order wasn\'t placed.';
+
+  @override
+  String get restaurantOwnerPromo =>
+      'Own a restaurant? Let AI answer your phone orders →';
 }

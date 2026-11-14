@@ -234,4 +234,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get statusCancelled => '已取消';
+
+  @override
+  String get orderNotPlaced => '这一单没有提交。';
+
+  @override
+  String get restaurantOwnerPromo => '你是餐厅老板吗？让 AI 帮你接电话点餐 →';
 }

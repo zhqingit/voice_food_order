@@ -120,7 +120,11 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(settingsControllerProvider).valueOrNull;
-    final unpaid = ref.watch(myOrdersProvider).valueOrNull?.where((o) => o.canPayOnline).firstOrNull;
+    // Remind about unpaid orders only until the customer has looked at them in My Orders.
+    final seen = ref.watch(seenUnpaidOrdersProvider).valueOrNull;
+    final unpaid = seen == null
+        ? null
+        : ref.watch(myOrdersProvider).valueOrNull?.where((o) => o.canPayOnline && !seen.contains(o.id)).firstOrNull;
 
     return Scaffold(
       backgroundColor: Colors.transparent,

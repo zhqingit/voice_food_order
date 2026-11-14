@@ -84,5 +84,7 @@
   "statusPreparing": "Preparing",
   "statusReady": "Ready",
   "statusCompleted": "Completed",
-  "statusCancelled": "Cancelled"
+  "statusCancelled": "Cancelled",
+  "orderNotPlaced": "This order wasn't placed.",
+  "restaurantOwnerPromo": "Own a restaurant? Let AI answer your phone orders →"
 }

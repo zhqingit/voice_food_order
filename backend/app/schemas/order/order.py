@@ -26,6 +26,10 @@ class OrderOut(BaseModel):
     store_name: str | None = None
     # My Orders: unpaid, still open, and the store takes online payment.
     can_pay_online: bool = False
+    # My Orders: the store's phone, so the customer can call about the order.
+    store_phone: str | None = None
+    # My Orders: staff changed the items after the order was placed.
+    modified_by_store: bool = False
     user_id: uuid.UUID | None
     status: str
     payment_status: str = "unpaid"
@@ -57,3 +61,27 @@ class OrderCreate(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: str = Field(min_length=2, max_length=32)
+
+
+class StoreOrderItemAdd(BaseModel):
+    menu_item_id: uuid.UUID
+    # Required when the menu item has options (sizes, can/bottle, ...).
+    variant_id: uuid.UUID | None = None
+    quantity: int = Field(default=1, ge=1, le=99)
+    note: str | None = Field(default=None, max_length=512)
+
+
+class StoreOrderItemUpdate(BaseModel):
+    quantity: int | None = Field(default=None, ge=1, le=99)
+    # Send "" or null to remove the note; leave it out to keep it.
+    note: str | None = Field(default=None, max_length=512)
+
+
+class OrderEventOut(BaseModel):
+    id: uuid.UUID
+    actor: str
+    kind: str
+    detail: str
+    total_before: Decimal | None = None
+    total_after: Decimal | None = None
+    created_at: datetime

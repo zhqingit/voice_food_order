@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../data/order_models.dart';
 import '../../gen_l10n/app_localizations.dart';
@@ -20,6 +21,31 @@ const _kAmber = Color(0xFFB25E00);
 final myOrdersProvider = FutureProvider.autoDispose<List<OrderOut>>((ref) {
   return ref.watch(orderRepositoryProvider).listMyOrders();
 });
+
+/// Unpaid orders the customer has already seen in My Orders. The home-screen
+/// reminder skips them, so it only nags once per order. Stored on the device.
+final seenUnpaidOrdersProvider = AsyncNotifierProvider<SeenUnpaidOrders, Set<String>>(SeenUnpaidOrders.new);
+
+class SeenUnpaidOrders extends AsyncNotifier<Set<String>> {
+  static const _key = 'seen_unpaid_order_ids';
+
+  @override
+  Future<Set<String>> build() async {
+    final prefs = await SharedPreferences.getInstance();
+    return (prefs.getStringList(_key) ?? const <String>[]).toSet();
+  }
+
+  /// Marks the orders on screen as seen; ids of orders no longer listed are dropped.
+  Future<void> markSeen(List<OrderOut> orders) async {
+    final current = await future;
+    final listed = orders.map((o) => o.id).toSet();
+    final next = current.intersection(listed)..addAll(orders.where((o) => o.canPayOnline).map((o) => o.id));
+    if (next.length == current.length && next.containsAll(current)) return;
+    state = AsyncData(next);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_key, next.toList());
+  }
+}
 
 final _orderItemsProvider = FutureProvider.autoDispose.family<List<OrderItemOut>, String>((ref, orderId) {
   return ref.watch(orderRepositoryProvider).getOrderItems(orderId);
@@ -44,6 +70,10 @@ class MyOrdersScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final orders = ref.watch(myOrdersProvider);
+    final shown = orders.valueOrNull;
+    if (shown != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(seenUnpaidOrdersProvider.notifier).markSeen(shown));
+    }
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -79,7 +109,8 @@ class MyOrdersScreen extends ConsumerWidget {
                         ? _Message(text: l10n.noOrdersYet)
                         : ListView.separated(
                             physics: const AlwaysScrollableScrollPhysics(),
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                            // Keep the last card clear of the system navigation bar.
+                            padding: EdgeInsets.fromLTRB(16, 8, 16, 32 + MediaQuery.of(context).padding.bottom),
                             itemCount: list.length,
                             separatorBuilder: (_, __) => const SizedBox(height: 12),
                             itemBuilder: (_, i) => _OrderCard(order: list[i]),

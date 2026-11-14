@@ -81,5 +81,7 @@
   "statusPreparing": "En preparación",
   "statusReady": "Listo",
   "statusCompleted": "Completado",
-  "statusCancelled": "Cancelado"
+  "statusCancelled": "Cancelado",
+  "orderNotPlaced": "Este pedido no se realizó.",
+  "restaurantOwnerPromo": "¿Tienes un restaurante? Deja que la IA atienda tus pedidos por teléfono →"
 }

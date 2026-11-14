@@ -81,5 +81,7 @@
   "statusPreparing": "制作中",
   "statusReady": "可取餐",
   "statusCompleted": "已完成",
-  "statusCancelled": "已取消"
+  "statusCancelled": "已取消",
+  "orderNotPlaced": "这一单没有提交。",
+  "restaurantOwnerPromo": "你是餐厅老板吗？让 AI 帮你接电话点餐 →"
 }

@@ -56,6 +56,7 @@ dependencies:
     git:
       url: git@github.com:zhqingit/liquid-glass-flutter.git
       ref: v0.1.0
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
