@@ -230,7 +230,20 @@
     "notificationsBlocked": "Desktop notifications are blocked in this browser's site settings.",
     "newOrderNotification": "New order #{{code}}",
     "channelPhone": "Phone",
-    "callbackPhone": "Callback phone"
+    "callbackPhone": "Callback phone",
+    "cancelOrder": "Cancel order",
+    "confirmCancelOrder": "Cancel order #{{code}}? Please let the customer know.",
+    "editNote": "Edit note",
+    "chooseItem": "Add an item…",
+    "chooseOption": "Choose an option…",
+    "addItem": "Add item",
+    "lastItem": "An order needs at least one item. Cancel the order instead.",
+    "notEditable": "This order can no longer be edited.",
+    "history": "Change history",
+    "noHistory": "No changes yet.",
+    "close": "Close",
+    "orderCount_one": "{{count}} order",
+    "orderCount_other": "{{count}} orders"
   },
   "profile": {
     "title": "Profile & Settings",

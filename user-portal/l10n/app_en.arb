@@ -76,6 +76,8 @@
   "payAmount": "Pay {amount}",
   "@payAmount": {"placeholders": {"amount": {"type": "String"}}},
   "payAtStoreNote": "This store takes payment at pickup or on delivery.",
+  "contactRestaurant": "Call the restaurant",
+  "modifiedByStore": "Changed by the restaurant",
   "paymentFailed": "Payment failed. Please try again.",
   "unpaidOrderBanner": "Order #{code} at {storeName} isn't paid yet",
   "@unpaidOrderBanner": {"placeholders": {"code": {"type": "String"}, "storeName": {"type": "String"}}},

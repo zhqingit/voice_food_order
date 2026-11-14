@@ -1,22 +1,77 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import axios from 'axios'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { formatPhone } from '../phone'
 import {
+  type OrderEventOut,
   type OrderItemOut,
   type OrderOut,
   type OrderUsage,
+  addOrderItem,
   getOrderUsage,
+  listOrderEvents,
   listOrderItems,
   listOrders,
+  removeOrderItem,
+  updateOrderItem,
   updateOrderStatus,
 } from '../api/orderApi'
+import { type MenuItemOut, listStoreItems } from '../api/menuApi'
 
 const COMMON_STATUSES = ['draft', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const POLL_INTERVAL_MS = 10_000
 // Orders arrive as "submitted"; accepting one moves it to "confirmed".
 const NEW_STATUS = 'submitted'
 const ACCEPTED_STATUS = 'confirmed'
+const CANCELLED_STATUS = 'cancelled'
+// Placed and not finished: staff can still edit these (matches the backend).
+const EDITABLE_STATUSES = ['submitted', 'confirmed', 'preparing', 'ready']
+
+type DayGroup = { day: string; orders: OrderOut[]; count: number; total: number }
+type MonthGroup = { month: string; days: DayGroup[]; count: number; total: number }
+
+// Day and month summaries count real orders: not drafts (live voice sessions) or cancelled ones.
+function isCounted(o: OrderOut): boolean {
+  return o.status !== 'draft' && o.status !== CANCELLED_STATUS
+}
+
+function summarize(orders: OrderOut[]): { count: number; total: number } {
+  const counted = orders.filter(isCounted)
+  return { count: counted.length, total: counted.reduce((sum, o) => sum + Number(o.total), 0) }
+}
+
+// Group by the order's day in the store's timezone (code_day, "YYYY-MM-DD"), newest first.
+// Orders keep the table's sort order inside each day.
+function groupByMonthAndDay(orders: OrderOut[]): MonthGroup[] {
+  const byDay = new Map<string, OrderOut[]>()
+  for (const o of orders) byDay.set(o.code_day, [...(byDay.get(o.code_day) ?? []), o])
+  const months = new Map<string, DayGroup[]>()
+  for (const day of [...byDay.keys()].sort().reverse()) {
+    const dayOrders = byDay.get(day)!
+    const month = day.slice(0, 7)
+    months.set(month, [...(months.get(month) ?? []), { day, orders: dayOrders, ...summarize(dayOrders) }])
+  }
+  return [...months.entries()].map(([month, days]) => ({
+    month,
+    days,
+    ...summarize(days.flatMap((d) => d.orders)),
+  }))
+}
+
+function monthLabel(month: string, lang: string): string {
+  const [y, m] = month.split('-').map(Number)
+  return new Date(y, m - 1, 1).toLocaleDateString(lang, { year: 'numeric', month: 'long' })
+}
+
+function dayLabel(day: string, lang: string): string {
+  const [y, m, d] = day.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString(lang, { month: 'long', day: 'numeric', weekday: 'short' })
+}
+
+function apiErrorCode(err: unknown): string | null {
+  return axios.isAxiosError(err) ? ((err.response?.data as { code?: string } | undefined)?.code ?? null) : null
+}
 
 type NotificationState = NotificationPermission | 'unsupported'
 
@@ -114,7 +169,7 @@ function paymentBadge(paymentStatus: string, t: TFunction): React.JSX.Element {
 }
 
 export function OrdersRoute(): React.JSX.Element {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -154,13 +209,45 @@ export function OrdersRoute(): React.JSX.Element {
     return sorted
   }, [orders, sortKey, sortDir])
 
+  const monthGroups = useMemo(() => groupByMonthAndDay(sortedOrders), [sortedOrders])
+  // Only the newest month starts open; these hold the months/days the user has toggled.
+  const [toggledMonths, setToggledMonths] = useState<Set<string>>(new Set())
+  const [closedDays, setClosedDays] = useState<Set<string>>(new Set())
+  const isMonthOpen = (month: string) => (month === monthGroups[0]?.month) !== toggledMonths.has(month)
+
+  function toggleIn(set: Set<string>, key: string): Set<string> {
+    const next = new Set(set)
+    if (!next.delete(key)) next.add(key)
+    return next
+  }
+
   const selectedOrder = useMemo(
     () => orders.find((o) => o.id === selectedOrderId) ?? null,
     [orders, selectedOrderId],
   )
 
+  const closeDetails = useCallback(() => setSelectedOrderId(null), [])
+
+  // While the details window is open: Esc closes it and the page behind doesn't scroll.
+  useEffect(() => {
+    if (!selectedOrderId) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeDetails() }
+    window.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [selectedOrderId, closeDetails])
+
   const [items, setItems] = useState<OrderItemOut[]>([])
   const [usage, setUsage] = useState<OrderUsage | null>(null)
+  const [events, setEvents] = useState<OrderEventOut[]>([])
+  const [menuItems, setMenuItems] = useState<MenuItemOut[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null)
+  const [addForm, setAddForm] = useState({ itemId: '', variantId: '', quantity: 1, note: '' })
   const knownStatuses = useRef<Map<string, string> | null>(null)
   const [notificationState, setNotificationState] = useState<NotificationState>(currentNotificationState)
   const openNotifications = useRef(new Map<string, Notification>())
@@ -197,7 +284,7 @@ export function OrdersRoute(): React.JSX.Element {
     }
     knownStatuses.current = new Map(data.map((o) => [o.id, o.status]))
     setOrders(data)
-    setSelectedOrderId((prev) => selectId ?? prev ?? (data[0]?.id ?? null))
+    if (selectId) setSelectedOrderId(selectId)
   }, [notifyNewOrder])
 
   // Oldest first: the order waiting longest is accepted first.
@@ -231,7 +318,6 @@ export function OrdersRoute(): React.JSX.Element {
     try {
       const updated = await updateOrderStatus(order.id, ACCEPTED_STATUS)
       setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
-      setSelectedOrderId(order.id)
       openNotifications.current.get(order.id)?.close()
       openNotifications.current.delete(order.id)
     } catch {
@@ -260,25 +346,92 @@ export function OrdersRoute(): React.JSX.Element {
   }, [reloadOrders])
 
   useEffect(() => {
+    setNoteDraft(null)
+    setAddForm({ itemId: '', variantId: '', quantity: 1, note: '' })
     if (!selectedOrderId) {
       setItems([])
       setUsage(null)
+      setEvents([])
       return
     }
     void (async () => {
       setError(null)
       try {
-        const [data, usageData] = await Promise.all([
+        const [data, usageData, eventData] = await Promise.all([
           listOrderItems(selectedOrderId),
           getOrderUsage(selectedOrderId).catch(() => null),
+          listOrderEvents(selectedOrderId).catch(() => []),
         ])
         setItems(data)
         setUsage(usageData)
+        setEvents(eventData)
       } catch {
         setError(t('orders.failedLoadItems'))
       }
     })()
   }, [selectedOrderId])
+
+  const editable = selectedOrder !== null && EDITABLE_STATUSES.includes(selectedOrder.status)
+
+  // The menu is only needed to add items, so load it the first time an editable order is opened.
+  useEffect(() => {
+    if (!editable || menuItems !== null) return
+    listStoreItems().then(setMenuItems).catch(() => setMenuItems([]))
+  }, [editable, menuItems])
+
+  // Run a staff edit, then show the new totals, items and change history.
+  async function applyEdit(edit: (orderId: string) => Promise<OrderOut>): Promise<boolean> {
+    if (!selectedOrder) return false
+    const orderId = selectedOrder.id
+    setError(null)
+    setBusy(true)
+    try {
+      const updated = await edit(orderId)
+      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
+      const [data, eventData] = await Promise.all([listOrderItems(orderId), listOrderEvents(orderId)])
+      setItems(data)
+      setEvents(eventData)
+      return true
+    } catch (err) {
+      const code = apiErrorCode(err)
+      setError(
+        code === 'last_item' ? t('orders.lastItem')
+          : code === 'order_not_editable' ? t('orders.notEditable')
+          : t('orders.failedUpdateOrder'),
+      )
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveNote(): Promise<void> {
+    if (!noteDraft) return
+    const { id, text } = noteDraft
+    setNoteDraft(null)
+    if (text.trim() === (items.find((it) => it.id === id)?.note ?? '')) return
+    await applyEdit((orderId) => updateOrderItem(orderId, id, { note: text }))
+  }
+
+  const addMenuItem = menuItems?.find((m) => m.id === addForm.itemId) ?? null
+  const addOptions = (addMenuItem?.variants ?? []).filter((v) => v.availability)
+
+  async function handleAddItem(): Promise<void> {
+    if (!addMenuItem) return
+    const ok = await applyEdit((orderId) => addOrderItem(orderId, {
+      menu_item_id: addMenuItem.id,
+      variant_id: addForm.variantId || null,
+      quantity: addForm.quantity,
+      note: addForm.note.trim() || null,
+    }))
+    if (ok) setAddForm({ itemId: '', variantId: '', quantity: 1, note: '' })
+  }
+
+  async function handleCancelOrder(): Promise<void> {
+    if (!selectedOrder) return
+    if (!window.confirm(t('orders.confirmCancelOrder', { code: selectedOrder.short_code }))) return
+    await applyEdit((orderId) => updateOrderStatus(orderId, CANCELLED_STATUS))
+  }
 
   function handlePrint(): void {
     if (!selectedOrder) return
@@ -334,14 +487,7 @@ export function OrdersRoute(): React.JSX.Element {
   }
 
   async function handleUpdateStatus(next: string): Promise<void> {
-    if (!selectedOrder) return
-    setError(null)
-    try {
-      const updated = await updateOrderStatus(selectedOrder.id, next)
-      setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)))
-    } catch {
-      setError(t('orders.failedUpdateOrder'))
-    }
+    await applyEdit((orderId) => updateOrderStatus(orderId, next))
   }
 
   return (
@@ -388,7 +534,7 @@ export function OrdersRoute(): React.JSX.Element {
         )}
       </div>
 
-      {error && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
+      {error && !selectedOrder && <div className="alert alert-error" style={{ marginBottom: 16 }}>{error}</div>}
 
       {/* Orders table */}
       <div className="card">
@@ -414,7 +560,33 @@ export function OrdersRoute(): React.JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {sortedOrders.map((o) => (
+              {monthGroups.map((mg) => (
+                <React.Fragment key={mg.month}>
+                  <tr
+                    onClick={() => setToggledMonths((s) => toggleIn(s, mg.month))}
+                    style={{ cursor: 'pointer', background: 'var(--color-bg)', borderBottom: '1px solid var(--color-border, #e5e7eb)' }}
+                  >
+                    <td colSpan={9} style={{ ...tdStyle, fontSize: 14, fontWeight: 700 }}>
+                      {isMonthOpen(mg.month) ? '▾' : '▸'} {monthLabel(mg.month, i18n.language)}
+                      <span style={{ marginLeft: 12, fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+                        {t('orders.orderCount', { count: mg.count })} · ${mg.total.toFixed(2)}
+                      </span>
+                    </td>
+                  </tr>
+                  {isMonthOpen(mg.month) && mg.days.map((dg) => (
+                    <React.Fragment key={dg.day}>
+                      <tr
+                        onClick={() => setClosedDays((s) => toggleIn(s, dg.day))}
+                        style={{ cursor: 'pointer', borderBottom: '1px solid var(--color-border, #f0f0f0)' }}
+                      >
+                        <td colSpan={9} style={{ ...tdStyle, paddingLeft: 28, fontWeight: 600 }}>
+                          {closedDays.has(dg.day) ? '▸' : '▾'} {dayLabel(dg.day, i18n.language)}
+                          <span style={{ marginLeft: 12, fontWeight: 400, color: 'var(--color-text-secondary)' }}>
+                            {t('orders.orderCount', { count: dg.count })} · ${dg.total.toFixed(2)}
+                          </span>
+                        </td>
+                      </tr>
+                      {!closedDays.has(dg.day) && dg.orders.map((o) => (
                 <tr
                   key={o.id}
                   onClick={() => setSelectedOrderId(o.id)}
@@ -436,6 +608,10 @@ export function OrdersRoute(): React.JSX.Element {
                   <td style={tdStyle}>{paymentBadge(o.payment_status, t)}</td>
                   <td style={{ ...tdStyle, fontSize: 14, fontWeight: 700, letterSpacing: 1 }} className="mono">{o.short_code}</td>
                 </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -443,16 +619,25 @@ export function OrdersRoute(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Order details (shown when an order is selected) */}
+      {/* Order details window (opens when an order is clicked) */}
       {selectedOrder && (
-        <div className="card" style={{ marginTop: 20 }}>
+        <div className="order-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeDetails() }}>
+        <div className="card order-modal" role="dialog" aria-modal="true" aria-labelledby="order-modal-title">
           <div className="card-header">
-            <h2>{t('orders.orderDetails')}</h2>
-            <button className="btn btn-secondary btn-sm" onClick={handlePrint}>
-              {t('orders.print')}
-            </button>
+            <h2 id="order-modal-title">
+              {t('orders.orderDetails')} <span className="mono" style={{ letterSpacing: 1 }}>#{selectedOrder.short_code}</span>
+            </h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button className="btn btn-secondary btn-sm" onClick={handlePrint}>
+                {t('orders.print')}
+              </button>
+              <button className="btn btn-secondary btn-sm" aria-label={t('orders.close')} title={t('orders.close')} onClick={closeDetails}>
+                ✕
+              </button>
+            </div>
           </div>
           <div className="card-body">
+            {error && <div className="alert alert-error" style={{ marginBottom: 12 }}>{error}</div>}
             <div className="grid-2">
               <div className="form-group">
                 <span className="meta-label">{t('orders.orderId')}</span>
@@ -542,6 +727,11 @@ export function OrdersRoute(): React.JSX.Element {
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
+              {editable && (
+                <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => void handleCancelOrder()}>
+                  {t('orders.cancelOrder')}
+                </button>
+              )}
             </div>
 
             <div style={{ marginTop: 20 }}>
@@ -554,6 +744,7 @@ export function OrdersRoute(): React.JSX.Element {
                     <th style={{ ...thStyle, textAlign: 'center' }}>{t('orders.qty')}</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>{t('orders.unitPrice')}</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>{t('orders.lineTotal')}</th>
+                    {editable && <th style={thStyle} />}
                   </tr>
                 </thead>
                 <tbody>
@@ -567,17 +758,155 @@ export function OrdersRoute(): React.JSX.Element {
                           </span>
                         )}
                       </td>
-                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)', fontStyle: it.note ? 'italic' : undefined }}>{it.note ?? '—'}</td>
-                      <td style={{ ...tdStyle, textAlign: 'center' }}>{it.quantity}</td>
+                      <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)', fontStyle: it.note ? 'italic' : undefined }}>
+                        {noteDraft?.id === it.id ? (
+                          <input
+                            className="form-input"
+                            autoFocus
+                            maxLength={512}
+                            value={noteDraft.text}
+                            onChange={(e) => setNoteDraft({ id: it.id, text: e.target.value })}
+                            onBlur={() => void saveNote()}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') void saveNote()
+                              if (e.key === 'Escape') {
+                                e.stopPropagation() // cancel the note edit, keep the window open
+                                setNoteDraft(null)
+                              }
+                            }}
+                          />
+                        ) : (
+                          <>
+                            {it.note ?? '—'}
+                            {editable && (
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ marginLeft: 6 }}
+                                title={t('orders.editNote')}
+                                disabled={busy}
+                                onClick={() => setNoteDraft({ id: it.id, text: it.note ?? '' })}
+                              >
+                                ✏️
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center' }}>
+                        {editable && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={busy || it.quantity <= 1}
+                            onClick={() => void applyEdit((orderId) => updateOrderItem(orderId, it.id, { quantity: it.quantity - 1 }))}
+                          >
+                            −
+                          </button>
+                        )}
+                        <span style={{ margin: '0 8px' }}>{it.quantity}</span>
+                        {editable && (
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            disabled={busy || it.quantity >= 99}
+                            onClick={() => void applyEdit((orderId) => updateOrderItem(orderId, it.id, { quantity: it.quantity + 1 }))}
+                          >
+                            +
+                          </button>
+                        )}
+                      </td>
                       <td style={{ ...tdStyle, textAlign: 'right' }}>${String(it.price_snapshot)}</td>
                       <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 600 }}>${(Number(it.price_snapshot) * it.quantity).toFixed(2)}</td>
+                      {editable && (
+                        <td style={tdStyle}>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            disabled={busy}
+                            onClick={() => void applyEdit((orderId) => removeOrderItem(orderId, it.id))}
+                          >
+                            {t('common.remove')}
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
               </table>
               {!items.length && <div className="empty-state" style={{ padding: '16px 0' }}>{t('orders.noItems')}</div>}
+
+              {editable && (
+                <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <select
+                    className="form-select"
+                    value={addForm.itemId}
+                    onChange={(e) => setAddForm({ ...addForm, itemId: e.target.value, variantId: '' })}
+                  >
+                    <option value="">{t('orders.chooseItem')}</option>
+                    {(menuItems ?? []).filter((m) => m.availability).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}{m.variants?.length ? '' : ` — $${String(m.price)}`}
+                      </option>
+                    ))}
+                  </select>
+                  {addOptions.length > 0 && (
+                    <select
+                      className="form-select"
+                      value={addForm.variantId}
+                      onChange={(e) => setAddForm({ ...addForm, variantId: e.target.value })}
+                    >
+                      <option value="">{t('orders.chooseOption')}</option>
+                      {addOptions.map((v) => (
+                        <option key={v.id} value={v.id}>{v.name} — ${String(v.price)}</option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    className="form-input"
+                    type="number"
+                    min={1}
+                    max={99}
+                    style={{ width: 70 }}
+                    value={addForm.quantity}
+                    onChange={(e) => setAddForm({ ...addForm, quantity: Math.min(99, Math.max(1, Number(e.target.value) || 1)) })}
+                  />
+                  <input
+                    className="form-input"
+                    placeholder={t('orders.note')}
+                    maxLength={512}
+                    value={addForm.note}
+                    onChange={(e) => setAddForm({ ...addForm, note: e.target.value })}
+                  />
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={busy || !addMenuItem || (addOptions.length > 0 && !addForm.variantId)}
+                    onClick={() => void handleAddItem()}
+                  >
+                    {t('orders.addItem')}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>{t('orders.history')}</h3>
+              {events.length ? (
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
+                  {events.map((e) => (
+                    <li key={e.id} style={{ marginBottom: 4 }}>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>{localTime(e.created_at)}</span>
+                      {' · '}{e.detail}
+                      {e.total_before !== null && e.total_after !== null && e.total_before !== e.total_after && (
+                        <span style={{ marginLeft: 8, fontWeight: 600 }}>
+                          ${String(e.total_before)} → ${String(e.total_after)}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>{t('orders.noHistory')}</div>
+              )}
             </div>
           </div>
+        </div>
         </div>
       )}
     </>

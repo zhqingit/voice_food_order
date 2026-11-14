@@ -211,6 +211,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'This store takes payment at pickup or on delivery.';
 
   @override
+  String get contactRestaurant => 'Call the restaurant';
+
+  @override
+  String get modifiedByStore => 'Changed by the restaurant';
+
+  @override
   String get paymentFailed => 'Payment failed. Please try again.';
 
   @override

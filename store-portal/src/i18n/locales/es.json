@@ -229,7 +229,20 @@
     "notificationsBlocked": "Las notificaciones de escritorio están bloqueadas en la configuración del sitio de este navegador.",
     "newOrderNotification": "Nuevo pedido #{{code}}",
     "channelPhone": "Teléfono",
-    "callbackPhone": "Teléfono de contacto"
+    "callbackPhone": "Teléfono de contacto",
+    "cancelOrder": "Cancelar pedido",
+    "confirmCancelOrder": "¿Cancelar el pedido #{{code}}? Avise al cliente.",
+    "editNote": "Editar nota",
+    "chooseItem": "Agregar un artículo…",
+    "chooseOption": "Elija una opción…",
+    "addItem": "Agregar",
+    "lastItem": "Un pedido necesita al menos un artículo. Cancele el pedido en su lugar.",
+    "notEditable": "Este pedido ya no se puede modificar.",
+    "history": "Historial de cambios",
+    "noHistory": "Sin cambios todavía.",
+    "close": "Cerrar",
+    "orderCount_one": "{{count}} pedido",
+    "orderCount_other": "{{count}} pedidos"
   },
   "profile": {
     "title": "Perfil y Configuración",

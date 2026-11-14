@@ -210,6 +210,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get payAtStoreNote => 'Esta tienda cobra al recoger o en la entrega.';
 
   @override
+  String get contactRestaurant => 'Llamar al restaurante';
+
+  @override
+  String get modifiedByStore => 'Modificado por el restaurante';
+
+  @override
   String get paymentFailed => 'El pago falló. Inténtalo de nuevo.';
 
   @override

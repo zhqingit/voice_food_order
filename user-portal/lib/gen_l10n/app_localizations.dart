@@ -490,6 +490,18 @@ abstract class AppLocalizations {
   /// **'This store takes payment at pickup or on delivery.'**
   String get payAtStoreNote;
 
+  /// No description provided for @contactRestaurant.
+  ///
+  /// In en, this message translates to:
+  /// **'Call the restaurant'**
+  String get contactRestaurant;
+
+  /// No description provided for @modifiedByStore.
+  ///
+  /// In en, this message translates to:
+  /// **'Changed by the restaurant'**
+  String get modifiedByStore;
+
   /// No description provided for @paymentFailed.
   ///
   /// In en, this message translates to:

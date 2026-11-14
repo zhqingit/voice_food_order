@@ -54,6 +54,46 @@ export async function updateOrderStatus(orderId: UUID, status: string): Promise<
   return res.data as OrderOut
 }
 
+// ── Staff edits to a placed order (each returns the order with new totals) ──
+
+export async function addOrderItem(
+  orderId: UUID,
+  payload: { menu_item_id: UUID; variant_id?: UUID | null; quantity: number; note?: string | null },
+): Promise<OrderOut> {
+  const res = await apiClient.post(`/store/orders/${orderId}/items`, payload)
+  return res.data as OrderOut
+}
+
+// Leave `note` out to keep it; send "" to remove it.
+export async function updateOrderItem(
+  orderId: UUID,
+  itemId: UUID,
+  payload: { quantity?: number; note?: string },
+): Promise<OrderOut> {
+  const res = await apiClient.patch(`/store/orders/${orderId}/items/${itemId}`, payload)
+  return res.data as OrderOut
+}
+
+export async function removeOrderItem(orderId: UUID, itemId: UUID): Promise<OrderOut> {
+  const res = await apiClient.delete(`/store/orders/${orderId}/items/${itemId}`)
+  return res.data as OrderOut
+}
+
+export type OrderEventOut = {
+  id: UUID
+  actor: string
+  kind: string
+  detail: string
+  total_before: Money | null
+  total_after: Money | null
+  created_at: string
+}
+
+export async function listOrderEvents(orderId: UUID): Promise<OrderEventOut[]> {
+  const res = await apiClient.get(`/store/orders/${orderId}/events`)
+  return res.data as OrderEventOut[]
+}
+
 export type OrderUsage = {
   prompt_tokens: number
   completion_tokens: number

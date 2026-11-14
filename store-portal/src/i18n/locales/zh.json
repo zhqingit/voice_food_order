@@ -229,7 +229,19 @@
     "notificationsBlocked": "桌面通知已在浏览器的网站设置中被屏蔽。",
     "newOrderNotification": "新订单 #{{code}}",
     "channelPhone": "电话",
-    "callbackPhone": "回电号码"
+    "callbackPhone": "回电号码",
+    "cancelOrder": "取消订单",
+    "confirmCancelOrder": "确定取消订单 #{{code}} 吗？请记得通知顾客。",
+    "editNote": "修改备注",
+    "chooseItem": "添加菜品…",
+    "chooseOption": "选择规格…",
+    "addItem": "添加",
+    "lastItem": "订单至少要保留一个菜品。如需全部取消，请取消订单。",
+    "notEditable": "此订单已无法修改。",
+    "history": "修改记录",
+    "noHistory": "暂无修改。",
+    "close": "关闭",
+    "orderCount_other": "{{count}} 单"
   },
   "profile": {
     "title": "店铺资料与设置",

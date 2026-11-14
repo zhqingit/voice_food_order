@@ -210,6 +210,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get payAtStoreNote => '这家店在取餐或送达时付款。';
 
   @override
+  String get contactRestaurant => '联系餐厅';
+
+  @override
+  String get modifiedByStore => '餐厅已修改订单';
+
+  @override
   String get paymentFailed => '付款失败，请重试。';
 
   @override

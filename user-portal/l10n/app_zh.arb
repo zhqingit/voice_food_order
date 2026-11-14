@@ -74,6 +74,8 @@
   "unpaid": "未付款",
   "payAmount": "支付 {amount}",
   "payAtStoreNote": "这家店在取餐或送达时付款。",
+  "contactRestaurant": "联系餐厅",
+  "modifiedByStore": "餐厅已修改订单",
   "paymentFailed": "付款失败，请重试。",
   "unpaidOrderBanner": "{storeName} 的订单 #{code} 还没付款",
   "statusSubmitted": "已下单",

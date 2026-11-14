@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../data/order_models.dart';
 import '../../gen_l10n/app_localizations.dart';
@@ -230,6 +231,7 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                     if (_order.fulfillmentType != null)
                       _Chip(label: _order.fulfillmentType == 'delivery' ? l10n.delivery : l10n.pickup, color: _kTextMuted),
                     _Chip(label: _paid ? l10n.paid : l10n.unpaid, color: _paid ? _kGreen : _kAmber),
+                    if (_order.modifiedByStore) _Chip(label: l10n.modifiedByStore, color: _kOrange),
                   ],
                 ),
                 if (_expanded) _Items(orderId: _order.id),
@@ -239,6 +241,18 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                 ] else if (!_paid && open) ...[
                   const SizedBox(height: 10),
                   Text(l10n.payAtStoreNote, style: const TextStyle(fontSize: 12, color: _kAmber)),
+                ],
+                if (_order.storePhone != null && _order.storePhone!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      style: TextButton.styleFrom(foregroundColor: _kOrange, padding: EdgeInsets.zero),
+                      icon: const Icon(Icons.phone, size: 18),
+                      label: Text(l10n.contactRestaurant),
+                      onPressed: () => launchUrl(Uri(scheme: 'tel', path: _order.storePhone)),
+                    ),
+                  ),
                 ],
               ],
             ),

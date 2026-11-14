@@ -13,6 +13,10 @@ class OrderOut {
   final String? storeName;
   /// Unpaid, still open, and the store takes online payment (My Orders only).
   final bool canPayOnline;
+  /// The store's phone, so the customer can call about the order (My Orders only).
+  final String? storePhone;
+  /// Staff changed the items after the order was placed (My Orders only).
+  final bool modifiedByStore;
   final String? userId;
   final String status;
   final String paymentStatus;
@@ -31,6 +35,8 @@ class OrderOut {
     required this.storeId,
     this.storeName,
     this.canPayOnline = false,
+    this.storePhone,
+    this.modifiedByStore = false,
     required this.userId,
     required this.status,
     required this.paymentStatus,
@@ -51,6 +57,8 @@ class OrderOut {
       storeId: json['store_id'] as String,
       storeName: json['store_name'] as String?,
       canPayOnline: json['can_pay_online'] as bool? ?? false,
+      storePhone: json['store_phone'] as String?,
+      modifiedByStore: json['modified_by_store'] as bool? ?? false,
       userId: json['user_id'] as String?,
       status: json['status'] as String,
       paymentStatus: json['payment_status'] as String? ?? 'unpaid',

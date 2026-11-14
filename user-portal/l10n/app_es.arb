@@ -74,6 +74,8 @@
   "unpaid": "Sin pagar",
   "payAmount": "Pagar {amount}",
   "payAtStoreNote": "Esta tienda cobra al recoger o en la entrega.",
+  "contactRestaurant": "Llamar al restaurante",
+  "modifiedByStore": "Modificado por el restaurante",
   "paymentFailed": "El pago falló. Inténtalo de nuevo.",
   "unpaidOrderBanner": "El pedido #{code} de {storeName} aún no está pagado",
   "statusSubmitted": "Realizado",
