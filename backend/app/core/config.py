@@ -112,7 +112,8 @@ class Settings(BaseSettings):
     # referenced by its acct_ id (stores.stripe_account_id).
     stripe_secret_key: str | None = None
     stripe_publishable_key: str | None = None
-    # Webhook signing secret (whsec_...); set once the webhook is registered.
+    # Webhook signing secret(s) (whsec_...), comma-separated: one for the
+    # platform endpoint and one for the Connect (connected accounts) endpoint.
     stripe_webhook_secret: str | None = None
     # Platform commission in basis points (1000 = 10%). Default for all stores;
     # a store may override via stores.platform_fee_bps.

@@ -148,11 +148,20 @@ def create_payment_intent(order: Order, store: Store) -> PaymentIntentResult:
 
 
 def verify_webhook(payload: bytes, signature: str) -> stripe.Event:
-    """Verify a Stripe webhook signature and return the parsed event."""
-    if not settings.stripe_webhook_secret:
+    """Verify a Stripe webhook signature and return the parsed event.
+
+    STRIPE_WEBHOOK_SECRET may hold several comma-separated secrets: the
+    platform ("Your account") endpoint and the Connect ("Connected accounts")
+    endpoint each have their own signing secret.
+    """
+    secrets = [s.strip() for s in (settings.stripe_webhook_secret or "").split(",") if s.strip()]
+    if not secrets:
         raise AppError(500, "stripe_not_configured", "Stripe webhook secret is not configured.")
-    try:
-        return stripe.Webhook.construct_event(payload, signature, settings.stripe_webhook_secret)
-    except (ValueError, stripe.error.SignatureVerificationError) as exc:
-        log.warning("payment_service.verify_webhook invalid signature: %s", exc)
-        raise AppError(400, "invalid_webhook", "Invalid webhook signature.") from exc
+    last_exc: Exception | None = None
+    for secret in secrets:
+        try:
+            return stripe.Webhook.construct_event(payload, signature, secret)
+        except (ValueError, stripe.error.SignatureVerificationError) as exc:
+            last_exc = exc
+    log.warning("payment_service.verify_webhook invalid signature: %s", last_exc)
+    raise AppError(400, "invalid_webhook", "Invalid webhook signature.") from last_exc
