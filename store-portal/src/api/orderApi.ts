@@ -14,7 +14,8 @@ export type OrderOut = {
   amount_paid: Money
   balance_due: Money
   channel: string
-  subtotal: Money
+  subtotal: Money // before discount
+  discount: Money // store promotion, taken off before tax
   tax: Money
   total: Money
   customer_name: string | null

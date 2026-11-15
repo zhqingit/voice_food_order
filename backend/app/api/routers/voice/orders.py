@@ -48,6 +48,7 @@ def _order_out(order: Order) -> OrderOut:
         payment_status=order.payment_status,
         channel=order.channel,
         subtotal=order.subtotal,
+        discount=order.discount,
         tax=order.tax,
         total=order.total,
         customer_name=order.customer_name,
@@ -218,8 +219,8 @@ def finalize_order(
     if order.status != "draft":
         raise AppError(status_code=409, code="order_not_editable", detail="Order is not editable")
 
+    order_service.recalc_totals(db, order=order)  # while still a draft: picks the promotion
     order.status = "submitted"
-    order_service.recalc_totals(db, order=order)
     db.commit()
     db.refresh(order)
     return _order_out(order)

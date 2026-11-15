@@ -10,6 +10,7 @@ from app.models.store import Store
 from app.voice.menu import load_menu_for_store
 from app.voice.monitor import ConversationMonitor, MonitorConfig
 from app.services.store_hours_service import store_open_status
+from app.services import commission, order_service, promotions
 from app.voice.prompts import PhoneCallInfo, build_system_prompt
 
 _VOICE_TONE_MAP = {
@@ -43,6 +44,12 @@ def load_store_voice_setup(db: Session, store: Store, *, phone: PhoneCallInfo | 
     menu = load_menu_for_store(db, store.id)
     addr_parts = [store.address_line1, store.address_line2, store.city, store.state, store.postal_code]
     store_address = ", ".join(p for p in (_clean(v) for v in addr_parts) if p) or None
+    running = promotions.running_for(
+        db,
+        store_id=store.id,
+        channel=commission.PHONE_CHANNEL if phone is not None else "voice",
+        day=order_service.today_in_store_tz(store),
+    )
 
     system_prompt = build_system_prompt(
         menu_lines=menu,
@@ -56,6 +63,7 @@ def load_store_voice_setup(db: Session, store: Store, *, phone: PhoneCallInfo | 
         store_country=_clean(store.country),
         hours_today=store_open_status(db, store).today_text,
         phone=phone,
+        promotions=[f"{p.name}: {promotions.describe(p)}" for p in running],
     )
     return StoreVoiceSetup(
         system_prompt=system_prompt,

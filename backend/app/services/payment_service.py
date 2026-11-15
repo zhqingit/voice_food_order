@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Callable
 
@@ -202,6 +203,112 @@ def create_refund(payment_intent_id: str, *, amount: Decimal, order_id: str) -> 
         metadata={"order_id": order_id},
     )
     return RefundResult(refund_id=refund.id, status=refund.status)
+
+
+# ── Monthly invoices to stores ────────────────────────────────────────────
+# The platform bills each store (as a Stripe Customer on the platform account)
+# for commission on orders paid at the store. Stripe emails the invoice and the
+# store pays on Stripe's hosted page.
+
+
+@dataclass(frozen=True)
+class SentInvoice:
+    invoice_id: str
+    hosted_url: str | None
+    pdf_url: str | None
+    due_date: date | None
+
+
+def ensure_customer(store: Store) -> str:
+    """The store's Stripe Customer id, created on first use."""
+    if store.stripe_customer_id:
+        return store.stripe_customer_id
+    customer = _call(
+        "ensure_customer",
+        stripe.Customer.create,
+        email=store.email,
+        name=store.name,
+        metadata={"store_id": str(store.id)},
+        idempotency_key=f"store-customer-{store.id}",
+    )
+    return customer.id
+
+
+def send_invoice(
+    *,
+    customer_id: str,
+    invoice_ref: str,
+    lines: list[tuple[str, Decimal]],
+    description: str,
+    footer: str,
+    days_until_due: int,
+) -> SentInvoice:
+    """Create, finalize and email an invoice. Safe to retry: every call has an
+    idempotency key, and a retry picks up an invoice already finalized."""
+    key = f"store-invoice-{invoice_ref}"
+    invoice = _call(
+        "create_invoice",
+        stripe.Invoice.create,
+        customer=customer_id,
+        collection_method="send_invoice",
+        days_until_due=days_until_due,
+        pending_invoice_items_behavior="exclude",
+        auto_advance=False,
+        description=description,
+        footer=footer,
+        metadata={"store_invoice_id": invoice_ref},
+        idempotency_key=f"{key}-create",
+    )
+    for i, (text, amount) in enumerate(lines):
+        _call(
+            "create_invoice_item",
+            stripe.InvoiceItem.create,
+            customer=customer_id,
+            invoice=invoice.id,
+            amount=to_cents(amount),
+            currency="usd",
+            description=text,
+            idempotency_key=f"{key}-item-{i}",
+        )
+    invoice = _call("retrieve_invoice", stripe.Invoice.retrieve, invoice.id)
+    if invoice.status == "draft":
+        expected = sum(to_cents(amount) for _, amount in lines)
+        if int(invoice.total) != expected:
+            raise AppError(409, "stripe_total_mismatch", "The Stripe draft does not match this invoice; delete it in Stripe and retry.")
+        invoice = _call("finalize_invoice", stripe.Invoice.finalize_invoice, invoice.id)
+    _call("send_invoice", stripe.Invoice.send_invoice, invoice.id)
+    due = datetime.fromtimestamp(invoice.due_date, tz=timezone.utc).date() if invoice.due_date else None
+    return SentInvoice(
+        invoice_id=invoice.id, hosted_url=invoice.hosted_invoice_url, pdf_url=invoice.invoice_pdf, due_date=due
+    )
+
+
+def void_invoice(invoice_id: str) -> None:
+    _call("void_invoice", stripe.Invoice.void_invoice, invoice_id)
+
+
+def mark_invoice_paid_out_of_band(invoice_id: str) -> None:
+    _call("mark_invoice_paid", stripe.Invoice.pay, invoice_id, paid_out_of_band=True)
+
+
+def fetch_invoice_stripe_fee(invoice_id: str) -> Decimal | None:
+    """Stripe's processing fee on an invoice's payment. Best-effort: None if unknown."""
+    try:
+        payments = _call(
+            "fetch_invoice_stripe_fee",
+            stripe.InvoicePayment.list,
+            invoice=invoice_id,
+            expand=["data.payment.payment_intent.latest_charge.balance_transaction"],
+        )
+        cents = sum(
+            int(p.payment.payment_intent.latest_charge.balance_transaction.fee)
+            for p in payments.data
+            if p.status == "paid" and p.payment.type == "payment_intent"
+        )
+        return (Decimal(cents) / 100).quantize(Decimal("0.01"))
+    except Exception:  # noqa: BLE001 - reporting data only; never fail the webhook
+        log.warning("payment_service.fetch_invoice_stripe_fee failed for %s", invoice_id, exc_info=True)
+        return None
 
 
 # ── Webhook ───────────────────────────────────────────────────────────────

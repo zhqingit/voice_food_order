@@ -65,6 +65,7 @@ def _order_out(
         balance_due=max(order_payments.owed(order) - net_paid, order_payments.ZERO),
         channel=order.channel,
         subtotal=order.subtotal,
+        discount=order.discount,
         tax=order.tax,
         total=order.total,
         customer_name=order.customer_name,

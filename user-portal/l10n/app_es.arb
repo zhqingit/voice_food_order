@@ -95,5 +95,10 @@
   "statusCompleted": "Completado",
   "statusCancelled": "Cancelado",
   "orderNotPlaced": "Este pedido no se realizó.",
-  "restaurantOwnerPromo": "¿Tienes un restaurante? Deja que la IA atienda tus pedidos por teléfono →"
+  "restaurantOwnerPromo": "¿Tienes un restaurante? Deja que la IA atienda tus pedidos por teléfono →",
+
+  "discount": "Descuento",
+  "promoPercentOff": "{percent}% menos",
+  "promoAmountOff": "{amount} menos",
+  "promoWithMinimum": "{deal} desde {min}"
 }

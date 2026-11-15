@@ -51,7 +51,9 @@
     "orders": "Pedidos",
     "ai": "IA",
     "profile": "Perfil",
-    "logout": "Cerrar sesión"
+    "logout": "Cerrar sesión",
+    "billing": "Facturación",
+    "promotions": "Promociones"
   },
   "menu": {
     "title": "Gestión de Menú",
@@ -272,7 +274,8 @@
     "smsNotAvailable": "Los SMS estarán disponibles cuando se apruebe el registro.",
     "customerNotifiedAt": "Último aviso al cliente: {{time}}",
     "badgeBalanceDue": "Saldo pendiente",
-    "badgeRefunded": "Reembolsado"
+    "badgeRefunded": "Reembolsado",
+    "discount": "Descuento"
   },
   "profile": {
     "title": "Perfil y Configuración",
@@ -367,5 +370,73 @@
     "setupTurnOn": "Activa los pedidos por teléfono arriba.",
     "setupTest": "Llama a tu restaurante y deja que suene: la IA debería contestar.",
     "paymentNote": "Los pedidos por teléfono se pagan al recoger o al entregar. Aparecen en Pedidos con la etiqueta Teléfono y el número de quien llamó."
+  },
+  "billing": {
+    "title": "Facturación",
+    "subtitle": "Facturas mensuales de VoxEats: comisión de los pedidos pagados en el local, más la cuota mensual si la hay. La comisión de los pedidos pagados en línea se cobra automáticamente y no se factura aquí.",
+    "month": "Mes",
+    "statusLabel": "Estado",
+    "orders": "Pedidos",
+    "total": "Total",
+    "due": "Vence",
+    "payNow": "Pagar",
+    "empty": "Aún no hay facturas.",
+    "loadFailed": "No se pudieron cargar las facturas.",
+    "downloadCsv": "Descargar CSV",
+    "item": "Concepto",
+    "subtotal": "Subtotal (sin impuestos)",
+    "rate": "Tasa",
+    "commission": "Comisión",
+    "paidOnline": "Cobrado en línea",
+    "billed": "Facturado",
+    "monthlyFee": "Cuota mensual",
+    "appOrder": "Pedido por app",
+    "phoneOrder": "Pedido por teléfono",
+    "status": {
+      "open": "Pendiente",
+      "paid": "Pagada",
+      "void": "Anulada",
+      "uncollectible": "Incobrable",
+      "overdue": "Vencida"
+    }
+  },
+  "promotions": {
+    "title": "Promociones",
+    "subtitle": "Descuentos que usted financia, aplicados automáticamente a los pedidos que califican, en la app y por teléfono.",
+    "new": "Nueva promoción",
+    "name": "Nombre que ven los clientes",
+    "namePlaceholder": "p. ej. Inauguración 10% de descuento",
+    "type": "Tipo",
+    "typePercent": "Porcentaje",
+    "typeAmount": "Monto fijo",
+    "percent": "Descuento (%)",
+    "amount": "Descuento ($)",
+    "minSubtotal": "Pedido mínimo, sin impuestos ($, opcional)",
+    "channels": "Aplica a",
+    "channelAll": "App y teléfono",
+    "channelApp": "Pedidos por app",
+    "channelPhone": "Pedidos por teléfono",
+    "dates": "Fecha de inicio / fin (opcional)",
+    "rules": "Cada pedido recibe su mejor promoción (no se suman). El descuento se aplica antes de impuestos y nuestra comisión se calcula sobre el monto con descuento. Una vez creada, las condiciones no se pueden cambiar: desactívela y cree otra.",
+    "create": "Crear promoción",
+    "list": "Sus promociones",
+    "empty": "Aún no hay promociones.",
+    "percentOff": "{{value}}% de descuento",
+    "amountOff": "{{value}} de descuento",
+    "withMinimum": "{{off}} en pedidos de {{min}} o más",
+    "anyOrder": "{{off}} en cualquier pedido",
+    "noEnd": "Sin fecha de fin",
+    "used_one": "usada en {{count}} pedido",
+    "used_other": "usada en {{count}} pedidos",
+    "turnOff": "Desactivar",
+    "turnOn": "Activar",
+    "delete": "Eliminar",
+    "confirmDelete": "¿Eliminar “{{name}}”?",
+    "loadFailed": "No se pudieron cargar las promociones.",
+    "errors": {
+      "invalid": "Revise los campos: nombre, monto mayor que 0 (máximo 100%) y fecha de fin posterior al inicio.",
+      "promotion_in_use": "Hay pedidos que usaron esta promoción; no se puede eliminar. Desactívela.",
+      "generic": "Algo salió mal. Inténtelo de nuevo."
+    }
   }
 }

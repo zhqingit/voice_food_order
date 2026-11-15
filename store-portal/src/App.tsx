@@ -11,6 +11,8 @@ import { MenuRoute } from './routes/MenuRoute'
 import { OrdersRoute } from './routes/OrdersRoute'
 import { ProfileRoute } from './routes/ProfileRoute'
 import { AIRoute } from './routes/AIRoute'
+import { BillingRoute } from './routes/BillingRoute'
+import { PromotionsRoute } from './routes/PromotionsRoute'
 import { changeLanguage, SUPPORTED_LANGUAGES } from './i18n'
 
 export function App(): React.JSX.Element {
@@ -48,6 +50,8 @@ export function App(): React.JSX.Element {
           <Route path="/menu" element={<MenuRoute />} />
           <Route path="/orders" element={<OrdersRoute />} />
           <Route path="/ai" element={<AIRoute />} />
+          <Route path="/promotions" element={<PromotionsRoute />} />
+          <Route path="/billing" element={<BillingRoute />} />
           <Route path="/profile" element={<ProfileRoute />} />
           <Route path="*" element={<Navigate to="/menu" replace />} />
         </Routes>

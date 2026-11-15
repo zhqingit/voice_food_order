@@ -8,8 +8,10 @@ from app.models.order_event import OrderEvent
 from app.models.payment import Payment
 from app.models.phone_call import PhoneCall
 from app.models.platform_cost import PlatformCost
+from app.models.promotion import Promotion
 from app.models.order_item import OrderItem
 from app.models.store import Store
+from app.models.store_invoice import StoreInvoice, StoreInvoiceLine
 from app.models.voice_session import VoiceSession
 from app.models.refresh_session import RefreshSession
 from app.models.refresh_token import RefreshToken
@@ -18,6 +20,8 @@ from app.models.user import User
 __all__ = [
 	"User",
 	"Store",
+	"StoreInvoice",
+	"StoreInvoiceLine",
 	"Admin",
 	"Menu",
 	"MenuItem",
@@ -28,6 +32,7 @@ __all__ = [
 	"Payment",
 	"PhoneCall",
 	"PlatformCost",
+	"Promotion",
 	"OrderItem",
 	"VoiceSession",
 	"RefreshSession",

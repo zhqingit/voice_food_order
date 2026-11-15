@@ -52,6 +52,9 @@ class LiveOrderSummary {
   final String? shortCode;
   final String status;
   final double subtotal;
+  /// Restaurant promotion applied by the server (0 = none), and its name.
+  final double discount;
+  final String? promotion;
   final double tax;
   final double total;
   final List<LiveOrderItem> items;
@@ -63,6 +66,8 @@ class LiveOrderSummary {
     required this.shortCode,
     required this.status,
     required this.subtotal,
+    this.discount = 0,
+    this.promotion,
     required this.tax,
     required this.total,
     required this.items,
@@ -79,6 +84,8 @@ class LiveOrderSummary {
       shortCode: json['short_code'] as String?,
       status: json['status'] as String? ?? 'draft',
       subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      discount: (json['discount'] as num?)?.toDouble() ?? 0,
+      promotion: json['promotion'] as String?,
       tax: (json['tax'] as num?)?.toDouble() ?? 0,
       total: (json['total'] as num?)?.toDouble() ?? 0,
       items: itemsList,
@@ -93,6 +100,8 @@ class LiveOrderSummary {
       shortCode: shortCode,
       status: status,
       subtotal: subtotal,
+      discount: discount,
+      promotion: promotion,
       tax: tax,
       total: total,
       items: items,

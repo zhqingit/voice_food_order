@@ -12,7 +12,8 @@ CostCategory = Literal["server", "phone_numbers", "domain", "other"]
 
 class ChannelStats(BaseModel):
     orders: int = 0
-    gmv: Decimal = Decimal("0.00")  # pre-tax subtotal of completed orders
+    gmv: Decimal = Decimal("0.00")  # pre-tax subtotal of completed orders, after store discounts
+    discounts: Decimal = Decimal("0.00")  # store-funded promotions
     commission: Decimal = Decimal("0.00")
 
 
@@ -31,6 +32,7 @@ class StoreMonthStats(BaseModel):
     phone_minutes: int
     telephony_cost: Decimal  # estimated
     stripe_fees: Decimal
+    invoice_fees: Decimal  # Stripe fees on this month's paid invoice
     costs: Decimal
     net: Decimal
 
@@ -53,6 +55,7 @@ class PlatformCostCreate(BaseModel):
 class MonthTotals(BaseModel):
     orders: int
     gmv: Decimal
+    discounts: Decimal
     commission: Decimal
     commission_online: Decimal
     commission_to_invoice: Decimal
@@ -61,9 +64,15 @@ class MonthTotals(BaseModel):
     ai_cost: Decimal
     telephony_cost: Decimal
     stripe_fees: Decimal
+    invoice_fees: Decimal
     fixed_costs: Decimal
     costs: Decimal
     net: Decimal
+    # This month's invoices to stores (sent ones).
+    invoiced: Decimal
+    invoice_paid: Decimal
+    invoice_outstanding: Decimal  # open or uncollectible
+    invoice_overdue: Decimal
 
 
 class MonthlyStatsOut(BaseModel):

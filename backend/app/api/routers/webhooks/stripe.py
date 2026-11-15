@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.order import Order
 from app.models.store import Store
-from app.services import order_payments, payment_service
+from app.services import invoice_service, order_payments, payment_service
 
 log = logging.getLogger(__name__)
 
@@ -118,6 +118,17 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
                 amount=_dollars(_field(obj, "amount")),
                 status=_field(obj, "status") or "",
                 reason=_field(obj, "reason"),
+            )
+            db.commit()
+
+    elif event_type in ("invoice.paid", "invoice.voided", "invoice.marked_uncollectible"):
+        # The platform's monthly invoices to stores.
+        if _field(obj, "id"):
+            invoice_service.on_stripe_event(
+                db,
+                event_type=event_type,
+                stripe_invoice_id=_field(obj, "id"),
+                paid_out_of_band=bool(_field(obj, "paid_out_of_band")),
             )
             db.commit()
 

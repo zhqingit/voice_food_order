@@ -50,11 +50,14 @@ class Store(Base):
     # Cached from Stripe (account.updated webhook): whether the store can accept
     # charges yet. Drives payment-ready badges; NOT a gate on orderability.
     stripe_charges_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Stripe Customer (cus_...) on the platform account that the store's
+    # monthly invoices are billed to. Created on the first invoice sent.
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Per-store commission overrides in basis points (e.g. 1500 = 15%), by order
     # channel. None falls back to the platform default (settings.commission_*_bps).
     commission_app_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     commission_phone_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # Flat monthly fee added to the store's monthly invoice. 0 = none (not used yet).
+    # Flat monthly fee added to the store's monthly invoice. 0 = none.
     monthly_fee: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
     )

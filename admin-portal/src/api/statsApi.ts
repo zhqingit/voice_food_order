@@ -1,7 +1,8 @@
 import { apiClient } from './client'
 
 // Money values are decimal strings ("12.50").
-export type ChannelStats = { orders: number; gmv: string; commission: string }
+// gmv is pre-tax and after store discounts; discounts are store-funded promotions.
+export type ChannelStats = { orders: number; gmv: string; discounts: string; commission: string }
 
 export type StoreMonthStats = {
   store_id: string
@@ -17,6 +18,7 @@ export type StoreMonthStats = {
   phone_minutes: number
   telephony_cost: string // estimated
   stripe_fees: string
+  invoice_fees: string // Stripe fees on this month's paid invoice
   costs: string
   net: string
 }
@@ -30,6 +32,7 @@ export type MonthlyStats = {
   totals: {
     orders: number
     gmv: string
+    discounts: string
     commission: string
     commission_online: string
     commission_to_invoice: string
@@ -38,9 +41,15 @@ export type MonthlyStats = {
     ai_cost: string
     telephony_cost: string
     stripe_fees: string
+    invoice_fees: string
     fixed_costs: string
     costs: string
     net: string
+    // This month's invoices to stores (sent ones).
+    invoiced: string
+    invoice_paid: string
+    invoice_outstanding: string
+    invoice_overdue: string
   }
   stores: StoreMonthStats[]
   fixed_costs: PlatformCost[]

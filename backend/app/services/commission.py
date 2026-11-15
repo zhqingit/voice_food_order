@@ -2,7 +2,7 @@
 
 The rate depends on the channel the order came in on (app or phone): each
 store may override the platform default for either. It is charged on the
-pre-tax subtotal, and locked on the order when the order is created, so a later
+pre-tax subtotal after any store discount, and locked on the order when the order is created, so a later
 rate change never alters past orders.
 
 For orders paid online, the commission is taken from each Stripe charge as the
@@ -44,4 +44,4 @@ def apply(order: Order, store: Store | None) -> None:
         if store is None:
             return
         order.commission_bps = resolve_bps(store, order.channel)
-    order.commission = amount(order.subtotal or Decimal("0.00"), order.commission_bps)
+    order.commission = amount((order.subtotal or Decimal("0.00")) - (order.discount or Decimal("0.00")), order.commission_bps)

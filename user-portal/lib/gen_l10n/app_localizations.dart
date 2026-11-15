@@ -621,6 +621,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Own a restaurant? Let AI answer your phone orders →'**
   String get restaurantOwnerPromo;
+
+  /// Order summary: restaurant promotion taken off the subtotal
+  ///
+  /// In en, this message translates to:
+  /// **'Discount'**
+  String get discount;
+
+  /// Store card promotion chip
+  ///
+  /// In en, this message translates to:
+  /// **'{percent}% off'**
+  String promoPercentOff(String percent);
+
+  /// Store card promotion chip
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} off'**
+  String promoAmountOff(String amount);
+
+  /// Promotion with an order minimum
+  ///
+  /// In en, this message translates to:
+  /// **'{deal} on {min}+'**
+  String promoWithMinimum(String deal, String min);
 }
 
 class _AppLocalizationsDelegate

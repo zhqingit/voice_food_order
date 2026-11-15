@@ -16,7 +16,7 @@ import uuid
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import case, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -25,10 +25,10 @@ from app.models.payment import Payment
 from app.models.phone_call import PhoneCall
 from app.models.platform_cost import PlatformCost
 from app.models.store import Store
+from app.models.store_invoice import StoreInvoice
 from app.models.voice_session import VoiceSession
 from app.schemas.admin.stats import ChannelStats, MonthlyStatsOut, MonthTotals, PlatformCostOut, StoreMonthStats
-from app.services import commission
-from app.services.order_payments import REFUND_COUNTED
+from app.services import commission, invoice_service, order_payments
 
 ZERO = Decimal("0.00")
 CENT = Decimal("0.01")
@@ -37,6 +37,18 @@ CENT = Decimal("0.01")
 def estimate_stripe_fee(amount: Decimal) -> Decimal:
     """Stripe's standard US card rate, for charges whose real fee wasn't fetched."""
     return (amount * Decimal("0.029") + Decimal("0.30")).quantize(CENT, rounding=ROUND_HALF_UP)
+
+
+# Stripe Invoicing's own fee on each paid invoice, on top of the payment fee.
+INVOICING_FEE_RATE = Decimal("0.004")
+
+
+def invoice_fee(invoice: StoreInvoice) -> Decimal:
+    """What a paid invoice cost us in Stripe fees (nothing if paid outside Stripe)."""
+    if invoice.status != invoice_service.PAID or invoice.paid_out_of_band:
+        return ZERO
+    payment = invoice.stripe_fee if invoice.stripe_fee is not None else estimate_stripe_fee(invoice.total)
+    return payment + (invoice.total * INVOICING_FEE_RATE).quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def parse_month(month: str) -> date:
@@ -67,6 +79,7 @@ class _Acc:
         self.phone_seconds = 0
         self.telephony_cost = Decimal("0")
         self.stripe_fees = ZERO
+        self.invoice_fees = ZERO
 
 
 def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
@@ -79,34 +92,19 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
 
     # Completed orders and the commission collected on each through Stripe.
     orders = db.execute(
-        select(Order.id, Order.store_id, Order.channel, Order.subtotal, Order.commission)
+        select(Order.id, Order.store_id, Order.channel, Order.subtotal, Order.discount, Order.commission)
         .where(Order.status == "completed")
         .where(Order.code_day >= start, Order.code_day < end)
     ).all()
-    fee = func.coalesce(Payment.application_fee, 0)
-    collected = dict(
-        db.execute(
-            select(
-                Payment.order_id,
-                func.sum(
-                    case(
-                        ((Payment.kind == "charge") & (Payment.status == "succeeded"), fee),
-                        ((Payment.kind == "refund") & Payment.status.in_(REFUND_COUNTED), -fee),
-                        else_=0,
-                    )
-                ),
-            )
-            .where(Payment.order_id.in_([o.id for o in orders]))
-            .group_by(Payment.order_id)
-        ).all()
-    ) if orders else {}
+    collected = order_payments.commission_collected_by_order(db, [o.id for o in orders])
     for o in orders:
         a = get(o.store_id)
         ch = a.phone if commission.is_phone(o.channel) else a.app
         ch.orders += 1
-        ch.gmv += o.subtotal
+        ch.gmv += o.subtotal - o.discount
+        ch.discounts += o.discount
         ch.commission += o.commission
-        a.commission_online += min(max(Decimal(collected.get(o.id) or 0), ZERO), o.commission)
+        a.commission_online += min(max(collected.get(o.id, ZERO), ZERO), o.commission)
 
     # AI cost of app voice sessions (phone calls are counted from phone_calls).
     for store_id, cost in db.execute(
@@ -143,6 +141,14 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
     ).all():
         get(store_id).stripe_fees += stripe_fee if stripe_fee is not None else estimate_stripe_fee(amount)
 
+    invoices = db.execute(
+        select(StoreInvoice)
+        .where(StoreInvoice.period == start)
+        .where(StoreInvoice.status.in_((invoice_service.OPEN, invoice_service.PAID, invoice_service.UNCOLLECTIBLE)))
+    ).scalars().all()
+    for inv in invoices:
+        get(inv.store_id).invoice_fees += invoice_fee(inv)
+
     # Stores with a monthly fee are listed even in a month without activity.
     stores = {
         s.id: s
@@ -156,7 +162,7 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
     ).scalars().all()
     return MonthlyStatsOut(
         month=start.strftime("%Y-%m"),
-        totals=_totals(rows, fixed),
+        totals=_totals(rows, fixed, invoices),
         stores=rows,
         fixed_costs=[cost_out(c) for c in fixed],
     )
@@ -168,7 +174,7 @@ def _store_row(store: Store, a: _Acc) -> StoreMonthStats:
     revenue = commission_total + monthly_fee
     ai_cost = a.ai_cost.quantize(CENT, rounding=ROUND_HALF_UP)
     telephony = a.telephony_cost.quantize(CENT, rounding=ROUND_HALF_UP)
-    costs = ai_cost + telephony + a.stripe_fees
+    costs = ai_cost + telephony + a.stripe_fees + a.invoice_fees
     return StoreMonthStats(
         store_id=store.id,
         store_name=store.name,
@@ -183,12 +189,13 @@ def _store_row(store: Store, a: _Acc) -> StoreMonthStats:
         phone_minutes=round(a.phone_seconds / 60),
         telephony_cost=telephony,
         stripe_fees=a.stripe_fees,
+        invoice_fees=a.invoice_fees,
         costs=costs,
         net=revenue - costs,
     )
 
 
-def _totals(rows: list[StoreMonthStats], fixed: list[PlatformCost]) -> MonthTotals:
+def _totals(rows: list[StoreMonthStats], fixed: list[PlatformCost], invoices: list[StoreInvoice]) -> MonthTotals:
     def total(fn) -> Decimal:
         return sum((fn(r) for r in rows), ZERO)
 
@@ -198,6 +205,7 @@ def _totals(rows: list[StoreMonthStats], fixed: list[PlatformCost]) -> MonthTota
     return MonthTotals(
         orders=sum(r.app.orders + r.phone.orders for r in rows),
         gmv=total(lambda r: r.app.gmv + r.phone.gmv),
+        discounts=total(lambda r: r.app.discounts + r.phone.discounts),
         commission=total(lambda r: r.app.commission + r.phone.commission),
         commission_online=total(lambda r: r.commission_online),
         commission_to_invoice=total(lambda r: r.commission_to_invoice),
@@ -206,9 +214,14 @@ def _totals(rows: list[StoreMonthStats], fixed: list[PlatformCost]) -> MonthTota
         ai_cost=total(lambda r: r.ai_cost),
         telephony_cost=total(lambda r: r.telephony_cost),
         stripe_fees=total(lambda r: r.stripe_fees),
+        invoice_fees=total(lambda r: r.invoice_fees),
         fixed_costs=fixed_costs,
         costs=costs,
         net=revenue - costs,
+        invoiced=sum((i.total for i in invoices), ZERO),
+        invoice_paid=sum((i.total for i in invoices if i.status == invoice_service.PAID), ZERO),
+        invoice_outstanding=sum((i.total for i in invoices if i.status != invoice_service.PAID), ZERO),
+        invoice_overdue=sum((i.total for i in invoices if invoice_service.is_overdue(i)), ZERO),
     )
 
 
@@ -219,7 +232,7 @@ def cost_out(c: PlatformCost) -> PlatformCostOut:
 CSV_HEADER = [
     "store", "app_orders", "app_gmv", "app_commission", "phone_orders", "phone_gmv", "phone_commission",
     "commission_online", "commission_to_invoice", "monthly_fee", "revenue",
-    "ai_cost", "phone_calls", "phone_minutes", "telephony_cost", "stripe_fees", "costs", "net",
+    "ai_cost", "phone_calls", "phone_minutes", "telephony_cost", "stripe_fees", "invoice_fees", "costs", "net",
 ]
 
 
@@ -228,7 +241,7 @@ def csv_rows(report: MonthlyStatsOut) -> list[list]:
         [
             r.store_name, r.app.orders, r.app.gmv, r.app.commission, r.phone.orders, r.phone.gmv, r.phone.commission,
             r.commission_online, r.commission_to_invoice, r.monthly_fee, r.revenue,
-            r.ai_cost, r.phone_calls, r.phone_minutes, r.telephony_cost, r.stripe_fees, r.costs, r.net,
+            r.ai_cost, r.phone_calls, r.phone_minutes, r.telephony_cost, r.stripe_fees, r.invoice_fees, r.costs, r.net,
         ]
         for r in report.stores
     ]

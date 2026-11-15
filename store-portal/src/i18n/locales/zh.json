@@ -51,7 +51,9 @@
     "orders": "订单",
     "ai": "AI 设置",
     "profile": "店铺资料",
-    "logout": "退出登录"
+    "logout": "退出登录",
+    "billing": "账单",
+    "promotions": "促销"
   },
   "menu": {
     "title": "菜单管理",
@@ -271,7 +273,8 @@
     "smsNotAvailable": "短信登记审核通过后才能发送短信。",
     "customerNotifiedAt": "上次通知顾客：{{time}}",
     "badgeBalanceDue": "待补差价",
-    "badgeRefunded": "已退款"
+    "badgeRefunded": "已退款",
+    "discount": "折扣"
   },
   "profile": {
     "title": "店铺资料与设置",
@@ -396,5 +399,73 @@
     "setupTurnOn": "在上方开启电话点餐。",
     "setupTest": "拨打餐厅电话并让它一直响：AI 应该会接听。",
     "paymentNote": "电话订单在取餐或送达时付款。它们会出现在订单页，带有“电话”标记和来电号码。"
+  },
+  "billing": {
+    "title": "账单",
+    "subtitle": "VoxEats 每月账单：到店付款订单的抽成，以及月费（如有）。在线付款订单的抽成已自动扣除，不在这里收取。",
+    "month": "月份",
+    "statusLabel": "状态",
+    "orders": "订单数",
+    "total": "合计",
+    "due": "到期日",
+    "payNow": "去付款",
+    "empty": "暂无账单。",
+    "loadFailed": "账单加载失败。",
+    "downloadCsv": "下载 CSV",
+    "item": "项目",
+    "subtotal": "小计（税前）",
+    "rate": "比例",
+    "commission": "抽成",
+    "paidOnline": "已在线扣除",
+    "billed": "本次收取",
+    "monthlyFee": "月费",
+    "appOrder": "App 订单",
+    "phoneOrder": "电话订单",
+    "status": {
+      "open": "未付款",
+      "paid": "已付款",
+      "void": "已作废",
+      "uncollectible": "无法收回",
+      "overdue": "已逾期"
+    }
+  },
+  "promotions": {
+    "title": "促销",
+    "subtitle": "由本店承担的折扣，符合条件的订单自动打折，App 和电话订餐都适用。",
+    "new": "新建促销",
+    "name": "顾客看到的名称",
+    "namePlaceholder": "例如：开业九折",
+    "type": "类型",
+    "typePercent": "按比例打折",
+    "typeAmount": "立减金额",
+    "percent": "折扣比例（%）",
+    "amount": "立减金额（$）",
+    "minSubtotal": "最低消费，税前（$，可不填）",
+    "channels": "适用渠道",
+    "channelAll": "App 和电话",
+    "channelApp": "App 订单",
+    "channelPhone": "电话订单",
+    "dates": "开始 / 结束日期（可不填）",
+    "rules": "每个订单只用对顾客最划算的一个促销，不会叠加。折扣在税前扣除，平台抽成按折后金额计算。促销建好后折扣条件不能修改，如需调整请停用后新建。",
+    "create": "创建促销",
+    "list": "我的促销",
+    "empty": "还没有促销。",
+    "percentOff": "{{value}}% 折扣",
+    "amountOff": "立减 {{value}}",
+    "withMinimum": "满 {{min}} {{off}}",
+    "anyOrder": "全部订单 {{off}}",
+    "noEnd": "长期有效",
+    "used_one": "已用于 {{count}} 单",
+    "used_other": "已用于 {{count}} 单",
+    "turnOff": "停用",
+    "turnOn": "启用",
+    "delete": "删除",
+    "confirmDelete": "删除“{{name}}”？",
+    "loadFailed": "促销加载失败。",
+    "errors": {
+      "invalid": "请检查：名称必填，金额大于 0（比例不超过 100%），结束日期不能早于开始日期。",
+      "promotion_in_use": "已有订单使用了这个促销，不能删除，可以停用。",
+      "generic": "出错了，请重试。"
+    }
   }
 }

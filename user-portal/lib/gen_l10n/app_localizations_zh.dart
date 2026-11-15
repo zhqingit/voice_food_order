@@ -284,4 +284,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restaurantOwnerPromo => '你是餐厅老板吗？让 AI 帮你接电话点餐 →';
+
+  @override
+  String get discount => '折扣';
+
+  @override
+  String promoPercentOff(String percent) {
+    return '减 $percent%';
+  }
+
+  @override
+  String promoAmountOff(String amount) {
+    return '立减 $amount';
+  }
+
+  @override
+  String promoWithMinimum(String deal, String min) {
+    return '满 $min $deal';
+  }
 }

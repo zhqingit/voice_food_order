@@ -21,9 +21,10 @@ from app.models.menu_item import MenuItem
 from app.models.menu_item_variant import MenuItemVariant
 from app.models.order import Order
 from app.models.order_item import OrderItem
+from app.models.promotion import Promotion
 from app.models.voice_session import VoiceSession
 from app.models.store import Store
-from app.services import delivery_service, menu_service, order_service
+from app.services import delivery_service, menu_service, order_service, promotions
 from app.schemas.order.order import OrderCreate
 
 logger = logging.getLogger(__name__)
@@ -374,6 +375,20 @@ class VoiceToolRouter:
             "total": float(order.total),
             "items": summary_items,
         }
+        # Discounts are computed by services/promotions.py, never by the model.
+        if order.discount > 0:
+            promo = db.get(Promotion, order.promotion_id) if order.promotion_id else None
+            result["discount"] = float(order.discount)
+            result["promotion"] = promo.name if promo else None
+            result["subtotal_after_discount"] = float(order.subtotal - order.discount)
+        upsell = promotions.next_promotion(db, order)
+        if upsell is not None:
+            result["next_promotion"] = {
+                "name": upsell.name,
+                "add_more": float(upsell.add_more),
+                "discount": float(upsell.discount),
+                "say": f"If you add ${upsell.add_more:.2f} more, you'd get {upsell.name} (${upsell.discount:.2f} off).",
+            }
         if order.customer_name:
             result["customer_name"] = order.customer_name
         if order.notes:

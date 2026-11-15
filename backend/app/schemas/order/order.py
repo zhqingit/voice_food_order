@@ -43,7 +43,9 @@ class OrderOut(BaseModel):
     amount_paid: Decimal = Decimal("0.00")
     balance_due: Decimal = Decimal("0.00")
     channel: str
-    subtotal: Decimal
+    subtotal: Decimal  # before discount
+    # Store promotion taken off the subtotal (before tax).
+    discount: Decimal = Decimal("0.00")
     tax: Decimal
     total: Decimal
     customer_name: str | None = None

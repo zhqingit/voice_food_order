@@ -73,6 +73,7 @@ def build_system_prompt(
     store_country: str | None = None,
     hours_today: str | None = None,
     phone: PhoneCallInfo | None = None,
+    promotions: list[str] | None = None,
 ) -> str:
     menu_text = ""
     if menu_lines:
@@ -279,6 +280,17 @@ You MUST verbally confirm the customer's name BEFORE you call the `checkout` too
         extra = custom_prompt.strip()
         if extra:
             prompt = f"{prompt}\n\n## Store-specific instructions\n{extra}"
+
+    if promotions:
+        listed = "\n".join(f"- {p}" for p in promotions)
+        prompt = (
+            f"{prompt}\n\n## Promotions (the system applies them automatically)\n{listed}\n"
+            "- Tell the customer about them when they ask about deals or specials, or once when you read back the order.\n"
+            "- NEVER calculate a discount, a discounted price or a new total yourself. The system works them out: "
+            "read `discount`, `promotion` and `total` from the get_summary result exactly as given.\n"
+            "- Never promise a discount that get_summary does not show.\n"
+            "- If get_summary returns `next_promotion`, you may say its `say` text once (word for word); do not repeat it."
+        )
 
     if menu_text:
         prompt = f"{prompt}\n\nMenu:\n{menu_text}"

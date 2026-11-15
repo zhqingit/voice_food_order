@@ -418,7 +418,10 @@ class _StoreCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _StatusBadge(isOpen: store.isCurrentlyOpen),
-                    Icon(Icons.mic_rounded, size: 18, color: _warmOrangeStart.withValues(alpha: 0.6)),
+                    if (store.promotions.isNotEmpty)
+                      Flexible(child: _PromoChip(promotion: store.promotions.first))
+                    else
+                      Icon(Icons.mic_rounded, size: 18, color: _warmOrangeStart.withValues(alpha: 0.6)),
                   ],
                 ),
                 // Center: store icon + name
@@ -496,6 +499,42 @@ class _StoreCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The store's promotion terms, e.g. "10% off" or "$5 off $30+".
+class _PromoChip extends StatelessWidget {
+  final StorePromotion promotion;
+
+  const _PromoChip({required this.promotion});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final p = promotion;
+    final percent = p.value == p.value.roundToDouble() ? p.value.toStringAsFixed(0) : p.value.toString();
+    final deal = p.kind == 'percent' ? l10n.promoPercentOff(percent) : l10n.promoAmountOff('\$${p.value.toStringAsFixed(p.value == p.value.roundToDouble() ? 0 : 2)}');
+    final label = p.minSubtotal > 0 ? l10n.promoWithMinimum(deal, '\$${p.minSubtotal.toStringAsFixed(0)}') : deal;
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(999)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.local_offer_outlined, size: 11, color: Color(0xFF16A34A)),
+          const SizedBox(width: 3),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+            ),
+          ),
+        ],
       ),
     );
   }

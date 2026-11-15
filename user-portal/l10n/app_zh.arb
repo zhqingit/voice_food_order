@@ -95,5 +95,10 @@
   "statusCompleted": "已完成",
   "statusCancelled": "已取消",
   "orderNotPlaced": "这一单没有提交。",
-  "restaurantOwnerPromo": "你是餐厅老板吗？让 AI 帮你接电话点餐 →"
+  "restaurantOwnerPromo": "你是餐厅老板吗？让 AI 帮你接电话点餐 →",
+
+  "discount": "折扣",
+  "promoPercentOff": "减 {percent}%",
+  "promoAmountOff": "立减 {amount}",
+  "promoWithMinimum": "满 {min} {deal}"
 }

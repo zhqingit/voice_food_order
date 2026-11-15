@@ -102,5 +102,14 @@
   "statusCompleted": "Completed",
   "statusCancelled": "Cancelled",
   "orderNotPlaced": "This order wasn't placed.",
-  "restaurantOwnerPromo": "Own a restaurant? Let AI answer your phone orders →"
+  "restaurantOwnerPromo": "Own a restaurant? Let AI answer your phone orders →",
+
+  "discount": "Discount",
+  "@discount": {"description": "Order summary: restaurant promotion taken off the subtotal"},
+  "promoPercentOff": "{percent}% off",
+  "@promoPercentOff": {"description": "Store card promotion chip", "placeholders": {"percent": {"type": "String"}}},
+  "promoAmountOff": "{amount} off",
+  "@promoAmountOff": {"description": "Store card promotion chip", "placeholders": {"amount": {"type": "String"}}},
+  "promoWithMinimum": "{deal} on {min}+",
+  "@promoWithMinimum": {"description": "Promotion with an order minimum", "placeholders": {"deal": {"type": "String"}, "min": {"type": "String"}}}
 }

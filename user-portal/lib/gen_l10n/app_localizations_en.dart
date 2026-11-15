@@ -287,4 +287,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get restaurantOwnerPromo =>
       'Own a restaurant? Let AI answer your phone orders →';
+
+  @override
+  String get discount => 'Discount';
+
+  @override
+  String promoPercentOff(String percent) {
+    return '$percent% off';
+  }
+
+  @override
+  String promoAmountOff(String amount) {
+    return '$amount off';
+  }
+
+  @override
+  String promoWithMinimum(String deal, String min) {
+    return '$deal on $min+';
+  }
 }

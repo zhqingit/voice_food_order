@@ -15,8 +15,9 @@ from app.models.store_hours import StoreHours
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.menu.menu import MenuItemOut
 from app.schemas.store.hours import DayHours
+from app.schemas.store.promotions import PromotionPublic
 from app.schemas.store.store import StorePublicOut
-from app.services import delivery_service, menu_service
+from app.services import delivery_service, menu_service, order_service, promotions
 
 router = APIRouter(
     prefix="/user/stores",
@@ -46,7 +47,15 @@ def _hours_for_store(db: Session, store_id: uuid.UUID) -> list[DayHours]:
     ]
 
 
-def _store_public_out(store: Store, hours: list[DayHours]) -> StorePublicOut:
+def _promotions_today(db: Session, store: Store) -> list[PromotionPublic]:
+    running = promotions.running_for(db, store_id=store.id, channel=None, day=order_service.today_in_store_tz(store))
+    return [
+        PromotionPublic(id=p.id, name=p.name, kind=p.kind, value=p.value, min_subtotal=p.min_subtotal, channels=p.channels)
+        for p in running
+    ]
+
+
+def _store_public_out(store: Store, hours: list[DayHours], promos: list[PromotionPublic]) -> StorePublicOut:
     return StorePublicOut(
         id=store.id,
         name=store.name,
@@ -61,6 +70,7 @@ def _store_public_out(store: Store, hours: list[DayHours]) -> StorePublicOut:
         min_order_amount=store.min_order_amount,
         logo_url=store.logo_url,
         hours=hours,
+        promotions=promos,
     )
 
 
@@ -72,7 +82,7 @@ def list_stores(db: Session = Depends(get_db)) -> list[StorePublicOut]:
         .scalars()
         .all()
     )
-    return [_store_public_out(store, _hours_for_store(db, store.id)) for store in stores]
+    return [_store_public_out(store, _hours_for_store(db, store.id), _promotions_today(db, store)) for store in stores]
 
 
 @router.get("/{store_id}", response_model=StorePublicOut)
@@ -83,7 +93,7 @@ def get_store(store_id: uuid.UUID, db: Session = Depends(get_db)) -> StorePublic
         raise AppError(status_code=404, code="store_not_found", detail="Store not found")
     if not store.is_published:
         raise AppError(status_code=410, code="store_unpublished", detail="This store is no longer available")
-    return _store_public_out(store, _hours_for_store(db, store.id))
+    return _store_public_out(store, _hours_for_store(db, store.id), _promotions_today(db, store))
 
 
 @router.get("/{store_id}/menu", response_model=list[MenuItemOut])

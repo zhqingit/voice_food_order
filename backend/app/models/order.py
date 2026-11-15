@@ -58,6 +58,20 @@ class Order(Base):
     commission: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
     )
+    # Store-funded promotion: picked automatically while the order is a draft
+    # (the best one it qualifies for), then kept. `discount` comes off the
+    # subtotal before tax and commission (see services/promotions.py).
+    promotion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("promotions.id"), nullable=True
+    )
+    discount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
+    )
+    # The store invoice that billed this order's commission (paid-at-store
+    # orders). Cleared when that invoice is deleted or voided.
+    invoice_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("store_invoices.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     # Stripe PaymentIntent id (pi_...) for the charge against this order.
     payment_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

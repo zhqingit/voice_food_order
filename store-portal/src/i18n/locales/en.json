@@ -51,7 +51,9 @@
     "orders": "Orders",
     "ai": "AI",
     "profile": "Profile",
-    "logout": "Logout"
+    "logout": "Logout",
+    "billing": "Billing",
+    "promotions": "Promotions"
   },
   "menu": {
     "title": "Menu Management",
@@ -273,7 +275,8 @@
     "smsNotAvailable": "Text messages will be available once SMS registration is approved.",
     "customerNotifiedAt": "Customer last told about changes: {{time}}",
     "badgeBalanceDue": "Balance due",
-    "badgeRefunded": "Refunded"
+    "badgeRefunded": "Refunded",
+    "discount": "Discount"
   },
   "profile": {
     "title": "Profile & Settings",
@@ -410,5 +413,73 @@
     "setupTurnOn": "Turn phone ordering on above.",
     "setupTest": "Call your restaurant and let it ring: the AI should pick up.",
     "paymentNote": "Phone orders are paid at pickup or on delivery. They show up in Orders with a Phone badge and the caller's number."
+  },
+  "billing": {
+    "title": "Billing",
+    "subtitle": "Monthly invoices from VoxEats: commission on orders paid at the store, plus any monthly fee. Commission on orders paid online is taken automatically and is not billed here.",
+    "month": "Month",
+    "statusLabel": "Status",
+    "orders": "Orders",
+    "total": "Total",
+    "due": "Due",
+    "payNow": "Pay now",
+    "empty": "No invoices yet.",
+    "loadFailed": "Failed to load invoices.",
+    "downloadCsv": "Download CSV",
+    "item": "Item",
+    "subtotal": "Subtotal (pre-tax)",
+    "rate": "Rate",
+    "commission": "Commission",
+    "paidOnline": "Taken online",
+    "billed": "Billed",
+    "monthlyFee": "Monthly fee",
+    "appOrder": "App order",
+    "phoneOrder": "Phone order",
+    "status": {
+      "open": "Unpaid",
+      "paid": "Paid",
+      "void": "Void",
+      "uncollectible": "Uncollectible",
+      "overdue": "Overdue"
+    }
+  },
+  "promotions": {
+    "title": "Promotions",
+    "subtitle": "Discounts you fund, applied automatically to orders that qualify — in the app and on the phone.",
+    "new": "New promotion",
+    "name": "Name customers see",
+    "namePlaceholder": "e.g. Grand opening 10% off",
+    "type": "Type",
+    "typePercent": "Percent off",
+    "typeAmount": "Dollars off",
+    "percent": "Percent off (%)",
+    "amount": "Dollars off ($)",
+    "minSubtotal": "Minimum order, before tax ($, optional)",
+    "channels": "Applies to",
+    "channelAll": "App and phone",
+    "channelApp": "App orders",
+    "channelPhone": "Phone orders",
+    "dates": "Start / end date (optional)",
+    "rules": "Each order gets your one best promotion (they don't add up). The discount comes off before tax, and our commission is charged on the discounted amount. Once created, the discount terms can't be changed — turn it off and create a new one.",
+    "create": "Create promotion",
+    "list": "Your promotions",
+    "empty": "No promotions yet.",
+    "percentOff": "{{value}}% off",
+    "amountOff": "{{value}} off",
+    "withMinimum": "{{off}} orders of {{min}} or more",
+    "anyOrder": "{{off}} any order",
+    "noEnd": "No end date",
+    "used_one": "used on {{count}} order",
+    "used_other": "used on {{count}} orders",
+    "turnOff": "Turn off",
+    "turnOn": "Turn on",
+    "delete": "Delete",
+    "confirmDelete": "Delete “{{name}}”?",
+    "loadFailed": "Failed to load promotions.",
+    "errors": {
+      "invalid": "Check the fields: a name, an amount above 0 (at most 100%), and an end date after the start.",
+      "promotion_in_use": "Orders used this promotion, so it can't be deleted. Turn it off instead.",
+      "generic": "Something went wrong. Please try again."
+    }
   }
 }

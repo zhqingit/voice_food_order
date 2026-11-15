@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.core.phone import normalize_phone
 from app.schemas.store.hours import DayHours
+from app.schemas.store.promotions import PromotionPublic
 
 
 class StorePublicOut(BaseModel):
@@ -28,6 +29,8 @@ class StorePublicOut(BaseModel):
     voice_tone: str | None = None
     logo_url: str | None = None
     hours: list[DayHours] = []
+    # Promotions running today (applied automatically to qualifying orders).
+    promotions: list[PromotionPublic] = []
 
 
 class StoreOut(BaseModel):

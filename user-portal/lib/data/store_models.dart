@@ -23,6 +23,26 @@ class DayHours {
   }
 }
 
+/// A promotion running at the store today. The server applies it and computes
+/// the discount; the app only shows the terms.
+class StorePromotion {
+  final String name;
+  final String kind; // percent | amount_off
+  final double value; // percent off, or dollars off
+  final double minSubtotal; // pre-tax order minimum; 0 = any order
+
+  const StorePromotion({required this.name, required this.kind, required this.value, required this.minSubtotal});
+
+  factory StorePromotion.fromJson(Map<String, dynamic> json) {
+    return StorePromotion(
+      name: json['name'] as String,
+      kind: json['kind'] as String,
+      value: double.parse(json['value'].toString()),
+      minSubtotal: double.parse((json['min_subtotal'] ?? '0').toString()),
+    );
+  }
+}
+
 class StorePublicOut {
   final String id;
   final String name;
@@ -37,6 +57,7 @@ class StorePublicOut {
   final String? minOrderAmount;
   final String? logoUrl;
   final List<DayHours> hours;
+  final List<StorePromotion> promotions;
 
   const StorePublicOut({
     required this.id,
@@ -52,6 +73,7 @@ class StorePublicOut {
     this.minOrderAmount,
     this.logoUrl,
     this.hours = const [],
+    this.promotions = const [],
   });
 
   factory StorePublicOut.fromJson(Map<String, dynamic> json) {
@@ -72,6 +94,10 @@ class StorePublicOut {
           : null,
       hours: (json['hours'] as List<dynamic>?)
               ?.map((h) => DayHours.fromJson(h as Map<String, dynamic>))
+              .toList() ??
+          [],
+      promotions: (json['promotions'] as List<dynamic>?)
+              ?.map((p) => StorePromotion.fromJson(p as Map<String, dynamic>))
               .toList() ??
           [],
     );

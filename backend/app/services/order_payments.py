@@ -133,6 +133,23 @@ def net_paid_by_order(db: Session, order_ids: list[uuid.UUID]) -> dict[uuid.UUID
     return {order_id: Decimal(total or 0) for order_id, total in rows}
 
 
+def commission_collected_by_order(db: Session, order_ids: list[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+    """Commission taken through Stripe per order (application fees net of the
+    part returned with refunds), for reports and invoices (one query)."""
+    if not order_ids:
+        return {}
+    fee = func.coalesce(Payment.application_fee, 0)
+    signed = case(
+        ((Payment.kind == "charge") & (Payment.status == "succeeded"), fee),
+        ((Payment.kind == "refund") & Payment.status.in_(REFUND_COUNTED), -fee),
+        else_=0,
+    )
+    rows = db.execute(
+        select(Payment.order_id, func.sum(signed)).where(Payment.order_id.in_(order_ids)).group_by(Payment.order_id)
+    ).all()
+    return {order_id: Decimal(total or 0) for order_id, total in rows}
+
+
 def sync_payment_status(db: Session, order: Order) -> None:
     led = ledger(db, order)
     if led.net <= 0:

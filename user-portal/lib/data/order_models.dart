@@ -27,7 +27,10 @@ class OrderOut {
   final double amountPaid;
   final double balanceDue;
   final String channel;
+  /// Before discount.
   final double subtotal;
+  /// Restaurant promotion, taken off the subtotal before tax (computed by the server).
+  final double discount;
   final double tax;
   final double total;
   final String? notes;
@@ -51,6 +54,7 @@ class OrderOut {
     this.balanceDue = 0,
     required this.channel,
     required this.subtotal,
+    this.discount = 0,
     required this.tax,
     required this.total,
     required this.notes,
@@ -84,6 +88,7 @@ class OrderOut {
       balanceDue: json['balance_due'] == null ? 0 : _toDouble(json['balance_due']),
       channel: json['channel'] as String,
       subtotal: _toDouble(json['subtotal']),
+      discount: json['discount'] == null ? 0 : _toDouble(json['discount']),
       tax: _toDouble(json['tax']),
       total: _toDouble(json['total']),
       notes: json['notes'] as String?,

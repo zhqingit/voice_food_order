@@ -135,7 +135,7 @@ export function StatsRoute(): React.JSX.Element {
 
       {t && (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
-          <Tile label="Completed orders" value={String(t.orders)} sub={`GMV ${usd(t.gmv)} (pre-tax)`} />
+          <Tile label="Completed orders" value={String(t.orders)} sub={`GMV ${usd(t.gmv)} (pre-tax, after ${usd(t.discounts)} store discounts)`} />
           <Tile
             label="Revenue"
             value={usd(t.revenue)}
@@ -149,7 +149,13 @@ export function StatsRoute(): React.JSX.Element {
           <Tile
             label="Costs"
             value={usd(t.costs)}
-            sub={`AI ${usd(t.ai_cost)} · Twilio ${usd(t.telephony_cost)} · Stripe ${usd(t.stripe_fees)} · Fixed ${usd(t.fixed_costs)}`}
+            sub={`AI ${usd(t.ai_cost)} · Twilio ${usd(t.telephony_cost)} · Stripe ${usd(Number(t.stripe_fees) + Number(t.invoice_fees))} · Fixed ${usd(t.fixed_costs)}`}
+          />
+          <Tile
+            label="Invoiced to stores"
+            value={usd(t.invoiced)}
+            sub={`${usd(t.invoice_paid)} paid · ${usd(t.invoice_outstanding)} unpaid${Number(t.invoice_overdue) > 0 ? ` · ${usd(t.invoice_overdue)} overdue` : ''}`}
+            color={Number(t.invoice_overdue) > 0 ? '#dc2626' : undefined}
           />
           <Tile label="Net profit" value={usd(t.net)} color={netColor(t.net)} />
         </div>
@@ -200,7 +206,7 @@ export function StatsRoute(): React.JSX.Element {
                       {s.phone_calls} calls · {s.phone_minutes} min
                     </div>
                   </td>
-                  <td style={tdStyle}>{usd(s.stripe_fees)}</td>
+                  <td style={tdStyle}>{usd(Number(s.stripe_fees) + Number(s.invoice_fees))}</td>
                   <td style={{ ...tdStyle, fontWeight: 700, color: netColor(s.net) }}>{usd(s.net)}</td>
                 </tr>
               ))}

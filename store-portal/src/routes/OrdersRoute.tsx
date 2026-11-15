@@ -499,6 +499,7 @@ export function OrdersRoute(): React.JSX.Element {
       ${orderNote}
       <div class="totals">
         <div class="row"><span>Subtotal</span><span>$${escapeHtml(selectedOrder.subtotal)}</span></div>
+        ${Number(selectedOrder.discount) > 0 ? `<div class="row"><span>Discount</span><span>-$${escapeHtml(selectedOrder.discount)}</span></div>` : ''}
         <div class="row"><span>Tax</span><span>$${escapeHtml(selectedOrder.tax)}</span></div>
         <div class="row total"><span>Total</span><span>$${escapeHtml(selectedOrder.total)}</span></div>
       </div>
@@ -682,6 +683,9 @@ export function OrdersRoute(): React.JSX.Element {
                 <span className="meta-label">{t('orders.totals')}</span>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <span>{t('orders.subtotal')}: ${String(selectedOrder.subtotal)}</span>
+                  {Number(selectedOrder.discount) > 0 && (
+                    <span style={{ color: '#16a34a' }}>{t('orders.discount')}: -${String(selectedOrder.discount)}</span>
+                  )}
                   <span>{t('orders.tax')}: ${String(selectedOrder.tax)}</span>
                   <span style={{ fontWeight: 700 }}>{t('orders.total')}: ${String(selectedOrder.total)}</span>
                 </div>

@@ -12,6 +12,8 @@ const navKeys = [
   { to: '/menu', labelKey: 'nav.menu', icon: menuIcon },
   { to: '/orders', labelKey: 'nav.orders', icon: ordersIcon },
   { to: '/ai', labelKey: 'nav.ai', icon: aiIcon },
+  { to: '/promotions', labelKey: 'nav.promotions', icon: promotionsIcon },
+  { to: '/billing', labelKey: 'nav.billing', icon: billingIcon },
   { to: '/profile', labelKey: 'nav.profile', icon: profileIcon },
 ]
 
@@ -202,6 +204,24 @@ function ordersIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <path d="M9 12l2 2 4-4" />
+    </svg>
+  )
+}
+
+function promotionsIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z" />
+      <circle cx="7.5" cy="7.5" r="1.5" />
+    </svg>
+  )
+}
+
+function billingIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2z" />
+      <path d="M9 7h6M9 11h6M9 15h4" />
     </svg>
   )
 }

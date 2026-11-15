@@ -729,6 +729,22 @@ class _LiveOrderPanelState extends ConsumerState<_LiveOrderPanel> {
                         Text('\$${order.subtotal.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _kTextDark)),
                       ],
                     ),
+                    if (order.discount > 0) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              order.promotion != null ? '${l10n?.discount ?? 'Discount'} · ${order.promotion}' : (l10n?.discount ?? 'Discount'),
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12, color: Color(0xFF16A34A)),
+                            ),
+                          ),
+                          Text('-\$${order.discount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF16A34A))),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 2),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1055,7 +1071,8 @@ class _OrderSummaryCard extends StatelessWidget {
 
   const _OrderSummaryCard({required this.order, required this.items});
 
-  static String _money(double amount) => '\$${amount.toStringAsFixed(2)}';
+  static String _money(double amount) =>
+      amount < 0 ? '-\$${(-amount).toStringAsFixed(2)}' : '\$${amount.toStringAsFixed(2)}';
 
   @override
   Widget build(BuildContext context) {
@@ -1114,6 +1131,7 @@ class _OrderSummaryCard extends StatelessWidget {
           Divider(height: 1, color: Colors.grey.withValues(alpha: 0.15)),
           const SizedBox(height: 4),
           totalRow(l10n.subtotal, order.subtotal),
+          if (order.discount > 0) totalRow(l10n.discount, -order.discount),
           totalRow(l10n.tax, order.tax),
           totalRow(l10n.total, order.total, bold: true),
           if (order.fulfillmentType == 'delivery' && (order.deliveryAddress ?? '').isNotEmpty) ...[

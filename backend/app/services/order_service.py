@@ -14,7 +14,7 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.store import Store
 from app.schemas.order.order import OrderCreate
-from app.services import commission
+from app.services import commission, promotions
 
 
 # Placed and not yet finished or cancelled. Staff can edit these orders, and
@@ -32,7 +32,7 @@ _SHORT_CODE_LEN = 5
 _SHORT_CODE_TRIES = 20
 
 
-def _today_in_store_tz(store: Store) -> date:
+def today_in_store_tz(store: Store) -> date:
     tz_name = (store.timezone or "").strip()
     if tz_name:
         try:
@@ -56,7 +56,7 @@ def _assign_short_code(db: Session, *, order: Order, store: Store) -> None:
     are vanishingly rare; we retry a few times for safety. Caller flushes/
     commits — we set both columns on the in-memory order object.
     """
-    code_day = _today_in_store_tz(store)
+    code_day = today_in_store_tz(store)
     for _ in range(_SHORT_CODE_TRIES):
         candidate = _generate_short_code()
         exists = db.execute(
@@ -147,11 +147,10 @@ def recalc_totals(db: Session, *, order: Order, tax_rate: Decimal | None = None)
     if tax_rate is None:
         tax_rate = store.tax_rate if store else Decimal("0.0000")
 
-    tax = (subtotal * tax_rate).quantize(Decimal("0.01"))
-    total = subtotal + tax
-
     order.subtotal = subtotal
-    order.tax = tax
-    order.total = total
+    promotions.apply(db, order)  # sets order.discount
+    taxable = subtotal - order.discount
+    order.tax = (taxable * tax_rate).quantize(Decimal("0.01"))
+    order.total = taxable + order.tax
     commission.apply(order, store)
     return order
