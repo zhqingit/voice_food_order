@@ -18,30 +18,30 @@
 
 ## 0. 部署
 
-- [ ] 0.1 部署前先备份数据库，确认 `~/voxeats-日期.sql.gz` 文件已生成，而且大小不是 0。
-- [ ] 0.2 `docker compose exec api alembic current` 显示 `0034_platform_promotions (head)`。
-- [ ] 0.3 `curl https://<后端域名>/health` 返回正常。
-- [ ] 0.4 店家后台能打开，左侧菜单有：菜单、订单、AI、促销、账单、资料。
-- [ ] 0.5 管理员后台能登录，顶部有 Stores、Stats、Invoices、Promotions 四个页签。
-- [ ] 0.6 App 已重新打包并安装到手机上。
-- [ ] 0.7 Stripe 后台 → Webhooks：
+- [x] 0.1 部署前先备份数据库，确认 `~/voxeats-日期.sql.gz` 文件已生成，而且大小不是 0。
+- [x] 0.2 `docker compose exec api alembic current` 显示 `0034_platform_promotions (head)`。
+- [x] 0.3 `curl https://<后端域名>/health` 返回正常。
+- [x] 0.4 店家后台能打开，左侧菜单有：菜单、订单、AI、促销、账单、资料。
+- [x] 0.5 管理员后台能登录，顶部有 Stores、Stats、Invoices、Promotions 四个页签。
+- [x] 0.6 App 已重新打包并安装到手机上。
+- [x] 0.7 Stripe 后台 → Webhooks：
   - 平台账户（Your account）那个 endpoint 包含 `payment_intent.succeeded`、`payment_intent.payment_failed`、`payment_intent.canceled`、`refund.created`、`refund.updated`、`refund.failed`、`charge.refund.updated`、`charge.dispute.created`、`charge.dispute.closed`、`invoice.paid`、`invoice.voided`、`invoice.marked_uncollectible`。
   - Connect（Connected accounts）那个 endpoint 包含 `account.updated`。
-- [ ] 0.8 Stripe 后台 → Settings → Billing → Invoices（发票设置）：付款方式勾选了银行卡和 ACH。
+- [x] 0.8 Stripe 后台 → Settings → Billing → Invoices（发票设置）：付款方式勾选了银行卡和 ACH。
 
 ---
 
 ## 1. 管理员后台：店铺管理（Stores）
 
-- [ ] 1.1 店铺列表能显示所有店，列出审核状态、启用状态、上架状态、Stripe 状态、抽成比例和 AI 电话号码。
-- [ ] 1.2 点开一家店，能看到 Stripe 的实时状态（能否收款、资料是否提交、能否提现）。
-- [ ] 1.3 **审核**：取消审核后，App 店铺列表里这家店消失；重新审核通过后又出现。
-- [ ] 1.4 **停用**：停用后，App 里看不到这家店，打它的 AI 电话听到“号码已停用”；恢复后一切正常。
-- [ ] 1.5 **抽成比例**：
+- [x] 1.1 店铺列表能显示所有店，列出审核状态、启用状态、上架状态、Stripe 状态、抽成比例和 AI 电话号码。
+- [x] 1.2 点开一家店，能看到 Stripe 的实时状态（能否收款、资料是否提交、能否提现）。
+- [x] 1.3 **审核**：取消审核后，App 店铺列表里这家店消失；重新审核通过后又出现。
+- [x] 1.4 **停用**：停用后，App 里看不到这家店，打它的 AI 电话听到“号码已停用”；恢复后一切正常。
+- [-] 1.5 **抽成比例**：
   - 把 App 抽成那一格清空并保存，列表显示“15% / 10% (default)”。
   - 改成 12% 并保存，列表显示 12%。
-  - 改完后**新下的单**按 12% 算，改之前的旧单不变。可以在 Stats 页或账单明细里核对。
-- [ ] 1.6 **月费**：填 $10 并保存，列表显示“+ $10/mo”。测完记得改回 $0，否则会出现在账单里。
+  [ ] 改完后**新下的单**按 12% 算，改之前的旧单不变。可以在 Stats 页或账单明细里核对。
+- [-] 1.6 **月费**：填 $10 并保存，列表显示“+ $10/mo”。测完记得改回 $0，否则会出现在账单里。
 - [ ] 1.7 **AI 电话号码**：分配、移除都能保存。移除后，这家店的电话点餐自动关闭。
 
 ---

@@ -130,9 +130,17 @@ export function PaymentsCard(): React.JSX.Element {
                 <span>
                   {t('payments.phoneOrders')}: <strong style={{ fontSize: 18 }}>{status.fee_phone_bps / 100}%</strong>
                 </span>
+                {Number(status.monthly_fee) > 0 && (
+                  <span>
+                    {t('payments.monthlyFee')}:{' '}
+                    <strong style={{ fontSize: 18 }}>${Number(status.monthly_fee).toFixed(2)}</strong>
+                    {t('payments.perMonth')}
+                  </span>
+                )}
               </div>
               <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '6px 0 0' }}>
                 {t('payments.feeDesc')}
+                {Number(status.monthly_fee) > 0 && ` ${t('payments.monthlyFeeDesc')}`}
               </p>
             </div>
           </>

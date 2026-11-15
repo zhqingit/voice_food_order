@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import AnyHttpUrl, BaseModel
 
 
@@ -22,3 +24,5 @@ class PaymentStatusResponse(BaseModel):
     # Commission on the pre-tax subtotal of this store's orders, by channel.
     fee_app_bps: int
     fee_phone_bps: int
+    # Flat fee added to the store's monthly invoice (0 = none).
+    monthly_fee: Decimal = Decimal("0.00")

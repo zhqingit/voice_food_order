@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
@@ -79,4 +80,5 @@ def status(
         details_submitted=details_submitted,
         fee_app_bps=commission.resolve_bps(current_store, "app"),
         fee_phone_bps=commission.resolve_bps(current_store, commission.PHONE_CHANNEL),
+        monthly_fee=current_store.monthly_fee or Decimal("0.00"),
     )

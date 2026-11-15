@@ -7,6 +7,7 @@ export type PaymentStatus = {
   // Commission on the pre-tax subtotal, by the channel the order came in on.
   fee_app_bps: number
   fee_phone_bps: number
+  monthly_fee: string // flat fee on the monthly bill; "0.00" = none
 }
 
 export type ConnectResponse = {

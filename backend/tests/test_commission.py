@@ -121,6 +121,14 @@ def test_admin_sets_rates_per_channel_and_a_monthly_fee(admin_client, admin_head
     assert r.json()["effective_phone_bps"] == 1000  # back to the platform default
 
 
+def test_the_store_sees_its_rates_and_monthly_fee(admin_client, admin_headers, store_client, store):
+    admin_client.patch(f"/admin/stores/{store['id']}", json={"monthly_fee": "49.00"}, headers=admin_headers)
+
+    r = store_client.get("/store/payments/status", headers=store["headers"])
+
+    assert (r.json()["fee_app_bps"], r.json()["fee_phone_bps"], r.json()["monthly_fee"]) == (1500, 1000, "49.00")
+
+
 @pytest.fixture()
 def admin_headers(session_factory):
     with session_factory() as db:

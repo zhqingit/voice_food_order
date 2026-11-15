@@ -390,7 +390,10 @@
     "loadError": "Couldn't load payment status.",
     "connectError": "Couldn't start Stripe onboarding. Please try again.",
     "appOrders": "App orders",
-    "phoneOrders": "Phone orders"
+    "phoneOrders": "Phone orders",
+    "monthlyFee": "Monthly fee",
+    "perMonth": "/mo",
+    "monthlyFeeDesc": "The monthly fee is added to your monthly bill."
   },
   "phone": {
     "title": "Phone ordering (AI)",
