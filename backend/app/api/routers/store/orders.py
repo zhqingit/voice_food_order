@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -19,14 +20,21 @@ from app.models.user import User
 from app.models.voice_session import VoiceSession
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import (
+    CustomerNoticeOut,
+    CustomerNotifiedCreate,
+    InStorePaymentCreate,
     OrderEventOut,
     OrderItemOut,
     OrderOut,
+    OrderPaymentsOut,
     OrderStatusUpdate,
+    PaymentOut,
+    RefundCreate,
     StoreOrderItemAdd,
     StoreOrderItemUpdate,
 )
-from app.services import store_order_edit_service
+from app.services import order_payments, store_order_edit_service
+from app.services.order_event_service import ACTOR_STORE
 
 router = APIRouter(
     prefix="/store/orders",
@@ -35,7 +43,9 @@ router = APIRouter(
 )
 
 
-def _order_out(order: Order, db: Session) -> OrderOut:
+def _order_out(order: Order, db: Session, net_paid: Decimal | None = None) -> OrderOut:
+    if net_paid is None:
+        net_paid = order_payments.ledger(db, order).net
     user_email: str | None = None
     if order.user_id is not None:
         user = db.get(User, order.user_id)
@@ -49,6 +59,8 @@ def _order_out(order: Order, db: Session) -> OrderOut:
         user_id=order.user_id,
         status=order.status,
         payment_status=order.payment_status,
+        amount_paid=net_paid,
+        balance_due=max(order_payments.owed(order) - net_paid, order_payments.ZERO),
         channel=order.channel,
         subtotal=order.subtotal,
         tax=order.tax,
@@ -95,7 +107,8 @@ def list_orders(
     orders = db.execute(
         select(Order).where(Order.store_id == current_store.id).order_by(Order.created_at.desc())
     ).scalars().all()
-    return [_order_out(order, db) for order in orders]
+    net_paid = order_payments.net_paid_by_order(db, [o.id for o in orders])
+    return [_order_out(order, db, net_paid.get(order.id, order_payments.ZERO)) for order in orders]
 
 
 @router.get("/{order_id}", response_model=OrderOut)
@@ -198,6 +211,90 @@ def list_order_events(
         select(OrderEvent).where(OrderEvent.order_id == order.id).order_by(OrderEvent.created_at)
     ).scalars().all()
     return [OrderEventOut.model_validate(e, from_attributes=True) for e in events]
+
+
+def _payments_out(db: Session, order: Order) -> OrderPaymentsOut:
+    led = order_payments.ledger(db, order)
+    return OrderPaymentsOut(
+        paid=led.paid,
+        refunded=led.refunded,
+        net=led.net,
+        balance_due=led.balance_due,
+        overpaid=led.overpaid,
+        card_refundable=led.card_refundable,
+        payments=[PaymentOut.model_validate(p, from_attributes=True) for p in order_payments.list_payments(db, order)],
+    )
+
+
+@router.get("/{order_id}/payments", response_model=OrderPaymentsOut)
+def get_order_payments(
+    order_id: uuid.UUID,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> OrderPaymentsOut:
+    """What was paid and refunded, and what is still owed or refundable."""
+    return _payments_out(db, _get_store_order(db, current_store, order_id))
+
+
+@router.post("/{order_id}/payments", response_model=OrderPaymentsOut)
+def record_in_store_payment(
+    order_id: uuid.UUID,
+    payload: InStorePaymentCreate,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> OrderPaymentsOut:
+    """Staff took the balance (or the whole order) at the counter."""
+    order = _get_store_order(db, current_store, order_id, lock=True)
+    order_payments.record_in_store_payment(db, order, amount=payload.amount)
+    db.commit()
+    return _payments_out(db, order)
+
+
+@router.post("/{order_id}/refunds", response_model=OrderPaymentsOut)
+def refund_order(
+    order_id: uuid.UUID,
+    payload: RefundCreate,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> OrderPaymentsOut:
+    """Give money back: to the card through Stripe, or record cash back in store."""
+    order = _get_store_order(db, current_store, order_id, lock=True)
+    order_payments.refund(db, order, amount=payload.amount, method=payload.method, actor=ACTOR_STORE)
+    db.commit()
+    return _payments_out(db, order)
+
+
+@router.get("/{order_id}/customer-notice", response_model=CustomerNoticeOut)
+def get_customer_notice(
+    order_id: uuid.UUID,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> CustomerNoticeOut:
+    """The message to tell the customer about changes since they were last told."""
+    order = _get_store_order(db, current_store, order_id)
+    notice = order_payments.customer_notice(db, order, current_store)
+    return CustomerNoticeOut(
+        message=notice.message,
+        phone=notice.phone,
+        pending=notice.pending,
+        last_notified_at=notice.last_notified_at,
+    )
+
+
+@router.post("/{order_id}/customer-notice", response_model=CustomerNoticeOut)
+def mark_customer_notified(
+    order_id: uuid.UUID,
+    payload: CustomerNotifiedCreate,
+    current_store: Store = Depends(get_current_store_web),
+    db: Session = Depends(get_db),
+) -> CustomerNoticeOut:
+    """Staff told the customer. Texting isn't available until SMS registration is approved."""
+    if payload.method == "sms":
+        raise AppError(status_code=409, code="sms_not_available", detail="Text messages aren't available yet")
+    order = _get_store_order(db, current_store, order_id, lock=True)
+    order_payments.mark_customer_notified(db, order, method=payload.method)
+    db.commit()
+    return get_customer_notice(order_id, current_store, db)
 
 
 @router.get("/{order_id}/items", response_model=list[OrderItemOut])

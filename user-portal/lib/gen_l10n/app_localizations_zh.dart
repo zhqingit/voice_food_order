@@ -216,6 +216,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modifiedByStore => '餐厅已修改订单';
 
   @override
+  String get cancelOrder => '取消订单';
+
+  @override
+  String cancelOrderConfirm(String code) {
+    return '确定取消订单 #$code 吗？';
+  }
+
+  @override
+  String get keepOrder => '保留订单';
+
+  @override
+  String get orderCancelled => '订单已取消。';
+
+  @override
+  String orderCancelledRefund(String amount) {
+    return '订单已取消，$amount 将退回您的卡。';
+  }
+
+  @override
+  String get cancelTooLate => '餐厅已接单，如需取消请致电餐厅。';
+
+  @override
+  String get balanceDueChip => '待补差价';
+
+  @override
+  String get refundedChip => '已退款';
+
+  @override
   String get paymentFailed => '付款失败，请重试。';
 
   @override

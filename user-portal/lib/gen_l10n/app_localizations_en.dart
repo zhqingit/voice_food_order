@@ -217,6 +217,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modifiedByStore => 'Changed by the restaurant';
 
   @override
+  String get cancelOrder => 'Cancel order';
+
+  @override
+  String cancelOrderConfirm(String code) {
+    return 'Cancel order #$code?';
+  }
+
+  @override
+  String get keepOrder => 'Keep order';
+
+  @override
+  String get orderCancelled => 'Order cancelled.';
+
+  @override
+  String orderCancelledRefund(String amount) {
+    return 'Order cancelled. $amount will go back to your card.';
+  }
+
+  @override
+  String get cancelTooLate =>
+      'The restaurant has already accepted this order. Please call them to cancel.';
+
+  @override
+  String get balanceDueChip => 'Balance due';
+
+  @override
+  String get refundedChip => 'Refunded';
+
+  @override
   String get paymentFailed => 'Payment failed. Please try again.';
 
   @override

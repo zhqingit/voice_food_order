@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -39,8 +40,9 @@ class SeenUnpaidOrders extends AsyncNotifier<Set<String>> {
   /// Marks the orders on screen as seen; ids of orders no longer listed are dropped.
   Future<void> markSeen(List<OrderOut> orders) async {
     final current = await future;
-    final listed = orders.map((o) => o.id).toSet();
-    final next = current.intersection(listed)..addAll(orders.where((o) => o.canPayOnline).map((o) => o.id));
+    final listed = orders.map((o) => o.paymentReminderKey).toSet();
+    final next = current.intersection(listed)
+      ..addAll(orders.where((o) => o.canPayOnline).map((o) => o.paymentReminderKey));
     if (next.length == current.length && next.containsAll(current)) return;
     state = AsyncData(next);
     final prefs = await SharedPreferences.getInstance();
@@ -183,9 +185,59 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
     }
   }
 
+  Future<void> _cancel() async {
+    final l10n = AppLocalizations.of(context)!;
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.cancelOrderConfirm(_order.shortCode)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.keepOrder)),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(l10n.cancelOrder),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final paidBefore = _order.amountPaid;
+      final cancelled = await ref.read(orderRepositoryProvider).cancelOrder(_order.id);
+      final refunded = paidBefore - cancelled.amountPaid;
+      messenger.showSnackBar(SnackBar(
+        content: Text(refunded > 0 ? l10n.orderCancelledRefund(_money(refunded)) : l10n.orderCancelled),
+      ));
+      ref.invalidate(myOrdersProvider);
+    } on DioException catch (e) {
+      final code = (e.response?.data is Map) ? (e.response!.data as Map)['code'] : null;
+      messenger.showSnackBar(SnackBar(
+        content: Text(code == 'order_not_cancellable' ? l10n.cancelTooLate : l10n.somethingWentWrong),
+      ));
+      if (code == 'order_not_cancellable') ref.invalidate(myOrdersProvider);
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(l10n.somethingWentWrong)));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  (String, Color) _paymentChip(AppLocalizations l10n) {
+    if (_paid) return (l10n.paid, _kGreen);
+    return switch (_order.paymentStatus) {
+      'partially_paid' => (l10n.balanceDueChip, _kAmber),
+      'refunded' => (l10n.refundedChip, _kTextMuted),
+      _ => (l10n.unpaid, _kAmber),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final (paymentLabel, paymentColor) = _paymentChip(l10n);
     final placedAt = DateFormat.yMMMd().add_jm().format(_order.createdAt.toLocal());
     final open = !{'completed', 'cancelled'}.contains(_order.status);
 
@@ -230,30 +282,43 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                     _Chip(label: _statusLabel(l10n, _order.status), color: _kTextMuted),
                     if (_order.fulfillmentType != null)
                       _Chip(label: _order.fulfillmentType == 'delivery' ? l10n.delivery : l10n.pickup, color: _kTextMuted),
-                    _Chip(label: _paid ? l10n.paid : l10n.unpaid, color: _paid ? _kGreen : _kAmber),
+                    _Chip(label: paymentLabel, color: paymentColor),
                     if (_order.modifiedByStore) _Chip(label: l10n.modifiedByStore, color: _kOrange),
                   ],
                 ),
                 if (_expanded) _Items(orderId: _order.id),
                 if (!_paid && _order.canPayOnline) ...[
                   const SizedBox(height: 14),
-                  _PayButton(label: l10n.payAmount(_money(_order.total)), busy: _busy, onPressed: _pay),
+                  _PayButton(
+                    label: l10n.payAmount(_money(_order.balanceDue > 0 ? _order.balanceDue : _order.total)),
+                    busy: _busy,
+                    onPressed: _pay,
+                  ),
                 ] else if (!_paid && open) ...[
                   const SizedBox(height: 10),
                   Text(l10n.payAtStoreNote, style: const TextStyle(fontSize: 12, color: _kAmber)),
                 ],
-                if (_order.storePhone != null && _order.storePhone!.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      style: TextButton.styleFrom(foregroundColor: _kOrange, padding: EdgeInsets.zero),
-                      icon: const Icon(Icons.phone, size: 18),
-                      label: Text(l10n.contactRestaurant),
-                      onPressed: () => launchUrl(Uri(scheme: 'tel', path: _order.storePhone)),
-                    ),
-                  ),
-                ],
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 16,
+                  children: [
+                    if (_order.storePhone != null && _order.storePhone!.isNotEmpty)
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: _kOrange, padding: EdgeInsets.zero),
+                        icon: const Icon(Icons.phone, size: 18),
+                        label: Text(l10n.contactRestaurant),
+                        onPressed: () => launchUrl(Uri(scheme: 'tel', path: _order.storePhone)),
+                      ),
+                    // Only before the restaurant accepts the order; after that, call them.
+                    if (_order.status == 'submitted')
+                      TextButton.icon(
+                        style: TextButton.styleFrom(foregroundColor: Colors.red.shade700, padding: EdgeInsets.zero),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: Text(l10n.cancelOrder),
+                        onPressed: _busy ? null : _cancel,
+                      ),
+                  ],
+                ),
               ],
             ),
           ),

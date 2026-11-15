@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -18,7 +19,11 @@ from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemOut, OrderOut
-from app.services import order_service
+from app.services import order_payments, order_service, store_order_edit_service
+from app.services.order_event_service import ACTOR_CUSTOMER
+
+# Customers can cancel only before the store accepts the order; after that they call the store.
+CUSTOMER_CANCELLABLE_STATUSES = frozenset({"submitted"})
 
 router = APIRouter(
     prefix="/user/orders",
@@ -27,7 +32,13 @@ router = APIRouter(
 )
 
 
-def _order_out(order: Order, store: Store | None = None, *, modified_by_store: bool = False) -> OrderOut:
+def _order_out(
+    order: Order,
+    store: Store | None = None,
+    *,
+    modified_by_store: bool = False,
+    net_paid: Decimal = order_payments.ZERO,
+) -> OrderOut:
     can_pay_online = (
         store is not None
         and order.payment_status != "paid"
@@ -47,6 +58,8 @@ def _order_out(order: Order, store: Store | None = None, *, modified_by_store: b
         user_id=order.user_id,
         status=order.status,
         payment_status=order.payment_status,
+        amount_paid=net_paid,
+        balance_due=max(order_payments.owed(order) - net_paid, order_payments.ZERO),
         channel=order.channel,
         subtotal=order.subtotal,
         tax=order.tax,
@@ -92,7 +105,45 @@ def list_orders(
             .where(OrderEvent.kind.like("item_%"))
         ).scalars()
     )
-    return [_order_out(order, store, modified_by_store=order.id in modified) for order, store in rows]
+    net_paid = order_payments.net_paid_by_order(db, [order.id for order, _ in rows])
+    return [
+        _order_out(
+            order,
+            store,
+            modified_by_store=order.id in modified,
+            net_paid=net_paid.get(order.id, order_payments.ZERO),
+        )
+        for order, store in rows
+    ]
+
+
+@router.post("/{order_id}/cancel", response_model=OrderOut)
+def cancel_order(
+    order_id: uuid.UUID,
+    current_user: User = Depends(get_current_user_mobile),
+    db: Session = Depends(get_db),
+) -> OrderOut:
+    """Cancel an order the store hasn't accepted yet; card payments are refunded."""
+    order = db.execute(
+        select(Order).where(Order.user_id == current_user.id).where(Order.id == order_id).with_for_update()
+    ).scalar_one_or_none()
+    if order is None:
+        raise AppError(status_code=404, code="order_not_found", detail="Order not found")
+    if order.status not in CUSTOMER_CANCELLABLE_STATUSES:
+        raise AppError(
+            status_code=409,
+            code="order_not_cancellable",
+            detail="The restaurant has already accepted this order; please call them to cancel",
+        )
+    store_order_edit_service.set_status(db, order, order_payments.CANCELLED, actor=ACTOR_CUSTOMER)
+    led = order_payments.ledger(db, order)
+    refundable = min(led.overpaid, led.card_refundable)
+    if refundable > 0:
+        order_payments.refund(db, order, amount=refundable, method="card", actor=ACTOR_CUSTOMER)
+    db.commit()
+    db.refresh(order)
+    store = db.get(Store, order.store_id)
+    return _order_out(order, store, net_paid=order_payments.ledger(db, order).net)
 
 
 @router.post("", response_model=OrderOut)

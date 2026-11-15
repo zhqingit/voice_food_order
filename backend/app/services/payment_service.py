@@ -41,6 +41,19 @@ class PaymentIntentResult:
     payment_intent_id: str
 
 
+@dataclass(frozen=True)
+class PaymentIntentState:
+    status: str
+    client_secret: str
+    amount: int  # cents
+
+
+@dataclass(frozen=True)
+class RefundResult:
+    refund_id: str
+    status: str  # pending | succeeded | failed | canceled | requires_action
+
+
 def _ensure_configured() -> None:
     if not settings.stripe_secret_key:
         raise AppError(500, "stripe_not_configured", "Stripe is not configured.")
@@ -115,10 +128,11 @@ def fetch_account_status(account_id: str) -> AccountStatus:
 # ── Charging the customer ─────────────────────────────────────────────────
 
 
-def create_payment_intent(order: Order, store: Store) -> PaymentIntentResult:
+def create_payment_intent(order: Order, store: Store, *, amount_due: Decimal) -> PaymentIntentResult:
     """Create a destination-charge PaymentIntent for an order.
 
-    Charges the customer for `order.total`, keeps the platform commission as
+    Charges the customer `amount_due` (the order total, or the balance still
+    owed after staff raised the total), keeps the platform commission as
     `application_fee_amount`, and routes the rest to the store's connected
     account. Callers must confirm the store is payment-ready first; this guards
     defensively and refuses otherwise.
@@ -126,7 +140,7 @@ def create_payment_intent(order: Order, store: Store) -> PaymentIntentResult:
     if not store.stripe_account_id or not store.stripe_charges_enabled:
         raise AppError(409, "store_not_payment_ready", "This store cannot accept online payments yet.")
 
-    amount = to_cents(order.total)
+    amount = to_cents(amount_due)
     if amount <= 0:
         raise AppError(400, "invalid_amount", "Order total must be positive to charge.")
 
@@ -142,6 +156,39 @@ def create_payment_intent(order: Order, store: Store) -> PaymentIntentResult:
         metadata={"order_id": str(order.id), "store_id": str(store.id)},
     )
     return PaymentIntentResult(client_secret=intent.client_secret, payment_intent_id=intent.id)
+
+
+def retrieve_payment_intent(payment_intent_id: str) -> PaymentIntentState:
+    intent = _call("retrieve_payment_intent", stripe.PaymentIntent.retrieve, payment_intent_id)
+    return PaymentIntentState(status=intent.status, client_secret=intent.client_secret, amount=int(intent.amount))
+
+
+def cancel_payment_intent(payment_intent_id: str) -> bool:
+    """Cancel a PaymentIntent the customer hasn't paid. False if Stripe refused
+    (e.g. it succeeded a moment ago; the webhook then handles the payment)."""
+    try:
+        _call("cancel_payment_intent", stripe.PaymentIntent.cancel, payment_intent_id)
+        return True
+    except AppError:
+        return False
+
+
+def create_refund(payment_intent_id: str, *, amount: Decimal, order_id: str) -> RefundResult:
+    """Refund part or all of a destination charge.
+
+    The money is pulled back from the store's connected account
+    (reverse_transfer) and the platform commission on it is returned too.
+    """
+    refund = _call(
+        "create_refund",
+        stripe.Refund.create,
+        payment_intent=payment_intent_id,
+        amount=to_cents(amount),
+        reverse_transfer=True,
+        refund_application_fee=True,
+        metadata={"order_id": order_id},
+    )
+    return RefundResult(refund_id=refund.id, status=refund.status)
 
 
 # ── Webhook ───────────────────────────────────────────────────────────────

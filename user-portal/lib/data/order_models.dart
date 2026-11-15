@@ -19,7 +19,11 @@ class OrderOut {
   final bool modifiedByStore;
   final String? userId;
   final String status;
+  /// unpaid | partially_paid | paid | refunded
   final String paymentStatus;
+  /// Net amount paid so far, and what is still owed (My Orders only).
+  final double amountPaid;
+  final double balanceDue;
   final String channel;
   final double subtotal;
   final double tax;
@@ -40,6 +44,8 @@ class OrderOut {
     required this.userId,
     required this.status,
     required this.paymentStatus,
+    this.amountPaid = 0,
+    this.balanceDue = 0,
     required this.channel,
     required this.subtotal,
     required this.tax,
@@ -49,6 +55,10 @@ class OrderOut {
     required this.deliveryAddress,
     required this.createdAt,
   });
+
+  /// Identifies an unpaid amount for the home-screen reminder: a new balance
+  /// (staff raised the total) is reminded about again.
+  String get paymentReminderKey => '$id:${balanceDue.toStringAsFixed(2)}';
 
   factory OrderOut.fromJson(Map<String, dynamic> json) {
     return OrderOut(
@@ -62,6 +72,8 @@ class OrderOut {
       userId: json['user_id'] as String?,
       status: json['status'] as String,
       paymentStatus: json['payment_status'] as String? ?? 'unpaid',
+      amountPaid: json['amount_paid'] == null ? 0 : _toDouble(json['amount_paid']),
+      balanceDue: json['balance_due'] == null ? 0 : _toDouble(json['balance_due']),
       channel: json['channel'] as String,
       subtotal: _toDouble(json['subtotal']),
       tax: _toDouble(json['tax']),

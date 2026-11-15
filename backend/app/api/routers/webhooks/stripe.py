@@ -8,17 +8,17 @@ from __future__ import annotations
 
 import logging
 import uuid
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.time import utcnow_naive
 from app.db.session import get_db
 from app.models.order import Order
 from app.models.store import Store
-from app.services import payment_service
+from app.services import order_payments, payment_service
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +36,20 @@ def _field(obj: Any, key: str, default: Any = None) -> Any:
         return obj[key]
     except (KeyError, TypeError):
         return default
+
+
+def _dollars(cents: Any) -> Decimal:
+    return (Decimal(int(cents or 0)) / 100).quantize(Decimal("0.01"))
+
+
+def _order_from_metadata(db: Session, obj: Any) -> Order | None:
+    order_id_raw = _field(_field(obj, "metadata") or {}, "order_id")
+    if not order_id_raw:
+        return None
+    try:
+        return db.get(Order, uuid.UUID(order_id_raw), with_for_update=True)
+    except ValueError:
+        return None
 
 
 @router.post("/stripe")
@@ -59,18 +73,44 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
                 db.commit()
 
     elif event_type == "payment_intent.succeeded":
-        order_id_raw = _field(_field(obj, "metadata") or {}, "order_id")
-        order = None
-        if order_id_raw:
-            try:
-                order = db.get(Order, uuid.UUID(order_id_raw))
-            except ValueError:
-                order = None
-        if order is not None and order.payment_status != "paid":
-            order.payment_status = "paid"
-            order.paid_at = utcnow_naive()
-            order.payment_ref = _field(obj, "id") or order.payment_ref
-            db.add(order)
+        order = _order_from_metadata(db, obj)
+        if order is not None and _field(obj, "id"):
+            order_payments.receive_card_payment(
+                db, order, payment_intent_id=_field(obj, "id"), amount=_dollars(_field(obj, "amount_received"))
+            )
+            db.commit()
+
+    elif event_type in ("payment_intent.payment_failed", "payment_intent.canceled"):
+        error = _field(obj, "last_payment_error") or {}
+        order_payments.update_card_charge(
+            db,
+            payment_intent_id=_field(obj, "id") or "",
+            status="failed" if event_type.endswith("failed") else "canceled",
+            failure_reason=_field(error, "message"),
+        )
+        db.commit()
+
+    elif event_type in ("refund.created", "refund.updated", "refund.failed", "charge.refund.updated"):
+        if _field(obj, "id"):
+            order_payments.update_refund(
+                db,
+                refund_id=_field(obj, "id"),
+                payment_intent_id=_field(obj, "payment_intent"),
+                amount=_dollars(_field(obj, "amount")),
+                status=_field(obj, "status") or "pending",
+            )
+            db.commit()
+
+    elif event_type in ("charge.dispute.created", "charge.dispute.closed"):
+        if _field(obj, "id"):
+            order_payments.record_dispute(
+                db,
+                dispute_id=_field(obj, "id"),
+                payment_intent_id=_field(obj, "payment_intent"),
+                amount=_dollars(_field(obj, "amount")),
+                status=_field(obj, "status") or "",
+                reason=_field(obj, "reason"),
+            )
             db.commit()
 
     return {"received": True}

@@ -124,7 +124,7 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
     final seen = ref.watch(seenUnpaidOrdersProvider).valueOrNull;
     final unpaid = seen == null
         ? null
-        : ref.watch(myOrdersProvider).valueOrNull?.where((o) => o.canPayOnline && !seen.contains(o.id)).firstOrNull;
+        : ref.watch(myOrdersProvider).valueOrNull?.where((o) => o.canPayOnline && !seen.contains(o.paymentReminderKey)).firstOrNull;
 
     return Scaffold(
       backgroundColor: Colors.transparent,

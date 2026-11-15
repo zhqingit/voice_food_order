@@ -7,7 +7,6 @@ order_events.
 from __future__ import annotations
 
 import uuid
-from decimal import Decimal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -16,11 +15,9 @@ from app.core.errors import AppError
 from app.models.menu_item import MenuItem
 from app.models.menu_item_variant import MenuItemVariant
 from app.models.order import Order
-from app.models.order_event import OrderEvent
 from app.models.order_item import OrderItem
-from app.services import order_service
-
-ACTOR_STORE = "store"
+from app.services import order_payments, order_service
+from app.services.order_event_service import ACTOR_STORE, log_event
 
 
 def _require_editable(order: Order) -> None:
@@ -43,24 +40,14 @@ def _get_item(db: Session, order: Order, item_id: uuid.UUID) -> OrderItem:
     return item
 
 
-def _log(db: Session, order: Order, *, kind: str, detail: str, total_before: Decimal | None) -> None:
-    db.add(
-        OrderEvent(
-            order_id=order.id,
-            actor=ACTOR_STORE,
-            kind=kind,
-            detail=detail[:512],
-            total_before=total_before,
-            total_after=order.total,
-        )
-    )
-
-
 def _recalc_and_log(db: Session, order: Order, *, kind: str, detail: str) -> None:
     total_before = order.total
     db.flush()
     order_service.recalc_totals(db, order=order)
-    _log(db, order, kind=kind, detail=detail, total_before=total_before)
+    # A paid order whose total went up now has a balance due (or, if it went
+    # down, an overpayment staff can refund).
+    order_payments.sync_payment_status(db, order)
+    log_event(db, order, actor=ACTOR_STORE, kind=kind, detail=detail, total_before=total_before)
 
 
 def add_item(
@@ -138,8 +125,12 @@ def remove_item(db: Session, order: Order, item_id: uuid.UUID) -> None:
     _recalc_and_log(db, order, kind="item_removed", detail=label)
 
 
-def set_status(db: Session, order: Order, status: str) -> None:
+def set_status(db: Session, order: Order, status: str, *, actor: str = ACTOR_STORE) -> None:
     if status == order.status:
         return
-    _log(db, order, kind="status_changed", detail=f"{order.status} → {status}", total_before=order.total)
+    log_event(db, order, actor=actor, kind="status_changed", detail=f"{order.status} → {status}")
     order.status = status
+    if status == order_payments.CANCELLED:
+        order_payments.on_cancelled(db, order)
+    # A cancelled order owes nothing, so what was paid becomes refundable.
+    order_payments.sync_payment_status(db, order)

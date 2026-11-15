@@ -19,7 +19,7 @@ from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemCreate, OrderItemOut, OrderOut
 from app.schemas.order.payment import PaymentIntentResponse
-from app.services import order_service, payment_service
+from app.services import order_payments, order_service, payment_service
 
 from pydantic import BaseModel, Field
 
@@ -236,8 +236,9 @@ def create_payment_intent(
     If the store isn't payment-ready, returns payment_available=False so the
     client falls back to collecting at the store instead of charging online.
     """
+    # Locked so a double tap can't start two charges.
     order = db.execute(
-        select(Order).where(Order.user_id == current_user.id).where(Order.id == order_id)
+        select(Order).where(Order.user_id == current_user.id).where(Order.id == order_id).with_for_update()
     ).scalar_one_or_none()
     if order is None:
         raise AppError(status_code=404, code="order_not_found", detail="Order not found")
@@ -250,7 +251,9 @@ def create_payment_intent(
     if store is None:
         raise AppError(status_code=404, code="store_not_found", detail="Store not found")
 
-    amount = payment_service.to_cents(order.total)
+    # The whole total, or only the balance if staff raised a paid order's total.
+    amount_due = order_payments.ledger(db, order).balance_due
+    amount = payment_service.to_cents(amount_due)
 
     # Store not payment-ready → tell the client to collect at the store.
     if not store.stripe_account_id or not store.stripe_charges_enabled:
@@ -260,9 +263,27 @@ def create_payment_intent(
             reason="store_not_payment_ready",
         )
 
-    result = payment_service.create_payment_intent(order, store)
-    order.payment_ref = result.payment_intent_id
-    db.add(order)
+    # Reopening the payment sheet: reuse the unfinished PaymentIntent for the
+    # same amount instead of starting a second charge.
+    previous = order_payments.open_card_charge(db, order)
+    if previous is not None and previous.stripe_id and payment_service.to_cents(previous.amount) == amount:
+        state = payment_service.retrieve_payment_intent(previous.stripe_id)
+        if state.status in ("requires_payment_method", "requires_confirmation", "requires_action"):
+            return PaymentIntentResponse(
+                payment_available=True,
+                client_secret=state.client_secret,
+                publishable_key=settings.stripe_publishable_key,
+                amount=amount,
+            )
+    if previous is not None and previous.stripe_id:
+        # The amount changed since (staff edited the order): drop the old one.
+        if payment_service.cancel_payment_intent(previous.stripe_id):
+            previous.status = "canceled"
+
+    result = payment_service.create_payment_intent(order, store, amount_due=amount_due)
+    order_payments.record_card_charge_started(
+        db, order, payment_intent_id=result.payment_intent_id, amount=amount_due
+    )
     db.commit()
 
     return PaymentIntentResponse(

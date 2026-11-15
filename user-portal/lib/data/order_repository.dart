@@ -15,6 +15,15 @@ class OrderRepository {
     return json.map((e) => OrderOut.fromJson(e as Map<String, dynamic>)).toList();
   }
 
+  /// Cancel an order the restaurant hasn't accepted yet; card payments are refunded.
+  /// Fails with 409 `order_not_cancellable` once the restaurant has accepted it.
+  Future<OrderOut> cancelOrder(String orderId) async {
+    final res = await _dio.post<Map<String, dynamic>>('/user/orders/$orderId/cancel');
+    final json = res.data;
+    if (json == null) throw Exception('Empty response');
+    return OrderOut.fromJson(json);
+  }
+
   Future<OrderOut> getOrder(String orderId) async {
     final res = await _dio.get<Map<String, dynamic>>('/voice/orders/$orderId');
     final json = res.data;

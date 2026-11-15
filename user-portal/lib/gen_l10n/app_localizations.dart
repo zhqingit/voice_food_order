@@ -502,6 +502,54 @@ abstract class AppLocalizations {
   /// **'Changed by the restaurant'**
   String get modifiedByStore;
 
+  /// No description provided for @cancelOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel order'**
+  String get cancelOrder;
+
+  /// No description provided for @cancelOrderConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel order #{code}?'**
+  String cancelOrderConfirm(String code);
+
+  /// No description provided for @keepOrder.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep order'**
+  String get keepOrder;
+
+  /// No description provided for @orderCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Order cancelled.'**
+  String get orderCancelled;
+
+  /// No description provided for @orderCancelledRefund.
+  ///
+  /// In en, this message translates to:
+  /// **'Order cancelled. {amount} will go back to your card.'**
+  String orderCancelledRefund(String amount);
+
+  /// No description provided for @cancelTooLate.
+  ///
+  /// In en, this message translates to:
+  /// **'The restaurant has already accepted this order. Please call them to cancel.'**
+  String get cancelTooLate;
+
+  /// No description provided for @balanceDueChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Balance due'**
+  String get balanceDueChip;
+
+  /// No description provided for @refundedChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Refunded'**
+  String get refundedChip;
+
   /// No description provided for @paymentFailed.
   ///
   /// In en, this message translates to:

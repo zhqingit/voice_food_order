@@ -18,6 +18,7 @@ import {
   updateOrderStatus,
 } from '../api/orderApi'
 import { type MenuItemOut, listStoreItems } from '../api/menuApi'
+import { CustomerNoticeSection, OrderPaymentsSection } from './OrderMoneyPanel'
 
 const COMMON_STATUSES = ['draft', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled']
 const POLL_INTERVAL_MS = 10_000
@@ -150,8 +151,15 @@ function accountCell(order: OrderOut): React.JSX.Element | string {
   return '—'
 }
 
+const PAYMENT_BADGES: Record<string, { label: string; background: string; color: string }> = {
+  paid: { label: 'payments.paid', background: '#dcfce7', color: '#15803d' },
+  partially_paid: { label: 'orders.badgeBalanceDue', background: '#fef3c7', color: '#b45309' },
+  refunded: { label: 'orders.badgeRefunded', background: '#e5e7eb', color: '#374151' },
+  unpaid: { label: 'payments.unpaid', background: '#fee2e2', color: '#b91c1c' },
+}
+
 function paymentBadge(paymentStatus: string, t: TFunction): React.JSX.Element {
-  const paid = paymentStatus === 'paid'
+  const badge = PAYMENT_BADGES[paymentStatus] ?? PAYMENT_BADGES.unpaid
   return (
     <span
       style={{
@@ -159,11 +167,12 @@ function paymentBadge(paymentStatus: string, t: TFunction): React.JSX.Element {
         fontWeight: 700,
         padding: '2px 8px',
         borderRadius: 999,
-        background: paid ? '#dcfce7' : '#fee2e2',
-        color: paid ? '#15803d' : '#b91c1c',
+        background: badge.background,
+        color: badge.color,
+        whiteSpace: 'nowrap',
       }}
     >
-      {paid ? t('payments.paid') : t('payments.unpaid')}
+      {t(badge.label)}
     </span>
   )
 }
@@ -246,6 +255,8 @@ export function OrdersRoute(): React.JSX.Element {
   const [events, setEvents] = useState<OrderEventOut[]>([])
   const [menuItems, setMenuItems] = useState<MenuItemOut[] | null>(null)
   const [busy, setBusy] = useState(false)
+  // Bumped after every change so the payments and customer-notice sections reload.
+  const [detailVersion, setDetailVersion] = useState(0)
   const [noteDraft, setNoteDraft] = useState<{ id: string; text: string } | null>(null)
   const [addForm, setAddForm] = useState({ itemId: '', variantId: '', quantity: 1, note: '' })
   const knownStatuses = useRef<Map<string, string> | null>(null)
@@ -391,6 +402,7 @@ export function OrdersRoute(): React.JSX.Element {
       const [data, eventData] = await Promise.all([listOrderItems(orderId), listOrderEvents(orderId)])
       setItems(data)
       setEvents(eventData)
+      setDetailVersion((v) => v + 1)
       return true
     } catch (err) {
       const code = apiErrorCode(err)
@@ -403,6 +415,17 @@ export function OrdersRoute(): React.JSX.Element {
     } finally {
       setBusy(false)
     }
+  }
+
+  // A payment, refund or "customer told" was recorded in the money sections.
+  async function handleMoneyChanged(): Promise<void> {
+    if (!selectedOrderId) return
+    const orderId = selectedOrderId
+    try {
+      const [, eventData] = await Promise.all([reloadOrders(), listOrderEvents(orderId)])
+      setEvents(eventData)
+      setDetailVersion((v) => v + 1)
+    } catch { /* the next poll catches up */ }
   }
 
   async function saveNote(): Promise<void> {
@@ -884,6 +907,9 @@ export function OrdersRoute(): React.JSX.Element {
                 </div>
               )}
             </div>
+
+            <OrderPaymentsSection order={selectedOrder} version={detailVersion} onChanged={() => void handleMoneyChanged()} />
+            <CustomerNoticeSection order={selectedOrder} version={detailVersion} onChanged={() => void handleMoneyChanged()} />
 
             <div style={{ marginTop: 20 }}>
               <h3 style={{ margin: '0 0 12px', fontSize: 14, fontWeight: 600 }}>{t('orders.history')}</h3>

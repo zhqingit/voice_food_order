@@ -5,6 +5,7 @@ from app.models.menu_item_variant import MenuItemVariant
 from app.models.menu_menu_item import MenuMenuItem
 from app.models.order import Order
 from app.models.order_event import OrderEvent
+from app.models.payment import Payment
 from app.models.order_item import OrderItem
 from app.models.store import Store
 from app.models.voice_session import VoiceSession
@@ -22,6 +23,7 @@ __all__ = [
 	"MenuMenuItem",
 	"Order",
 	"OrderEvent",
+	"Payment",
 	"OrderItem",
 	"VoiceSession",
 	"RefreshSession",

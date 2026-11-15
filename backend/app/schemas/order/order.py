@@ -4,6 +4,8 @@ import uuid
 from decimal import Decimal
 from datetime import date, datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -32,7 +34,11 @@ class OrderOut(BaseModel):
     modified_by_store: bool = False
     user_id: uuid.UUID | None
     status: str
+    # unpaid | partially_paid | paid | refunded
     payment_status: str = "unpaid"
+    # Net amount paid so far (charges minus refunds), and what is still owed.
+    amount_paid: Decimal = Decimal("0.00")
+    balance_due: Decimal = Decimal("0.00")
     channel: str
     subtotal: Decimal
     tax: Decimal
@@ -85,3 +91,48 @@ class OrderEventOut(BaseModel):
     total_before: Decimal | None = None
     total_after: Decimal | None = None
     created_at: datetime
+
+
+class PaymentOut(BaseModel):
+    id: uuid.UUID
+    kind: str  # charge | refund
+    method: str  # card | in_store | dispute
+    amount: Decimal
+    status: str  # pending | succeeded | failed | canceled
+    failure_reason: str | None = None
+    created_at: datetime
+
+
+class OrderPaymentsOut(BaseModel):
+    paid: Decimal
+    refunded: Decimal
+    net: Decimal
+    balance_due: Decimal
+    # Paid more than is owed (staff lowered the total, or the order was cancelled).
+    overpaid: Decimal
+    # How much can still go back to the customer's card through Stripe.
+    card_refundable: Decimal
+    payments: list[PaymentOut]
+
+
+class RefundCreate(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    method: Literal["card", "in_store"] = "card"
+
+
+class InStorePaymentCreate(BaseModel):
+    amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+
+
+class CustomerNoticeOut(BaseModel):
+    message: str
+    phone: str | None = None
+    # Changes the customer hasn't been told about yet.
+    pending: bool
+    last_notified_at: datetime | None = None
+    # Texting needs the A2P 10DLC registration; until then staff call.
+    sms_available: bool = False
+
+
+class CustomerNotifiedCreate(BaseModel):
+    method: Literal["call", "sms"] = "call"
