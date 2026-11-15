@@ -3,22 +3,19 @@ from __future__ import annotations
 import csv
 import io
 import uuid
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps.admin import get_current_admin
 from app.api.host_policy import require_host_policy
-from app.core.config import settings
 from app.core.errors import AppError
 from app.db.session import get_db
 from app.models.admin import Admin
 from app.models.platform_cost import PlatformCost
 from app.schemas.admin.stats import MonthlyStatsOut, PlatformCostCreate, PlatformCostOut
 from app.schemas.common import Audience, PrincipalType
-from app.services import stats_service
+from app.services import months, stats_service
 
 router = APIRouter(
     prefix="/admin/stats",
@@ -30,7 +27,7 @@ MONTH_PATTERN = r"^\d{4}-(0[1-9]|1[0-2])$"
 
 
 def _month_or_current(month: str | None) -> str:
-    return month or datetime.now(ZoneInfo(settings.store_default_timezone)).strftime("%Y-%m")
+    return month or months.platform_today().strftime("%Y-%m")
 
 
 @router.get("/monthly", response_model=MonthlyStatsOut)

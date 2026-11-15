@@ -68,8 +68,8 @@ class Order(Base):
         Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
     )
     # Platform promotion (funded from our commission), only when paid online:
-    # the promotion offered at the payment sheet, and the discount actually
-    # taken by succeeded card payments. The customer owes total - platform_discount.
+    # set when a card charge carrying it succeeds (see order_payments). The
+    # customer owes total - platform_discount.
     platform_promotion_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("promotions.id"), nullable=True
     )

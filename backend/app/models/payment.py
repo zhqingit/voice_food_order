@@ -41,6 +41,9 @@ class Payment(Base):
     # Card charges: platform promotion taken off this charge (the customer paid
     # that much less; it comes out of our application fee).
     platform_discount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    platform_promotion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("promotions.id"), nullable=True
+    )
     # Card refunds: the charge they refund.
     parent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("payments.id"), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)

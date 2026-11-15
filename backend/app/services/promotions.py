@@ -16,6 +16,7 @@ Rules:
 """
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
@@ -33,7 +34,23 @@ PERCENT, AMOUNT_OFF = "percent", "amount_off"
 CHANNELS = ("all", "app", "phone")
 
 
-def discount_for(promo: Promotion, subtotal: Decimal) -> Decimal:
+@dataclass(frozen=True)
+class PromoTerms:
+    """A promotion's terms, detached from the database session (so a voice
+    session can load them once and reuse them every turn)."""
+
+    id: uuid.UUID
+    name: str
+    kind: str
+    value: Decimal
+    min_subtotal: Decimal
+
+    @classmethod
+    def of(cls, p: Promotion) -> "PromoTerms":
+        return cls(id=p.id, name=p.name, kind=p.kind, value=p.value, min_subtotal=p.min_subtotal)
+
+
+def discount_for(promo: Promotion | PromoTerms, subtotal: Decimal) -> Decimal:
     """What `promo` takes off this pre-tax subtotal (never more than the subtotal)."""
     if subtotal <= 0 or subtotal < promo.min_subtotal:
         return ZERO
@@ -66,11 +83,19 @@ def running_for(db: Session, *, store_id, channel: str | None, day: date) -> lis
     return [p for p in rows if is_running(p, day) and (channel is None or covers_channel(p, channel))]
 
 
-def apply(db: Session, order: Order) -> None:
-    """Set order.promotion_id and order.discount from order.subtotal."""
+def _running_for_order(db: Session, order: Order) -> list[PromoTerms]:
+    return [PromoTerms.of(p) for p in running_for(db, store_id=order.store_id, channel=order.channel, day=order.code_day)]
+
+
+def apply(db: Session, order: Order, running: list[PromoTerms] | None = None) -> None:
+    """Set order.promotion_id and order.discount from order.subtotal.
+
+    `running`: the store's promotions for this order, if the caller already has
+    them (a voice session loads them once); otherwise they're queried.
+    """
     if order.status == "draft":
         best, best_off = None, ZERO
-        for promo in running_for(db, store_id=order.store_id, channel=order.channel, day=order.code_day):
+        for promo in running if running is not None else _running_for_order(db, order):
             off = discount_for(promo, order.subtotal)
             if off > best_off:  # ties keep the older promotion
                 best, best_off = promo, off
@@ -88,13 +113,13 @@ class NextPromotion:
     discount: Decimal  # what it would take off at exactly that subtotal
 
 
-def next_promotion(db: Session, order: Order) -> NextPromotion | None:
+def next_promotion(db: Session, order: Order, running: list[PromoTerms] | None = None) -> NextPromotion | None:
     """The nearest promotion the draft would get by adding a bit more, if that
     beats the current discount. For the assistant to mention; computed here."""
     if order.status != "draft" or order.subtotal <= 0:
         return None
     options = []
-    for promo in running_for(db, store_id=order.store_id, channel=order.channel, day=order.code_day):
+    for promo in running if running is not None else _running_for_order(db, order):
         if promo.min_subtotal <= order.subtotal:
             continue
         off = discount_for(promo, promo.min_subtotal)

@@ -33,7 +33,7 @@ from app.models.order import Order
 from app.models.store import Store
 from app.models.store_invoice import StoreInvoice, StoreInvoiceLine
 from app.schemas.invoice import InvoiceDetailOut, InvoiceLineOut, InvoiceOut
-from app.services import commission, order_payments, payment_service
+from app.services import commission, months, order_payments, payment_service
 
 ZERO = Decimal("0.00")
 MIN_TOTAL = Decimal("1.00")  # smaller totals roll over to the next month
@@ -45,11 +45,6 @@ DRAFT, OPEN, PAID, VOID, UNCOLLECTIBLE = "draft", "open", "paid", "void", "uncol
 
 def month_label(period: date) -> str:
     return period.strftime("%B %Y")
-
-
-def _shift_month(d: date, months: int) -> date:
-    index = d.year * 12 + d.month - 1 + months
-    return date(index // 12, index % 12 + 1, 1)
 
 
 def _order_line(order: Order, collected_online: Decimal, amount: Decimal) -> StoreInvoiceLine:
@@ -72,7 +67,7 @@ def _order_line(order: Order, collected_online: Decimal, amount: Decimal) -> Sto
 def generate_drafts(db: Session, period: date) -> list[StoreInvoice]:
     """Create a draft for every store with something to bill for `period` and
     no live invoice for it yet. Safe to run again."""
-    end = _shift_month(period, 1)
+    end = months.shift_month(period, 1)
     already = set(
         db.execute(
             select(StoreInvoice.store_id).where(StoreInvoice.period == period).where(StoreInvoice.status != VOID)
@@ -83,7 +78,7 @@ def generate_drafts(db: Session, period: date) -> list[StoreInvoice]:
         select(Order)
         .where(Order.status == "completed")
         .where(Order.invoice_id.is_(None))
-        .where(Order.code_day >= _shift_month(period, -1), Order.code_day < end)
+        .where(Order.code_day >= months.shift_month(period, -1), Order.code_day < end)
         .order_by(Order.code_day, Order.created_at)
     ).scalars().all()
     collected = order_payments.commission_collected_by_order(db, [o.id for o in orders])

@@ -139,7 +139,13 @@ def remove_order_item(db: Session, *, order: Order, item_id: uuid.UUID) -> None:
     db.delete(item)
 
 
-def recalc_totals(db: Session, *, order: Order, tax_rate: Decimal | None = None) -> Order:
+def recalc_totals(
+    db: Session,
+    *,
+    order: Order,
+    tax_rate: Decimal | None = None,
+    store_promotions: list[promotions.PromoTerms] | None = None,
+) -> Order:
     items = db.execute(select(OrderItem).where(OrderItem.order_id == order.id)).scalars().all()
     subtotal = sum((item.price_snapshot * item.quantity for item in items), Decimal("0.00"))
 
@@ -148,7 +154,7 @@ def recalc_totals(db: Session, *, order: Order, tax_rate: Decimal | None = None)
         tax_rate = store.tax_rate if store else Decimal("0.0000")
 
     order.subtotal = subtotal
-    promotions.apply(db, order)  # sets order.discount
+    promotions.apply(db, order, running=store_promotions)  # sets order.discount
     taxable = subtotal - order.discount
     order.tax = (taxable * tax_rate).quantize(Decimal("0.01"))
     order.total = taxable + order.tax

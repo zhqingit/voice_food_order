@@ -1044,8 +1044,9 @@ class _PostSessionView extends ConsumerWidget {
             const SizedBox(height: 24),
           ],
 
-          // Payment (only for a placed order with a balance to pay)
-          if (placed && order.total > 0) ...[
+          // Payment (only for a placed order with a balance to pay). Stripe can't
+          // charge under $0.50: such an order is settled at the store.
+          if (placed && order.total >= 0.5) ...[
             _PaymentCard(order: order, storeName: storeName),
             const SizedBox(height: 16),
           ],

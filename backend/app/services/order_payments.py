@@ -33,6 +33,8 @@ CANCELLED = "cancelled"
 ZERO = Decimal("0.00")
 # A pending refund already counts, so the same money is never refunded twice.
 REFUND_COUNTED = ("pending", "succeeded")
+# Stripe's smallest card charge; a smaller balance is settled at the store.
+STRIPE_MIN_CHARGE = Decimal("0.50")
 
 
 @dataclass(frozen=True)
@@ -158,7 +160,12 @@ def commission_collected_by_order(db: Session, order_ids: list[uuid.UUID]) -> di
 def sync_payment_status(db: Session, order: Order) -> None:
     led = ledger(db, order)
     if led.net <= 0:
-        status = "refunded" if led.refunded > 0 else "unpaid"
+        if led.refunded > 0:
+            status = "refunded"
+        elif led.owed <= 0 and order.status != CANCELLED:
+            status = "paid"  # nothing to pay (a promotion took the whole order off)
+        else:
+            status = "unpaid"
     elif led.net < led.owed:
         status = "partially_paid"
     else:
@@ -189,11 +196,13 @@ def record_card_charge_started(
     amount: Decimal,
     application_fee: Decimal,
     platform_discount: Decimal | None = None,
+    platform_promotion_id: uuid.UUID | None = None,
 ) -> None:
     db.add(
         Payment(
             order_id=order.id, kind="charge", method="card", amount=amount, status="pending",
-            stripe_id=payment_intent_id, application_fee=application_fee, platform_discount=platform_discount,
+            stripe_id=payment_intent_id, application_fee=application_fee,
+            platform_discount=platform_discount, platform_promotion_id=platform_promotion_id,
         )
     )
     order.payment_ref = payment_intent_id
@@ -218,6 +227,7 @@ def receive_card_payment(
     row.stripe_fee = payment_service.fetch_stripe_fee(payment_intent_id)
     if row.platform_discount:
         order.platform_discount = (order.platform_discount or ZERO) + row.platform_discount
+        order.platform_promotion_id = row.platform_promotion_id
     if application_fee is not None:
         row.application_fee = application_fee
     order.payment_ref = payment_intent_id

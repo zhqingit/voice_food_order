@@ -1,9 +1,11 @@
-from datetime import date
+import uuid
+from datetime import date, timedelta
 from decimal import Decimal
 
 import pytest
 
 from app.models.order import Order
+from app.models.payment import Payment
 from app.models.store import Store
 from app.services import invoice_service, platform_promotions
 from app.voice.session_setup import load_store_voice_setup
@@ -95,6 +97,7 @@ def test_first_order_only_and_per_customer_limits(admin_client, admin_headers, s
         earlier = Order(
             store_id=o.store_id, user_id=o.user_id, status="completed", channel="voice", short_code="OLD12",
             code_day=date(2026, 11, 1), subtotal=Decimal("5.00"), tax=Decimal("0"), total=Decimal("5.00"),
+            created_at=o.created_at - timedelta(days=3),
         )
         db.add(earlier)
         db.commit()
@@ -113,8 +116,8 @@ def test_first_order_only_and_per_customer_limits(admin_client, admin_headers, s
     assert offer() == "Once each"
 
     with session_factory() as db:  # the earlier order already used it
-        e = db.get(Order, earlier_id)
-        e.platform_promotion_id, e.platform_discount = once["id"], Decimal("0.50")
+        db.add(Payment(order_id=earlier_id, kind="charge", method="card", amount=Decimal("4.50"), status="succeeded",
+                       stripe_id="pi_old", platform_discount=Decimal("0.50"), platform_promotion_id=uuid.UUID(once["id"])))
         db.commit()
     assert offer() is None
 
@@ -171,3 +174,70 @@ def test_admin_turns_promotions_off_and_cannot_delete_used_ones(
     r = admin_client.patch(f"/admin/promotions/{used['id']}", json={"is_active": False, "monthly_budget": "50"}, headers=admin_headers)
     assert (r.json()["is_active"], r.json()["monthly_budget"], r.json()["orders_count"]) == (False, "50.00", 1)
     assert admin_client.delete(f"/admin/promotions/{used['id']}", headers=admin_headers).status_code == 409
+
+
+def test_no_platform_discount_once_the_order_was_paid_online(store_client, user_client, world, webhook, promo):
+    _pay(user_client, world, webhook)  # paid in full, no promotion running then
+    promo()
+    store_client.post(f"/store/orders/{world['order']}/items", json={"menu_item_id": str(world["rice"])}, headers=world["store"])
+
+    r = user_client.post(f"/voice/orders/{world['order']}/payment-intent", headers=world["user"])
+
+    assert (r.json()["amount"], r.json()["platform_discount"]) == (1100, "0.00")
+
+
+def test_a_payment_in_progress_counts_toward_the_limits(user_client, session_factory, world, promo):
+    promo(name="Once each", per_user_limit=1)
+    with session_factory() as db:
+        o = db.get(Order, world["order"])
+        second = Order(
+            store_id=o.store_id, user_id=o.user_id, status="submitted", channel="voice", short_code="SEC12",
+            code_day=o.code_day, subtotal=Decimal("10.00"), tax=Decimal("1.00"), total=Decimal("11.00"),
+            commission_bps=1500, commission=Decimal("1.50"),
+        )
+        db.add(second)
+        db.commit()
+        second_id = second.id
+
+    first = user_client.post(f"/voice/orders/{world['order']}/payment-intent", headers=world["user"]).json()
+    other = user_client.post(f"/voice/orders/{second_id}/payment-intent", headers=world["user"]).json()
+
+    assert (first["platform_discount"], other["platform_discount"]) == ("1.00", "0.00")
+    # Reopening the first sheet keeps the same discounted charge.
+    again = user_client.post(f"/voice/orders/{world['order']}/payment-intent", headers=world["user"]).json()
+    assert again["client_secret"] == first["client_secret"]
+
+
+def test_an_abandoned_payment_sheet_does_not_tie_the_order_to_a_promotion(
+    admin_client, admin_headers, user_client, session_factory, world, promo
+):
+    offered = promo(name="Short-lived")
+    user_client.post(f"/voice/orders/{world['order']}/payment-intent", headers=world["user"])  # closed unpaid
+
+    with session_factory() as db:
+        assert db.get(Order, world["order"]).platform_promotion_id is None
+    assert admin_client.delete(f"/admin/promotions/{offered['id']}", headers=admin_headers).status_code == 204
+
+
+def test_a_balance_under_stripes_minimum_is_settled_at_the_store(user_client, session_factory, world):
+    with session_factory() as db:
+        o = db.get(Order, world["order"])
+        o.discount, o.tax, o.total = Decimal("9.70"), Decimal("0.03"), Decimal("0.33")
+        db.commit()
+
+    r = user_client.post(f"/voice/orders/{world['order']}/payment-intent", headers=world["user"])
+
+    assert (r.json()["payment_available"], r.json()["reason"]) == (False, "amount_too_small")
+    assert user_client.get("/user/orders", headers=world["user"]).json()[0]["can_pay_online"] is False
+
+
+def test_the_app_cannot_place_an_order_under_the_minimum(user_client, session_factory, world):
+    with session_factory() as db:
+        o = db.get(Order, world["order"])
+        o.status = "draft"
+        db.get(Store, o.store_id).min_order_amount = Decimal("25.00")
+        db.commit()
+
+    r = user_client.post(f"/voice/orders/{world['order']}/finalize", headers=world["user"])
+
+    assert r.status_code == 409 and r.json()["code"] == "below_minimum_order"

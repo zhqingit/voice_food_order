@@ -16,6 +16,7 @@ from app.models.promotion import Promotion
 from app.models.store import Store
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.store.promotions import PromotionCreate, PromotionOut, PromotionUpdate
+from app.services import order_service
 
 router = APIRouter(
     prefix="/store/promotions",
@@ -104,11 +105,24 @@ def delete_promotion(
     db: Session = Depends(get_db),
 ) -> Response:
     promo = _get(db, current_store, promo_id)
-    used = db.execute(select(Order.id).where(Order.promotion_id == promo.id).limit(1)).first()
-    if used is not None:
+    placed = db.execute(
+        select(Order.id).where(Order.promotion_id == promo.id, Order.status != "draft").limit(1)
+    ).first()
+    if placed is not None:
         raise AppError(
             status_code=409, code="promotion_in_use", detail="Orders used this promotion; turn it off instead of deleting it."
         )
+    # Unfinished drafts (e.g. a caller who hung up) let go of it and re-pick
+    # from the store's other promotions.
+    drafts = db.execute(
+        select(Order).where(Order.promotion_id == promo.id, Order.status == "draft").with_for_update()
+    ).scalars().all()
+    for draft in drafts:
+        draft.promotion_id = None
+    db.flush()
     db.delete(promo)
+    db.flush()
+    for draft in drafts:
+        order_service.recalc_totals(db, order=draft)
     db.commit()
     return Response(status_code=204)

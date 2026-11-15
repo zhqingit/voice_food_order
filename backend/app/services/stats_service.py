@@ -13,13 +13,12 @@ an admin and only appear in the totals.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
 from app.models.order import Order
 from app.models.payment import Payment
 from app.models.phone_call import PhoneCall
@@ -28,7 +27,7 @@ from app.models.store import Store
 from app.models.store_invoice import StoreInvoice
 from app.models.voice_session import VoiceSession
 from app.schemas.admin.stats import ChannelStats, MonthlyStatsOut, MonthTotals, PlatformCostOut, StoreMonthStats
-from app.services import commission, invoice_service, order_payments
+from app.services import commission, invoice_service, months, order_payments
 
 ZERO = Decimal("0.00")
 CENT = Decimal("0.01")
@@ -57,16 +56,6 @@ def parse_month(month: str) -> date:
     return date(int(year), int(mon), 1)
 
 
-def _next_month(start: date) -> date:
-    return date(start.year + start.month // 12, start.month % 12 + 1, 1)
-
-
-def _in_month(column, start: date, end: date):
-    """A naive-UTC timestamp column falls in [start, end) in the platform timezone."""
-    local = func.timezone(settings.store_default_timezone, func.timezone("UTC", column))
-    return (local >= datetime.combine(start, datetime.min.time())) & (local < datetime.combine(end, datetime.min.time()))
-
-
 class _Acc:
     """Running totals for one store."""
 
@@ -86,7 +75,7 @@ class _Acc:
 
 def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
     start = parse_month(month)
-    end = _next_month(start)
+    end = months.shift_month(start, 1)
     acc: dict[uuid.UUID, _Acc] = {}
 
     def get(store_id: uuid.UUID) -> _Acc:
@@ -109,16 +98,17 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
         ch.discounts += o.discount
         ch.commission += o.commission
         online = min(max(collected.get(o.id, ZERO), ZERO), o.commission)
-        given = min(o.platform_discount, o.commission - online)  # platform promotion, out of our commission
+        # The platform promotion counts in full as our cost, even in the rare
+        # case it ends up above the commission (staff lowered the order later).
         a.commission_online += online
-        a.platform_discounts += given
-        a.commission_to_invoice += o.commission - online - given
+        a.platform_discounts += o.platform_discount
+        a.commission_to_invoice += max(o.commission - online - o.platform_discount, ZERO)
 
     # AI cost of app voice sessions (phone calls are counted from phone_calls).
     for store_id, cost in db.execute(
         select(VoiceSession.store_id, func.sum(VoiceSession.llm_cost))
         .where(VoiceSession.channel != commission.PHONE_CHANNEL)
-        .where(_in_month(VoiceSession.started_at, start, end))
+        .where(months.in_month(VoiceSession.started_at, start, end))
         .group_by(VoiceSession.store_id)
     ).all():
         get(store_id).ai_cost += cost or 0
@@ -131,7 +121,7 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
             func.sum(PhoneCall.ai_cost),
             func.sum(PhoneCall.telephony_cost),
         )
-        .where(_in_month(PhoneCall.started_at, start, end))
+        .where(months.in_month(PhoneCall.started_at, start, end))
         .group_by(PhoneCall.store_id)
     ).all():
         a = get(store_id)
@@ -145,7 +135,7 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
         select(Order.store_id, Payment.amount, Payment.stripe_fee)
         .join(Order, Order.id == Payment.order_id)
         .where(Payment.kind == "charge", Payment.method == "card", Payment.status == "succeeded")
-        .where(_in_month(Payment.created_at, start, end))
+        .where(months.in_month(Payment.created_at, start, end))
     ).all():
         get(store_id).stripe_fees += stripe_fee if stripe_fee is not None else estimate_stripe_fee(amount)
 

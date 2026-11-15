@@ -41,12 +41,15 @@ def _order_out(
     store_changed_at: datetime | None = None,
     net_paid: Decimal = order_payments.ZERO,
 ) -> OrderOut:
+    balance_due = max(order_payments.owed(order) - net_paid, order_payments.ZERO)
     can_pay_online = (
         store is not None
         and order.payment_status != "paid"
         and order.status in order_service.PAYABLE_STATUSES
         and bool(store.stripe_account_id)
         and store.stripe_charges_enabled
+        # Stripe can't charge less than $0.50; such a balance is settled at the store.
+        and balance_due >= order_payments.STRIPE_MIN_CHARGE
     )
     return OrderOut(
         id=order.id,
@@ -62,7 +65,7 @@ def _order_out(
         status=order.status,
         payment_status=order.payment_status,
         amount_paid=net_paid,
-        balance_due=max(order_payments.owed(order) - net_paid, order_payments.ZERO),
+        balance_due=balance_due,
         channel=order.channel,
         subtotal=order.subtotal,
         discount=order.discount,
@@ -128,9 +131,7 @@ def list_orders(
             net_paid=net_paid.get(order.id, order_payments.ZERO),
         )
         if o.can_pay_online:
-            offer = platform_promotions.offer_for(db, order, amount_due=o.balance_due)
-            if offer is not None:
-                o.online_offer, o.online_offer_name = offer.discount, offer.promotion.name
+            platform_promotions.with_online_offer(db, o, order, balance_due=o.balance_due)
         out.append(o)
     return out
 

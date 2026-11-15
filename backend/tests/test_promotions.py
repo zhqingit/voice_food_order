@@ -10,7 +10,7 @@ from app.models.order_item import OrderItem
 from app.models.store import Store
 from app.schemas.menu.menu import MenuItemCreate
 from app.schemas.order.order import OrderCreate, OrderItemCreate
-from app.services import menu_service, order_service
+from app.services import menu_service, order_payments, order_service
 from app.voice.prompts import build_system_prompt
 from app.voice.session_setup import load_store_voice_setup
 from app.voice.tool_router import VoiceToolContext, VoiceToolRouter
@@ -104,7 +104,10 @@ def test_a_placed_order_keeps_its_promotion_through_staff_edits(store_client, se
 
 def test_used_promotions_can_be_turned_off_but_not_deleted_or_changed(store_client, session_factory, wok):
     used = _promo(store_client, wok)
-    _draft(session_factory, wok, 1)
+    placed = _draft(session_factory, wok, 1)
+    with session_factory() as db:
+        db.get(Order, placed).status = "submitted"
+        db.commit()
     unused = _promo(store_client, wok, name="Spare", min_subtotal="500")
 
     r = store_client.delete(f"/store/promotions/{used['id']}", headers=wok["headers"])
@@ -152,3 +155,64 @@ def test_customers_see_the_stores_running_promotions(user_client, store_client, 
     r = user_client.get(f"/user/stores/{wok['id']}")
 
     assert [(p["name"], p["kind"], p["value"]) for p in r.json()["promotions"]] == [("Grand opening", "percent", "15.00")]
+
+
+def test_an_abandoned_draft_does_not_block_deleting_its_promotion(store_client, session_factory, wok):
+    big = _promo(store_client, wok, name="20% off", value="20")
+    _promo(store_client, wok, name="10% off", value="10")
+    draft = _draft(session_factory, wok, 2)  # the caller hung up; it got 20% off
+    assert _money(session_factory, draft)[1] == Decimal("4.00")
+
+    assert store_client.delete(f"/store/promotions/{big['id']}", headers=wok["headers"]).status_code == 204
+
+    assert _money(session_factory, draft)[1] == Decimal("2.00")  # moved to the remaining promotion
+
+
+def test_the_app_store_card_only_shows_promotions_app_orders_can_get(user_client, store_client, wok):
+    _promo(store_client, wok, name="Call-in special", channels="phone")
+    _promo(store_client, wok, name="App deal", channels="app")
+
+    r = user_client.get(f"/user/stores/{wok['id']}")
+
+    assert [p["name"] for p in r.json()["promotions"]] == ["App deal"]
+
+
+def test_a_promotion_that_takes_the_whole_order_leaves_nothing_to_pay(store_client, session_factory, db_factory, wok):
+    _promo(store_client, wok, name="$15 off", kind="amount_off", value="15")
+    router = VoiceToolRouter(VoiceToolContext(db_factory=db_factory, store_id=wok["id"], user_id=None))
+    router.add_item(menu_item_id=wok["rice"], item_name=None, quantity=1)  # $10 → $0
+    order_id = router._context.order_id
+    with session_factory() as db:
+        o = db.get(Order, order_id)
+        assert (o.discount, o.total) == (Decimal("10.00"), Decimal("0.00"))
+        o.status = "submitted"
+        order_payments.sync_payment_status(db, o)
+        assert o.payment_status == "paid"
+
+
+def test_the_minimum_order_is_enforced_in_code(session_factory, db_factory, wok):
+    with session_factory() as db:
+        db.get(Store, wok["id"]).min_order_amount = Decimal("25.00")
+        db.commit()
+    router = VoiceToolRouter(VoiceToolContext(db_factory=db_factory, store_id=wok["id"], user_id=None))
+    router.add_item(menu_item_id=wok["rice"], item_name=None, quantity=2)  # $20.00
+    router.set_customer_name(name="Alice")
+    ctx = router._context  # the name was read back a moment ago
+    ctx.name_set_at -= 5
+    ctx.bot_speech_ended_at = ctx.name_set_at + 1
+
+    r = router.ask_to_place_order()
+
+    assert r["ok"] is False
+    assert "minimum order is $25.00" in r["message"] and "add $5.00 more" in r["message"]
+
+
+def test_a_voice_session_loads_promotions_once(store_client, session_factory, db_factory, wok):
+    _promo(store_client, wok, name="10% off", value="10")
+    router = VoiceToolRouter(VoiceToolContext(db_factory=db_factory, store_id=wok["id"], user_id=None))
+    router.add_item(menu_item_id=wok["rice"], item_name=None, quantity=2)
+
+    _promo(store_client, wok, name="50% off", value="50")  # created mid-call
+    order = router.add_item(menu_item_id=wok["rice"], item_name=None, quantity=1)["order"]
+
+    assert (order["promotion"], order["discount"]) == ("10% off", 3.0)  # still the session's list

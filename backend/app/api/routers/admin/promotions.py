@@ -2,24 +2,21 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.api.deps.admin import get_current_admin
 from app.api.host_policy import require_host_policy
-from app.core.config import settings
 from app.core.errors import AppError
 from app.db.session import get_db
 from app.models.admin import Admin
 from app.models.order import Order
+from app.models.payment import Payment
 from app.models.promotion import Promotion
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.store.promotions import PlatformPromotionCreate, PlatformPromotionOut, PlatformPromotionUpdate
-from app.services import platform_promotions
+from app.services import months, platform_promotions
 
 router = APIRouter(
     prefix="/admin/promotions",
@@ -29,7 +26,6 @@ router = APIRouter(
 
 
 def _out(db: Session, p: Promotion) -> PlatformPromotionOut:
-    today = datetime.now(ZoneInfo(settings.store_default_timezone)).date()
     orders = db.execute(
         select(func.count()).select_from(Order).where(Order.platform_promotion_id == p.id, Order.platform_discount > 0)
     ).scalar_one()
@@ -37,7 +33,7 @@ def _out(db: Session, p: Promotion) -> PlatformPromotionOut:
         id=p.id, name=p.name, kind=p.kind, value=p.value, min_subtotal=p.min_subtotal, channels=p.channels,
         starts_on=p.starts_on, ends_on=p.ends_on, is_active=p.is_active, orders_count=orders, created_at=p.created_at,
         first_order_only=p.first_order_only, per_user_limit=p.per_user_limit, monthly_budget=p.monthly_budget,
-        spent_this_month=platform_promotions.spent_this_month(db, p, today),
+        spent_this_month=platform_promotions.spent_this_month(db, p.id, months.platform_today()),
     )
 
 
@@ -100,8 +96,13 @@ def delete_promotion(
     db: Session = Depends(get_db),
 ) -> Response:
     promo = _get(db, promo_id)
-    if db.execute(select(Order.id).where(Order.platform_promotion_id == promo.id).limit(1)).first() is not None:
+    used = db.execute(
+        select(Payment.id).where(Payment.platform_promotion_id == promo.id, Payment.status == "succeeded").limit(1)
+    ).first()
+    if used is not None:
         raise AppError(status_code=409, code="promotion_in_use", detail="Orders used this promotion; turn it off instead.")
+    # Payment sheets opened but never paid let go of it.
+    db.execute(update(Payment).where(Payment.platform_promotion_id == promo.id).values(platform_promotion_id=None))
     db.delete(promo)
     db.commit()
     return Response(status_code=204)

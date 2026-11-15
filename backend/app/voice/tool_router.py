@@ -24,10 +24,21 @@ from app.models.order_item import OrderItem
 from app.models.promotion import Promotion
 from app.models.voice_session import VoiceSession
 from app.models.store import Store
-from app.services import delivery_service, menu_service, order_service, platform_promotions, promotions
+from app.services import delivery_service, menu_service, order_payments, order_service, platform_promotions, promotions
 from app.schemas.order.order import OrderCreate
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SessionPromotions:
+    """Loaded once per voice session: the store's running promotions and the
+    platform promotions this customer qualifies for. Discounts are still
+    computed in code every turn, only without re-querying; the payment
+    re-checks the platform promotion against the database."""
+
+    store: list[promotions.PromoTerms]
+    platform: list[platform_promotions.Eligible]
 
 
 @dataclass
@@ -61,6 +72,8 @@ class VoiceToolContext:
     bot_turns_since_ask: int = 0
     bot_speaking: bool = False
     customer_reply: str = ""
+    # Loaded on first use (see VoiceToolRouter._promotions).
+    session_promotions: SessionPromotions | None = None
 
     def mark_bot_started_speaking(self) -> None:
         self.bot_speaking = True
@@ -348,6 +361,26 @@ class VoiceToolRouter:
         db.commit()
         return order
 
+    def _promotions(self, db: Session) -> SessionPromotions:
+        """The session's promotions, loaded on first use."""
+        ctx = self._context
+        if ctx.session_promotions is None:
+            store = db.get(Store, ctx.store_id)
+            day = order_service.today_in_store_tz(store)
+            ctx.session_promotions = SessionPromotions(
+                store=[
+                    promotions.PromoTerms.of(p)
+                    for p in promotions.running_for(db, store_id=ctx.store_id, channel=ctx.channel, day=day)
+                ],
+                platform=platform_promotions.load_eligible(
+                    db, user_id=ctx.user_id, store_id=ctx.store_id, channel=ctx.channel, day=day
+                ),
+            )
+        return ctx.session_promotions
+
+    def _recalc(self, db: Session, order: Order) -> None:
+        order_service.recalc_totals(db, order=order, store_promotions=self._promotions(db).store)
+
     def _build_summary(self, db: Session, order: Order) -> dict[str, Any]:
         items = db.execute(select(OrderItem).where(OrderItem.order_id == order.id)).scalars().all()
         summary_items = []
@@ -381,7 +414,8 @@ class VoiceToolRouter:
             result["discount"] = float(order.discount)
             result["promotion"] = promo.name if promo else None
             result["subtotal_after_discount"] = float(order.subtotal - order.discount)
-        upsell = promotions.next_promotion(db, order)
+        cached = self._promotions(db)
+        upsell = promotions.next_promotion(db, order, running=cached.store)
         if upsell is not None:
             result["next_promotion"] = {
                 "name": upsell.name,
@@ -390,7 +424,7 @@ class VoiceToolRouter:
                 "say": f"If you add ${upsell.add_more:.2f} more, you'd get {upsell.name} (${upsell.discount:.2f} off).",
             }
         # Platform promotion for paying online in the app (also computed in code).
-        offer = platform_promotions.offer_for(db, order)
+        offer = platform_promotions.preview_offer(cached.platform, order)
         if offer is not None:
             result["online_offer"] = {
                 "name": offer.promotion.name,
@@ -493,7 +527,7 @@ class VoiceToolRouter:
             if variant_name_snapshot is not None:
                 oi.variant_name = variant_name_snapshot
             db.flush()
-            order_service.recalc_totals(db, order=order)
+            self._recalc(db, order)
             db.commit()
             self._record_add(menu_item.id, variant_key, note, quantity)
 
@@ -544,7 +578,7 @@ class VoiceToolRouter:
 
             db.delete(item)
             db.flush()
-            order_service.recalc_totals(db, order=order)
+            self._recalc(db, order)
             db.commit()
 
             return {
@@ -558,7 +592,7 @@ class VoiceToolRouter:
             order = self._get_order(db)
             if order is None:
                 return {"ok": True, "message": "Order is empty.", "order": None}
-            order_service.recalc_totals(db, order=order)
+            self._recalc(db, order)
             db.flush()
             return {"ok": True, "message": "Order summary.", "order": self._build_summary(db, order)}
 
@@ -611,6 +645,14 @@ class VoiceToolRouter:
         ).first()
         if has_items is None:
             return "Order is empty. Add items before checkout."
+        store = db.get(Store, self._context.store_id)
+        minimum = store.min_order_amount if store is not None else None
+        if minimum and order.subtotal < minimum:
+            short = minimum - order.subtotal
+            return (
+                f"The store's minimum order is ${minimum:.2f} (before tax and discounts) and this order is "
+                f"${order.subtotal:.2f}. Tell the customer they need to add ${short:.2f} more before it can be placed."
+            )
         if not order.fulfillment_type:
             return "Pickup or delivery is not set. Ask the customer and call set_fulfillment first."
         # Tool-layer gate: delivery orders MUST have a verbal confirmation
@@ -649,7 +691,7 @@ class VoiceToolRouter:
             not_ready = self._order_not_ready_error(db, order)
             if not_ready is not None:
                 return {"ok": False, "message": not_ready}
-            order_service.recalc_totals(db, order=order)
+            self._recalc(db, order)
             db.commit()
             return {**self._arm_and_ask(order, "Ask the customer now."), "ok": True}
 
@@ -699,13 +741,14 @@ class VoiceToolRouter:
                     if range_error is not None:
                         return range_error
 
-            order_service.recalc_totals(db, order=order)
+            self._recalc(db, order)
             refusal = self._approval_refusal(order)
             if refusal is not None:
                 db.commit()
                 return refusal
 
             order.status = "submitted"
+            order_payments.sync_payment_status(db, order)  # a $0 order is already paid
             db.commit()
             self._context.disarm_order_approval()
 
@@ -787,7 +830,7 @@ class VoiceToolRouter:
                     "order": self._build_summary(db, order),
                 }
 
-            order_service.recalc_totals(db, order=order)
+            self._recalc(db, order)
             db.commit()
 
             menu_item = db.get(MenuItem, oi.menu_item_id)

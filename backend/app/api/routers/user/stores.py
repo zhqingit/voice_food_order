@@ -48,7 +48,8 @@ def _hours_for_store(db: Session, store_id: uuid.UUID) -> list[DayHours]:
 
 
 def _promotions_today(db: Session, store: Store) -> list[PromotionPublic]:
-    running = promotions.running_for(db, store_id=store.id, channel=None, day=order_service.today_in_store_tz(store))
+    # The app shows what app orders can get (not phone-only promotions).
+    running = promotions.running_for(db, store_id=store.id, channel="voice", day=order_service.today_in_store_tz(store))
     return [
         PromotionPublic(id=p.id, name=p.name, kind=p.kind, value=p.value, min_subtotal=p.min_subtotal, channels=p.channels)
         for p in running

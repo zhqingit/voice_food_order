@@ -6,7 +6,7 @@ Create Date: 2026-11-14
 
 A promotion with no store is a platform promotion. It gets optional limits
 (first order only, uses per customer, monthly budget). Orders record the
-platform promotion and the discount taken; card charges record their share.
+platform promotion and the discount taken; card charges record theirs.
 """
 import sqlalchemy as sa
 from alembic import op
@@ -29,9 +29,14 @@ def upgrade() -> None:
     )
     op.add_column("orders", sa.Column("platform_discount", sa.Numeric(10, 2), nullable=False, server_default="0"))
     op.add_column("payments", sa.Column("platform_discount", sa.Numeric(10, 2), nullable=True))
+    op.add_column(
+        "payments",
+        sa.Column("platform_promotion_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("promotions.id"), nullable=True),
+    )
 
 
 def downgrade() -> None:
+    op.drop_column("payments", "platform_promotion_id")
     op.drop_column("payments", "platform_discount")
     op.drop_column("orders", "platform_discount")
     op.drop_column("orders", "platform_promotion_id")

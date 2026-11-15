@@ -103,9 +103,8 @@ def get_order_summary(
         raise AppError(status_code=404, code="order_not_found", detail="Order not found")
     out = _order_out(order)
     if order.status in order_service.PAYABLE_STATUSES:
-        offer = platform_promotions.offer_for(db, order, amount_due=order_payments.ledger(db, order).balance_due)
-        if offer is not None:
-            out.online_offer, out.online_offer_name = offer.discount, offer.promotion.name
+        balance = order_payments.ledger(db, order).balance_due
+        platform_promotions.with_online_offer(db, out, order, balance_due=balance)
     return out
 
 
@@ -227,7 +226,15 @@ def finalize_order(
         raise AppError(status_code=409, code="order_not_editable", detail="Order is not editable")
 
     order_service.recalc_totals(db, order=order)  # while still a draft: picks the promotion
+    store = db.get(Store, order.store_id)
+    if store is not None and store.min_order_amount and order.subtotal < store.min_order_amount:
+        raise AppError(
+            status_code=409,
+            code="below_minimum_order",
+            detail=f"The minimum order is ${store.min_order_amount:.2f} before tax and discounts.",
+        )
     order.status = "submitted"
+    order_payments.sync_payment_status(db, order)  # a $0 order is already paid
     db.commit()
     db.refresh(order)
     return _order_out(order)
@@ -274,6 +281,10 @@ def create_payment_intent(
             amount=amount,
             reason="store_not_payment_ready",
         )
+    # Stripe can't charge less than $0.50 (e.g. a store promotion took most of
+    # the order off): the customer settles it at the store.
+    if charge < order_payments.STRIPE_MIN_CHARGE:
+        return PaymentIntentResponse(payment_available=False, amount=amount, reason="amount_too_small")
 
     # Reopening the payment sheet: reuse the unfinished PaymentIntent for the
     # same amount instead of starting a second charge.
@@ -283,6 +294,7 @@ def create_payment_intent(
         and previous.stripe_id
         and payment_service.to_cents(previous.amount) == amount
         and (previous.platform_discount or Decimal("0.00")) == platform_discount
+        and previous.platform_promotion_id == (offer.promotion.id if offer else None)
     ):
         state = payment_service.retrieve_payment_intent(previous.stripe_id)
         if state.status in ("requires_payment_method", "requires_confirmation", "requires_action"):
@@ -310,9 +322,8 @@ def create_payment_intent(
         amount=charge,
         application_fee=application_fee,
         platform_discount=platform_discount or None,
+        platform_promotion_id=offer.promotion.id if offer else None,
     )
-    if offer is not None:
-        order.platform_promotion_id = offer.promotion.id
     db.commit()
 
     return PaymentIntentResponse(
