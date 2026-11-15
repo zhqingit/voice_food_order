@@ -688,6 +688,11 @@ export function OrdersRoute(): React.JSX.Element {
                   )}
                   <span>{t('orders.tax')}: ${String(selectedOrder.tax)}</span>
                   <span style={{ fontWeight: 700 }}>{t('orders.total')}: ${String(selectedOrder.total)}</span>
+                  {Number(selectedOrder.platform_discount) > 0 && (
+                    <span style={{ color: 'var(--color-text-secondary)' }}>
+                      {t('orders.platformDiscount', { amount: `$${String(selectedOrder.platform_discount)}` })}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

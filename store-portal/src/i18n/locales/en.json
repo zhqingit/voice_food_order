@@ -276,7 +276,8 @@
     "customerNotifiedAt": "Customer last told about changes: {{time}}",
     "badgeBalanceDue": "Balance due",
     "badgeRefunded": "Refunded",
-    "discount": "Discount"
+    "discount": "Discount",
+    "platformDiscount": "VoxEats promo {{amount}} (paid by VoxEats; your payout is unchanged)"
   },
   "profile": {
     "title": "Profile & Settings",

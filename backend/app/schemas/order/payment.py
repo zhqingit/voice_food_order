@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import BaseModel
 
 
@@ -9,6 +11,9 @@ class PaymentIntentResponse(BaseModel):
     payment_available: bool
     client_secret: str | None = None
     publishable_key: str | None = None
-    amount: int  # order total in cents
+    amount: int  # what the card is charged, in cents (after any platform discount)
+    # Platform promotion taken off this online payment (computed by the server).
+    platform_discount: Decimal = Decimal("0.00")
+    promotion: str | None = None
     currency: str = "usd"
     reason: str | None = None  # why payment is unavailable, when applicable

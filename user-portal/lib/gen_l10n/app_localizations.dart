@@ -645,6 +645,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{deal} on {min}+'**
   String promoWithMinimum(String deal, String min);
+
+  /// VoxEats promotion taken off an online payment
+  ///
+  /// In en, this message translates to:
+  /// **'Online payment discount'**
+  String get onlineDiscount;
+
+  /// VoxEats promotion for paying online
+  ///
+  /// In en, this message translates to:
+  /// **'Pay online to save {amount} ({name})'**
+  String onlineOfferNote(String amount, String name);
 }
 
 class _AppLocalizationsDelegate

@@ -28,6 +28,7 @@ from app.api.routers.store.payments import router as store_payments_router
 from app.api.routers.store.promotions import router as store_promotions_router
 from app.api.routers.admin.auth import router as admin_auth_router
 from app.api.routers.admin.invoices import router as admin_invoices_router
+from app.api.routers.admin.promotions import router as admin_promotions_router
 from app.api.routers.admin.stats import router as admin_stats_router
 from app.api.routers.admin.stores import router as admin_stores_router
 from app.api.routers.webhooks.stripe import router as stripe_webhook_router
@@ -67,6 +68,7 @@ app.include_router(admin_auth_router)
 app.include_router(admin_stores_router)
 app.include_router(admin_stats_router)
 app.include_router(admin_invoices_router)
+app.include_router(admin_promotions_router)
 app.include_router(stripe_webhook_router)
 app.include_router(voice_sessions_router)
 app.include_router(voice_orders_router)

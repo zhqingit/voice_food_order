@@ -100,5 +100,8 @@
   "discount": "折扣",
   "promoPercentOff": "减 {percent}%",
   "promoAmountOff": "立减 {amount}",
-  "promoWithMinimum": "满 {min} {deal}"
+  "promoWithMinimum": "满 {min} {deal}",
+
+  "onlineDiscount": "在线支付优惠",
+  "onlineOfferNote": "在线支付立省 {amount}（{name}）"
 }

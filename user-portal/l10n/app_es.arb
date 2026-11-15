@@ -100,5 +100,8 @@
   "discount": "Descuento",
   "promoPercentOff": "{percent}% menos",
   "promoAmountOff": "{amount} menos",
-  "promoWithMinimum": "{deal} desde {min}"
+  "promoWithMinimum": "{deal} desde {min}",
+
+  "onlineDiscount": "Descuento por pago en línea",
+  "onlineOfferNote": "Pague en línea y ahorre {amount} ({name})"
 }

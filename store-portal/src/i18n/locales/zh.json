@@ -274,7 +274,8 @@
     "customerNotifiedAt": "上次通知顾客：{{time}}",
     "badgeBalanceDue": "待补差价",
     "badgeRefunded": "已退款",
-    "discount": "折扣"
+    "discount": "折扣",
+    "platformDiscount": "VoxEats 优惠 {{amount}}（由 VoxEats 承担，不影响您的收入）"
   },
   "profile": {
     "title": "店铺资料与设置",

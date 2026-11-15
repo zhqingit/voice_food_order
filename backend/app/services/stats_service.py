@@ -74,6 +74,8 @@ class _Acc:
         self.app = ChannelStats()
         self.phone = ChannelStats()
         self.commission_online = ZERO
+        self.platform_discounts = ZERO
+        self.commission_to_invoice = ZERO
         self.ai_cost = Decimal("0")
         self.phone_calls = 0
         self.phone_seconds = 0
@@ -92,7 +94,9 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
 
     # Completed orders and the commission collected on each through Stripe.
     orders = db.execute(
-        select(Order.id, Order.store_id, Order.channel, Order.subtotal, Order.discount, Order.commission)
+        select(
+            Order.id, Order.store_id, Order.channel, Order.subtotal, Order.discount, Order.commission, Order.platform_discount
+        )
         .where(Order.status == "completed")
         .where(Order.code_day >= start, Order.code_day < end)
     ).all()
@@ -104,7 +108,11 @@ def monthly_report(db: Session, month: str) -> MonthlyStatsOut:
         ch.gmv += o.subtotal - o.discount
         ch.discounts += o.discount
         ch.commission += o.commission
-        a.commission_online += min(max(collected.get(o.id, ZERO), ZERO), o.commission)
+        online = min(max(collected.get(o.id, ZERO), ZERO), o.commission)
+        given = min(o.platform_discount, o.commission - online)  # platform promotion, out of our commission
+        a.commission_online += online
+        a.platform_discounts += given
+        a.commission_to_invoice += o.commission - online - given
 
     # AI cost of app voice sessions (phone calls are counted from phone_calls).
     for store_id, cost in db.execute(
@@ -174,14 +182,15 @@ def _store_row(store: Store, a: _Acc) -> StoreMonthStats:
     revenue = commission_total + monthly_fee
     ai_cost = a.ai_cost.quantize(CENT, rounding=ROUND_HALF_UP)
     telephony = a.telephony_cost.quantize(CENT, rounding=ROUND_HALF_UP)
-    costs = ai_cost + telephony + a.stripe_fees + a.invoice_fees
+    costs = ai_cost + telephony + a.stripe_fees + a.invoice_fees + a.platform_discounts
     return StoreMonthStats(
         store_id=store.id,
         store_name=store.name,
         app=a.app,
         phone=a.phone,
         commission_online=a.commission_online,
-        commission_to_invoice=commission_total - a.commission_online,
+        commission_to_invoice=a.commission_to_invoice,
+        platform_discounts=a.platform_discounts,
         monthly_fee=monthly_fee,
         revenue=revenue,
         ai_cost=ai_cost,
@@ -215,6 +224,7 @@ def _totals(rows: list[StoreMonthStats], fixed: list[PlatformCost], invoices: li
         telephony_cost=total(lambda r: r.telephony_cost),
         stripe_fees=total(lambda r: r.stripe_fees),
         invoice_fees=total(lambda r: r.invoice_fees),
+        platform_discounts=total(lambda r: r.platform_discounts),
         fixed_costs=fixed_costs,
         costs=costs,
         net=revenue - costs,
@@ -232,7 +242,8 @@ def cost_out(c: PlatformCost) -> PlatformCostOut:
 CSV_HEADER = [
     "store", "app_orders", "app_gmv", "app_commission", "phone_orders", "phone_gmv", "phone_commission",
     "commission_online", "commission_to_invoice", "monthly_fee", "revenue",
-    "ai_cost", "phone_calls", "phone_minutes", "telephony_cost", "stripe_fees", "invoice_fees", "costs", "net",
+    "ai_cost", "phone_calls", "phone_minutes", "telephony_cost", "stripe_fees", "invoice_fees", "platform_discounts",
+    "costs", "net",
 ]
 
 
@@ -241,7 +252,8 @@ def csv_rows(report: MonthlyStatsOut) -> list[list]:
         [
             r.store_name, r.app.orders, r.app.gmv, r.app.commission, r.phone.orders, r.phone.gmv, r.phone.commission,
             r.commission_online, r.commission_to_invoice, r.monthly_fee, r.revenue,
-            r.ai_cost, r.phone_calls, r.phone_minutes, r.telephony_cost, r.stripe_fees, r.invoice_fees, r.costs, r.net,
+            r.ai_cost, r.phone_calls, r.phone_minutes, r.telephony_cost, r.stripe_fees, r.invoice_fees,
+            r.platform_discounts, r.costs, r.net,
         ]
         for r in report.stores
     ]

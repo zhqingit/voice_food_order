@@ -55,6 +55,9 @@ class LiveOrderSummary {
   /// Restaurant promotion applied by the server (0 = none), and its name.
   final double discount;
   final String? promotion;
+  /// VoxEats discount for paying online in the app (server-computed), if any.
+  final double? onlineOffer;
+  final String? onlineOfferName;
   final double tax;
   final double total;
   final List<LiveOrderItem> items;
@@ -68,6 +71,8 @@ class LiveOrderSummary {
     required this.subtotal,
     this.discount = 0,
     this.promotion,
+    this.onlineOffer,
+    this.onlineOfferName,
     required this.tax,
     required this.total,
     required this.items,
@@ -86,6 +91,8 @@ class LiveOrderSummary {
       subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
       discount: (json['discount'] as num?)?.toDouble() ?? 0,
       promotion: json['promotion'] as String?,
+      onlineOffer: ((json['online_offer'] as Map<String, dynamic>?)?['discount'] as num?)?.toDouble(),
+      onlineOfferName: (json['online_offer'] as Map<String, dynamic>?)?['name'] as String?,
       tax: (json['tax'] as num?)?.toDouble() ?? 0,
       total: (json['total'] as num?)?.toDouble() ?? 0,
       items: itemsList,
@@ -102,6 +109,8 @@ class LiveOrderSummary {
       subtotal: subtotal,
       discount: discount,
       promotion: promotion,
+      onlineOffer: onlineOffer,
+      onlineOfferName: onlineOfferName,
       tax: tax,
       total: total,
       items: items,

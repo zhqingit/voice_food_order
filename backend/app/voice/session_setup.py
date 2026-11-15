@@ -10,7 +10,7 @@ from app.models.store import Store
 from app.voice.menu import load_menu_for_store
 from app.voice.monitor import ConversationMonitor, MonitorConfig
 from app.services.store_hours_service import store_open_status
-from app.services import commission, order_service, promotions
+from app.services import commission, order_service, platform_promotions, promotions
 from app.voice.prompts import PhoneCallInfo, build_system_prompt
 
 _VOICE_TONE_MAP = {
@@ -64,6 +64,15 @@ def load_store_voice_setup(db: Session, store: Store, *, phone: PhoneCallInfo | 
         hours_today=store_open_status(db, store).today_text,
         phone=phone,
         promotions=[f"{p.name}: {promotions.describe(p)}" for p in running],
+        # Online payment is app-only for now (phone orders have no payment link yet).
+        online_offers=(
+            [
+                f"{p.name}: {promotions.describe(p)}"
+                for p in platform_promotions.running(db, channel="voice", day=order_service.today_in_store_tz(store))
+            ]
+            if phone is None and store.stripe_charges_enabled
+            else None
+        ),
     )
     return StoreVoiceSetup(
         system_prompt=system_prompt,

@@ -309,10 +309,17 @@ class _OrderCardState extends ConsumerState<_OrderCard> {
                 if (!_paid && _order.canPayOnline) ...[
                   const SizedBox(height: 14),
                   _PayButton(
-                    label: l10n.payAmount(_money(_order.balanceDue > 0 ? _order.balanceDue : _order.total)),
+                    label: l10n.payAmount(_money((_order.balanceDue > 0 ? _order.balanceDue : _order.total) - (_order.onlineOffer ?? 0))),
                     busy: _busy,
                     onPressed: _pay,
                   ),
+                  if (_order.onlineOffer != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      l10n.onlineOfferNote(_money(_order.onlineOffer!), _order.onlineOfferName ?? ''),
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF16A34A)),
+                    ),
+                  ],
                 ] else if (!_paid && open) ...[
                   const SizedBox(height: 10),
                   Text(l10n.payAtStoreNote, style: const TextStyle(fontSize: 12, color: _kAmber)),

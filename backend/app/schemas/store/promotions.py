@@ -63,3 +63,27 @@ class PromotionPublic(BaseModel):
     value: Decimal
     min_subtotal: Decimal
     channels: PromotionChannels
+
+
+class PlatformPromotionCreate(PromotionCreate):
+    """A VoxEats-funded promotion (admin). Applies only to orders paid online."""
+
+    first_order_only: bool = False
+    per_user_limit: int | None = Field(default=None, ge=1)
+    monthly_budget: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+
+
+class PlatformPromotionUpdate(PromotionUpdate):
+    """The limits can change (they never alter past orders); the terms can't."""
+
+    first_order_only: bool | None = None
+    per_user_limit: int | None = Field(default=None, ge=1)
+    monthly_budget: Decimal | None = Field(default=None, gt=0, max_digits=10, decimal_places=2)
+
+
+class PlatformPromotionOut(PromotionOut):
+    first_order_only: bool
+    per_user_limit: int | None
+    monthly_budget: Decimal | None
+    # Discount given this month (platform timezone).
+    spent_this_month: Decimal

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -19,7 +20,7 @@ from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemCreate, OrderItemOut, OrderOut
 from app.schemas.order.payment import PaymentIntentResponse
-from app.services import order_payments, order_service, payment_service
+from app.services import order_payments, order_service, payment_service, platform_promotions
 
 from pydantic import BaseModel, Field
 
@@ -49,6 +50,7 @@ def _order_out(order: Order) -> OrderOut:
         channel=order.channel,
         subtotal=order.subtotal,
         discount=order.discount,
+        platform_discount=order.platform_discount,
         tax=order.tax,
         total=order.total,
         customer_name=order.customer_name,
@@ -99,7 +101,12 @@ def get_order_summary(
     ).scalar_one_or_none()
     if order is None:
         raise AppError(status_code=404, code="order_not_found", detail="Order not found")
-    return _order_out(order)
+    out = _order_out(order)
+    if order.status in order_service.PAYABLE_STATUSES:
+        offer = platform_promotions.offer_for(db, order, amount_due=order_payments.ledger(db, order).balance_due)
+        if offer is not None:
+            out.online_offer, out.online_offer_name = offer.discount, offer.promotion.name
+    return out
 
 
 @router.patch("/{order_id}", response_model=OrderOut)
@@ -254,7 +261,11 @@ def create_payment_intent(
 
     # The whole total, or only the balance if staff raised a paid order's total.
     amount_due = order_payments.ledger(db, order).balance_due
-    amount = payment_service.to_cents(amount_due)
+    # Platform promotion for paying online, computed in code (never by the AI).
+    offer = platform_promotions.offer_for(db, order, amount_due=amount_due)
+    platform_discount = offer.discount if offer else Decimal("0.00")
+    charge = amount_due - platform_discount
+    amount = payment_service.to_cents(charge)
 
     # Store not payment-ready → tell the client to collect at the store.
     if not store.stripe_account_id or not store.stripe_charges_enabled:
@@ -267,7 +278,12 @@ def create_payment_intent(
     # Reopening the payment sheet: reuse the unfinished PaymentIntent for the
     # same amount instead of starting a second charge.
     previous = order_payments.open_card_charge(db, order)
-    if previous is not None and previous.stripe_id and payment_service.to_cents(previous.amount) == amount:
+    if (
+        previous is not None
+        and previous.stripe_id
+        and payment_service.to_cents(previous.amount) == amount
+        and (previous.platform_discount or Decimal("0.00")) == platform_discount
+    ):
         state = payment_service.retrieve_payment_intent(previous.stripe_id)
         if state.status in ("requires_payment_method", "requires_confirmation", "requires_action"):
             return PaymentIntentResponse(
@@ -275,19 +291,28 @@ def create_payment_intent(
                 client_secret=state.client_secret,
                 publishable_key=settings.stripe_publishable_key,
                 amount=amount,
+                platform_discount=platform_discount,
+                promotion=offer.promotion.name if offer else None,
             )
     if previous is not None and previous.stripe_id:
         # The amount changed since (staff edited the order): drop the old one.
         if payment_service.cancel_payment_intent(previous.stripe_id):
             previous.status = "canceled"
 
-    application_fee = order_payments.application_fee_for(db, order, amount_due)
+    application_fee = order_payments.application_fee_for(db, order, charge, platform_discount)
     result = payment_service.create_payment_intent(
-        order, store, amount_due=amount_due, application_fee=application_fee
+        order, store, amount_due=charge, application_fee=application_fee
     )
     order_payments.record_card_charge_started(
-        db, order, payment_intent_id=result.payment_intent_id, amount=amount_due, application_fee=application_fee
+        db,
+        order,
+        payment_intent_id=result.payment_intent_id,
+        amount=charge,
+        application_fee=application_fee,
+        platform_discount=platform_discount or None,
     )
+    if offer is not None:
+        order.platform_promotion_id = offer.promotion.id
     db.commit()
 
     return PaymentIntentResponse(
@@ -295,4 +320,6 @@ def create_payment_intent(
         client_secret=result.client_secret,
         publishable_key=settings.stripe_publishable_key,
         amount=amount,
+        platform_discount=platform_discount,
+        promotion=offer.promotion.name if offer else None,
     )

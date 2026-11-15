@@ -24,7 +24,7 @@ from app.models.order_item import OrderItem
 from app.models.promotion import Promotion
 from app.models.voice_session import VoiceSession
 from app.models.store import Store
-from app.services import delivery_service, menu_service, order_service, promotions
+from app.services import delivery_service, menu_service, order_service, platform_promotions, promotions
 from app.schemas.order.order import OrderCreate
 
 logger = logging.getLogger(__name__)
@@ -388,6 +388,15 @@ class VoiceToolRouter:
                 "add_more": float(upsell.add_more),
                 "discount": float(upsell.discount),
                 "say": f"If you add ${upsell.add_more:.2f} more, you'd get {upsell.name} (${upsell.discount:.2f} off).",
+            }
+        # Platform promotion for paying online in the app (also computed in code).
+        offer = platform_promotions.offer_for(db, order)
+        if offer is not None:
+            result["online_offer"] = {
+                "name": offer.promotion.name,
+                "discount": float(offer.discount),
+                "total_if_paid_online": float(order.total - offer.discount),
+                "say": f"If you pay online in the app, you'll save ${offer.discount:.2f} with {offer.promotion.name}.",
             }
         if order.customer_name:
             result["customer_name"] = order.customer_name

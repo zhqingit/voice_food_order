@@ -46,6 +46,12 @@ class OrderOut(BaseModel):
     subtotal: Decimal  # before discount
     # Store promotion taken off the subtotal (before tax).
     discount: Decimal = Decimal("0.00")
+    # VoxEats promotion taken off the online payment (customer owes total - this).
+    platform_discount: Decimal = Decimal("0.00")
+    # Customer app, unpaid orders: the VoxEats promotion they'd get by paying
+    # online now (computed by the server), so the pay button shows the real charge.
+    online_offer: Decimal | None = None
+    online_offer_name: str | None = None
     tax: Decimal
     total: Decimal
     customer_name: str | None = None

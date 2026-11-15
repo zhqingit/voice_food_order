@@ -64,6 +64,7 @@ def _order_out(order: Order, db: Session, net_paid: Decimal | None = None) -> Or
         channel=order.channel,
         subtotal=order.subtotal,
         discount=order.discount,
+        platform_discount=order.platform_discount,
         tax=order.tax,
         total=order.total,
         customer_name=order.customer_name,

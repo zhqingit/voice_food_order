@@ -304,4 +304,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String promoWithMinimum(String deal, String min) {
     return '$deal desde $min';
   }
+
+  @override
+  String get onlineDiscount => 'Descuento por pago en línea';
+
+  @override
+  String onlineOfferNote(String amount, String name) {
+    return 'Pague en línea y ahorre $amount ($name)';
+  }
 }

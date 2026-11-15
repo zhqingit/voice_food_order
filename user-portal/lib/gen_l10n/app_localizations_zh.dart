@@ -302,4 +302,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String promoWithMinimum(String deal, String min) {
     return '满 $min $deal';
   }
+
+  @override
+  String get onlineDiscount => '在线支付优惠';
+
+  @override
+  String onlineOfferNote(String amount, String name) {
+    return '在线支付立省 $amount（$name）';
+  }
 }

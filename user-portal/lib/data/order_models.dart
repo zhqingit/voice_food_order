@@ -31,6 +31,11 @@ class OrderOut {
   final double subtotal;
   /// Restaurant promotion, taken off the subtotal before tax (computed by the server).
   final double discount;
+  /// VoxEats promotion taken off the online payment (the customer owes total minus this).
+  final double platformDiscount;
+  /// Unpaid orders: the VoxEats promotion paying online now would get (server-computed).
+  final double? onlineOffer;
+  final String? onlineOfferName;
   final double tax;
   final double total;
   final String? notes;
@@ -55,6 +60,9 @@ class OrderOut {
     required this.channel,
     required this.subtotal,
     this.discount = 0,
+    this.platformDiscount = 0,
+    this.onlineOffer,
+    this.onlineOfferName,
     required this.tax,
     required this.total,
     required this.notes,
@@ -89,6 +97,9 @@ class OrderOut {
       channel: json['channel'] as String,
       subtotal: _toDouble(json['subtotal']),
       discount: json['discount'] == null ? 0 : _toDouble(json['discount']),
+      platformDiscount: json['platform_discount'] == null ? 0 : _toDouble(json['platform_discount']),
+      onlineOffer: json['online_offer'] == null ? null : _toDouble(json['online_offer']),
+      onlineOfferName: json['online_offer_name'] as String?,
       tax: _toDouble(json['tax']),
       total: _toDouble(json['total']),
       notes: json['notes'] as String?,

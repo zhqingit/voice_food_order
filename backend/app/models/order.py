@@ -67,6 +67,15 @@ class Order(Base):
     discount: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
     )
+    # Platform promotion (funded from our commission), only when paid online:
+    # the promotion offered at the payment sheet, and the discount actually
+    # taken by succeeded card payments. The customer owes total - platform_discount.
+    platform_promotion_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("promotions.id"), nullable=True
+    )
+    platform_discount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
+    )
     # The store invoice that billed this order's commission (paid-at-store
     # orders). Cleared when that invoice is deleted or voided.
     invoice_id: Mapped[uuid.UUID | None] = mapped_column(

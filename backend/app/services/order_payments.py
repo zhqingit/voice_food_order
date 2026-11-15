@@ -58,7 +58,11 @@ class Ledger:
 
 
 def owed(order: Order) -> Decimal:
-    return ZERO if order.status == CANCELLED else order.total
+    """What the customer has to pay: the total, less any platform discount they
+    got by paying online; nothing once cancelled."""
+    if order.status == CANCELLED:
+        return ZERO
+    return max(order.total - (order.platform_discount or ZERO), ZERO)
 
 
 def _money(amount: Decimal) -> str:
@@ -103,10 +107,11 @@ def ledger(db: Session, order: Order) -> Ledger:
     )
 
 
-def application_fee_for(db: Session, order: Order, amount_due: Decimal) -> Decimal:
+def application_fee_for(db: Session, order: Order, amount_due: Decimal, platform_discount: Decimal = ZERO) -> Decimal:
     """The platform commission to take from a card charge: whatever of the
-    order's commission hasn't been collected through Stripe yet."""
-    remaining = order.commission - ledger(db, order).commission_collected
+    order's commission hasn't been collected through Stripe yet, less what we
+    give the customer as a platform discount (that's our money, not the store's)."""
+    remaining = order.commission - ledger(db, order).commission_collected - order.platform_discount - platform_discount
     return min(max(remaining, ZERO), amount_due)
 
 
@@ -177,12 +182,18 @@ def open_card_charge(db: Session, order: Order) -> Payment | None:
 
 
 def record_card_charge_started(
-    db: Session, order: Order, *, payment_intent_id: str, amount: Decimal, application_fee: Decimal
+    db: Session,
+    order: Order,
+    *,
+    payment_intent_id: str,
+    amount: Decimal,
+    application_fee: Decimal,
+    platform_discount: Decimal | None = None,
 ) -> None:
     db.add(
         Payment(
             order_id=order.id, kind="charge", method="card", amount=amount, status="pending",
-            stripe_id=payment_intent_id, application_fee=application_fee,
+            stripe_id=payment_intent_id, application_fee=application_fee, platform_discount=platform_discount,
         )
     )
     order.payment_ref = payment_intent_id
@@ -205,6 +216,8 @@ def receive_card_payment(
         db.add(row)
     row.amount, row.status, row.failure_reason = amount, "succeeded", None
     row.stripe_fee = payment_service.fetch_stripe_fee(payment_intent_id)
+    if row.platform_discount:
+        order.platform_discount = (order.platform_discount or ZERO) + row.platform_discount
     if application_fee is not None:
         row.application_fee = application_fee
     order.payment_ref = payment_intent_id

@@ -89,7 +89,9 @@ def generate_drafts(db: Session, period: date) -> list[StoreInvoice]:
     collected = order_payments.commission_collected_by_order(db, [o.id for o in orders])
     billable: dict[uuid.UUID, list[tuple[Order, Decimal, Decimal]]] = defaultdict(list)
     for o in orders:
-        online = min(max(collected.get(o.id, ZERO), ZERO), o.commission)
+        # Settled online: fees taken through Stripe, plus the commission we gave
+        # away as a platform discount (the customer paid that much less).
+        online = min(max(collected.get(o.id, ZERO) + o.platform_discount, ZERO), o.commission)
         if o.commission - online > 0:
             billable[o.store_id].append((o, online, o.commission - online))
 

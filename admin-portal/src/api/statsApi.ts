@@ -19,6 +19,7 @@ export type StoreMonthStats = {
   telephony_cost: string // estimated
   stripe_fees: string
   invoice_fees: string // Stripe fees on this month's paid invoice
+  platform_discounts: string // VoxEats promotions, given out of our commission
   costs: string
   net: string
 }
@@ -42,6 +43,7 @@ export type MonthlyStats = {
     telephony_cost: string
     stripe_fees: string
     invoice_fees: string
+    platform_discounts: string
     fixed_costs: string
     costs: string
     net: string

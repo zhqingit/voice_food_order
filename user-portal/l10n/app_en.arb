@@ -111,5 +111,10 @@
   "promoAmountOff": "{amount} off",
   "@promoAmountOff": {"description": "Store card promotion chip", "placeholders": {"amount": {"type": "String"}}},
   "promoWithMinimum": "{deal} on {min}+",
-  "@promoWithMinimum": {"description": "Promotion with an order minimum", "placeholders": {"deal": {"type": "String"}, "min": {"type": "String"}}}
+  "@promoWithMinimum": {"description": "Promotion with an order minimum", "placeholders": {"deal": {"type": "String"}, "min": {"type": "String"}}},
+
+  "onlineDiscount": "Online payment discount",
+  "@onlineDiscount": {"description": "VoxEats promotion taken off an online payment"},
+  "onlineOfferNote": "Pay online to save {amount} ({name})",
+  "@onlineOfferNote": {"description": "VoxEats promotion for paying online", "placeholders": {"amount": {"type": "String"}, "name": {"type": "String"}}}
 }

@@ -149,7 +149,7 @@ export function StatsRoute(): React.JSX.Element {
           <Tile
             label="Costs"
             value={usd(t.costs)}
-            sub={`AI ${usd(t.ai_cost)} · Twilio ${usd(t.telephony_cost)} · Stripe ${usd(Number(t.stripe_fees) + Number(t.invoice_fees))} · Fixed ${usd(t.fixed_costs)}`}
+            sub={`AI ${usd(t.ai_cost)} · Twilio ${usd(t.telephony_cost)} · Stripe ${usd(Number(t.stripe_fees) + Number(t.invoice_fees))} · Promotions ${usd(t.platform_discounts)} · Fixed ${usd(t.fixed_costs)}`}
           />
           <Tile
             label="Invoiced to stores"

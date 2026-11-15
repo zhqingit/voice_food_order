@@ -275,7 +275,8 @@
     "customerNotifiedAt": "Último aviso al cliente: {{time}}",
     "badgeBalanceDue": "Saldo pendiente",
     "badgeRefunded": "Reembolsado",
-    "discount": "Descuento"
+    "discount": "Descuento",
+    "platformDiscount": "Promoción VoxEats {{amount}} (la paga VoxEats; su pago no cambia)"
   },
   "profile": {
     "title": "Perfil y Configuración",

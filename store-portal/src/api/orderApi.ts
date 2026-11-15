@@ -16,6 +16,9 @@ export type OrderOut = {
   channel: string
   subtotal: Money // before discount
   discount: Money // store promotion, taken off before tax
+  // VoxEats promotion on the online payment: VoxEats covers it from its
+  // commission, so the store's payout is unchanged.
+  platform_discount: Money
   tax: Money
   total: Money
   customer_name: string | null

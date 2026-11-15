@@ -33,6 +33,7 @@ class StoreMonthStats(BaseModel):
     telephony_cost: Decimal  # estimated
     stripe_fees: Decimal
     invoice_fees: Decimal  # Stripe fees on this month's paid invoice
+    platform_discounts: Decimal  # platform promotions, given out of our commission
     costs: Decimal
     net: Decimal
 
@@ -65,6 +66,7 @@ class MonthTotals(BaseModel):
     telephony_cost: Decimal
     stripe_fees: Decimal
     invoice_fees: Decimal
+    platform_discounts: Decimal
     fixed_costs: Decimal
     costs: Decimal
     net: Decimal

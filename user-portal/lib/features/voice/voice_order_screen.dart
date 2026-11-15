@@ -761,6 +761,13 @@ class _LiveOrderPanelState extends ConsumerState<_LiveOrderPanel> {
                         Text('\$${order.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: _kOrangeStart)),
                       ],
                     ),
+                    if (order.onlineOffer != null && l10n != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        l10n.onlineOfferNote('\$${order.onlineOffer!.toStringAsFixed(2)}', order.onlineOfferName ?? ''),
+                        style: const TextStyle(fontSize: 11, color: Color(0xFF16A34A)),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1134,6 +1141,7 @@ class _OrderSummaryCard extends StatelessWidget {
           if (order.discount > 0) totalRow(l10n.discount, -order.discount),
           totalRow(l10n.tax, order.tax),
           totalRow(l10n.total, order.total, bold: true),
+          if (order.platformDiscount > 0) totalRow(l10n.onlineDiscount, -order.platformDiscount),
           if (order.fulfillmentType == 'delivery' && (order.deliveryAddress ?? '').isNotEmpty) ...[
             const SizedBox(height: 12),
             Row(
@@ -1503,6 +1511,9 @@ class _PaymentCard extends ConsumerStatefulWidget {
 }
 
 class _PaymentCardState extends ConsumerState<_PaymentCard> {
+  /// What the card will be charged: the total less the server's online offer.
+  double get _charge => widget.order.total - (widget.order.onlineOffer ?? 0);
+
   bool _busy = false;
   bool _paid = false;
   bool _payAtStore = false;
@@ -1551,6 +1562,16 @@ class _PaymentCardState extends ConsumerState<_PaymentCard> {
               Text('\$${widget.order.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _kOrangeStart)),
             ],
           ),
+          if (widget.order.onlineOffer != null && !_alreadyPaid) ...[
+            const SizedBox(height: 8),
+            Text(
+              AppLocalizations.of(context)!.onlineOfferNote(
+                '\$${widget.order.onlineOffer!.toStringAsFixed(2)}',
+                widget.order.onlineOfferName ?? '',
+              ),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF16A34A)),
+            ),
+          ],
           const SizedBox(height: 16),
 
           if (_alreadyPaid)
@@ -1588,7 +1609,7 @@ class _PaymentCardState extends ConsumerState<_PaymentCard> {
                   child: _busy
                       ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : Text(
-                          'Pay \$${widget.order.total.toStringAsFixed(2)}',
+                          'Pay \$${_charge.toStringAsFixed(2)}',
                           style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                         ),
                 ),

@@ -74,6 +74,7 @@ def build_system_prompt(
     hours_today: str | None = None,
     phone: PhoneCallInfo | None = None,
     promotions: list[str] | None = None,
+    online_offers: list[str] | None = None,
 ) -> str:
     menu_text = ""
     if menu_lines:
@@ -290,6 +291,14 @@ You MUST verbally confirm the customer's name BEFORE you call the `checkout` too
             "read `discount`, `promotion` and `total` from the get_summary result exactly as given.\n"
             "- Never promise a discount that get_summary does not show.\n"
             "- If get_summary returns `next_promotion`, you may say its `say` text once (word for word); do not repeat it."
+        )
+
+    if online_offers:
+        listed = "\n".join(f"- {p}" for p in online_offers)
+        prompt = (
+            f"{prompt}\n\n## VoxEats offers for paying online in the app (applied on the payment screen)\n{listed}\n"
+            "- NEVER calculate these yourself. If get_summary returns `online_offer`, you may say its `say` text "
+            "once (word for word). The `total` in the summary does not include it; never present it as part of the total."
         )
 
     if menu_text:

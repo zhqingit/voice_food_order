@@ -20,7 +20,7 @@ from app.models.store import Store
 from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemOut, OrderOut
-from app.services import order_payments, order_service, store_order_edit_service
+from app.services import order_payments, order_service, platform_promotions, store_order_edit_service
 from app.services.order_event_service import ACTOR_CUSTOMER, ACTOR_STORE
 
 # Customers can cancel only before the store accepts the order; after that they call the store.
@@ -66,6 +66,7 @@ def _order_out(
         channel=order.channel,
         subtotal=order.subtotal,
         discount=order.discount,
+        platform_discount=order.platform_discount,
         tax=order.tax,
         total=order.total,
         customer_name=order.customer_name,
@@ -117,16 +118,21 @@ def list_orders(
     for order_id, _, created_at in store_events:
         store_changed_at[order_id] = max(created_at, store_changed_at.get(order_id, created_at))
     net_paid = order_payments.net_paid_by_order(db, [order.id for order, _ in rows])
-    return [
-        _order_out(
+    out = []
+    for order, store in rows:
+        o = _order_out(
             order,
             store,
             modified_by_store=order.id in modified,
             store_changed_at=store_changed_at.get(order.id),
             net_paid=net_paid.get(order.id, order_payments.ZERO),
         )
-        for order, store in rows
-    ]
+        if o.can_pay_online:
+            offer = platform_promotions.offer_for(db, order, amount_due=o.balance_due)
+            if offer is not None:
+                o.online_offer, o.online_offer_name = offer.discount, offer.promotion.name
+        out.append(o)
+    return out
 
 
 @router.post("/{order_id}/cancel", response_model=OrderOut)
