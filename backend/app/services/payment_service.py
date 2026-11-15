@@ -26,6 +26,15 @@ from app.models.store import Store
 
 log = logging.getLogger(__name__)
 
+# Payment methods are set here, not by the Dashboard's payment method settings,
+# so turning a method on there can't change what customers or stores see.
+# Customers paying for food: instant methods only (Apple Pay and Google Pay
+# are cards). A delayed one such as ACH could fail days after the food left.
+ORDER_PAYMENT_METHODS = ["card", "link"]
+# Stores paying their monthly invoice: cards, or ACH (cheaper; clears in days,
+# and the invoice.paid webhook marks it paid then).
+INVOICE_PAYMENT_METHODS = ["card", "us_bank_account"]
+
 
 @dataclass(frozen=True)
 class AccountStatus:
@@ -147,7 +156,7 @@ def create_payment_intent(
         stripe.PaymentIntent.create,
         amount=amount,
         currency="usd",
-        automatic_payment_methods={"enabled": True},
+        payment_method_types=ORDER_PAYMENT_METHODS,
         application_fee_amount=fee,
         transfer_data={"destination": store.stripe_account_id},
         metadata={"order_id": str(order.id), "store_id": str(store.id)},
@@ -251,6 +260,7 @@ def send_invoice(
         stripe.Invoice.create,
         customer=customer_id,
         collection_method="send_invoice",
+        payment_settings={"payment_method_types": INVOICE_PAYMENT_METHODS},
         days_until_due=days_until_due,
         pending_invoice_items_behavior="exclude",
         auto_advance=False,
