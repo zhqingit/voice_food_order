@@ -3,11 +3,13 @@ import axios from 'axios'
 
 import { getAccessToken } from './auth/tokenStore'
 import { login, logout, refresh } from './auth/authApi'
+import { StatsRoute } from './routes/StatsRoute'
 import { StoresRoute } from './routes/StoresRoute'
 
 export function App(): React.JSX.Element {
   const [bootstrapped, setBootstrapped] = useState(false)
   const [token, setToken] = useState<string | null>(getAccessToken())
+  const [tab, setTab] = useState<'stores' | 'stats'>('stores')
 
   useEffect(() => {
     void (async () => {
@@ -53,15 +55,28 @@ export function App(): React.JSX.Element {
           background: '#fff',
         }}
       >
-        <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.3 }}>
-          VoxEats <span style={{ color: 'var(--color-primary, #2563eb)' }}>Admin</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: 0.3 }}>
+            VoxEats <span style={{ color: 'var(--color-primary, #2563eb)' }}>Admin</span>
+          </span>
+          <span style={{ display: 'flex', gap: 4 }}>
+            {(['stores', 'stats'] as const).map((t) => (
+              <button
+                key={t}
+                className={`btn btn-sm ${tab === t ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setTab(t)}
+              >
+                {t === 'stores' ? 'Stores' : 'Stats'}
+              </button>
+            ))}
+          </span>
         </span>
         <button className="btn btn-ghost btn-sm" onClick={() => void handleLogout()}>
           Logout
         </button>
       </header>
       <main style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
-        <StoresRoute />
+        {tab === 'stores' ? <StoresRoute /> : <StatsRoute />}
       </main>
     </div>
   )

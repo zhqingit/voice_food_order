@@ -159,6 +159,23 @@ def retrieve_payment_intent(payment_intent_id: str) -> PaymentIntentState:
     return PaymentIntentState(status=intent.status, client_secret=intent.client_secret, amount=int(intent.amount))
 
 
+def fetch_stripe_fee(payment_intent_id: str) -> Decimal | None:
+    """Stripe's processing fee on a succeeded charge, in dollars (the platform
+    pays it on destination charges). Best-effort: None if it can't be read."""
+    try:
+        intent = _call(
+            "fetch_stripe_fee",
+            stripe.PaymentIntent.retrieve,
+            payment_intent_id,
+            expand=["latest_charge.balance_transaction"],
+        )
+        txn = intent.latest_charge.balance_transaction
+        return (Decimal(int(txn.fee)) / 100).quantize(Decimal("0.01"))
+    except Exception:  # noqa: BLE001 - reporting data only; never fail the webhook
+        log.warning("payment_service.fetch_stripe_fee failed for %s", payment_intent_id, exc_info=True)
+        return None
+
+
 def cancel_payment_intent(payment_intent_id: str) -> bool:
     """Cancel a PaymentIntent the customer hasn't paid. False if Stripe refused
     (e.g. it succeeded a moment ago; the webhook then handles the payment)."""

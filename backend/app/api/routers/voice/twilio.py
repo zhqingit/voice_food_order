@@ -16,7 +16,10 @@ import asyncio
 import json
 import logging
 import time
+import uuid
 import xml.etree.ElementTree as ET
+from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Request, Response, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
@@ -26,8 +29,10 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import AppError
 from app.core.phone import normalize_phone
+from app.core.time import utcnow_naive
 from app.core.twilio import StreamGrant, create_stream_token, decode_stream_token, is_valid_twilio_signature
 from app.db.session import get_db, get_db_session
+from app.models.phone_call import PhoneCall
 from app.models.store import Store
 from app.services import voice_session_service
 from app.services.store_hours_service import store_open_status
@@ -191,6 +196,43 @@ async def _read_stream_start(websocket: WebSocket) -> dict:
             raise ValueError(f"unexpected Twilio event before start: {event}")
 
 
+def _save_call(
+    *,
+    grant: StreamGrant,
+    order_id: uuid.UUID | None,
+    end_reason: str,
+    started_at: datetime,
+    prompt: int,
+    completion: int,
+    ai_cost: Decimal,
+) -> None:
+    """Record the call and what it cost us (AI usage, estimated Twilio minutes)."""
+    ended_at = utcnow_naive()
+    seconds = max(int((ended_at - started_at).total_seconds()), 0)
+    billed_minutes = -(-seconds // 60)  # Twilio bills each started minute
+    try:
+        with get_db_session() as db:
+            db.add(
+                PhoneCall(
+                    store_id=grant.store_id,
+                    call_sid=grant.call_sid,
+                    caller=grant.caller,
+                    order_id=order_id,
+                    end_reason=end_reason,
+                    duration_seconds=seconds,
+                    prompt_tokens=prompt,
+                    completion_tokens=completion,
+                    ai_cost=ai_cost,
+                    telephony_cost=settings.phone_cost_per_minute * billed_minutes,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                )
+            )
+            db.commit()
+    except Exception:
+        logger.exception("Failed to save phone call %s", grant.call_sid)
+
+
 def _authorize_stream(start: dict) -> StreamGrant:
     token = (start.get("customParameters") or {}).get("token") or ""
     grant = decode_stream_token(token)
@@ -237,6 +279,7 @@ async def media_stream(websocket: WebSocket) -> None:
     # Twilio dials the staff number from the TwiML after <Connect>.
     transfer = asyncio.Event()
     transfer_immediately = False
+    end_reason = "hangup"
     transfer_asked_at = 0.0
 
     def _request_transfer(*, immediately: bool = False) -> None:
@@ -285,12 +328,16 @@ async def media_stream(websocket: WebSocket) -> None:
         await task.cancel(reason="caller_hung_up")
 
     async def _enforce_max_duration() -> None:
+        nonlocal end_reason
         await asyncio.sleep(runtime.ws_max_seconds)
+        end_reason = "max_duration"
         logger.info("Phone call hit %ss limit: store=%s call=%s", runtime.ws_max_seconds, store_id, call_sid)
         await task.cancel(reason="max_duration")  # Twilio then hands the caller to staff
 
     async def _transfer_when_ready() -> None:
+        nonlocal end_reason
         await transfer.wait()
+        end_reason = "transfer"
         if not transfer_immediately:
             # Let the bot finish "connecting you now" before the line switches.
             deadline = transfer_asked_at + _TRANSFER_LINE_TIMEOUT_SECONDS
@@ -303,6 +350,7 @@ async def media_stream(websocket: WebSocket) -> None:
         await task.cancel(reason="transfer_to_staff")
 
     logger.info("Phone call started: store=%s call=%s", store_id, call_sid)
+    started_at = utcnow_naive()
     watchdog = asyncio.create_task(_enforce_max_duration())
     transfer_watch = asyncio.create_task(_transfer_when_ready())
     try:
@@ -310,6 +358,7 @@ async def media_stream(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     except Exception:
+        end_reason = "error"
         logger.exception("Phone pipeline error: store=%s call=%s", store_id, call_sid)
     finally:
         watchdog.cancel()
@@ -326,4 +375,8 @@ async def media_stream(websocket: WebSocket) -> None:
         logger.warning(
             "Phone call ended: store=%s call=%s order=%s tokens=%d/%d cost=$%s",
             store_id, call_sid, tool_context.order_id, prompt, completion, cost,
+        )
+        _save_call(
+            grant=grant, order_id=tool_context.order_id, end_reason=end_reason, started_at=started_at,
+            prompt=prompt, completion=completion, ai_cost=cost,
         )

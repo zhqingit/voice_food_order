@@ -43,6 +43,7 @@ def stripe_calls(monkeypatch):
     monkeypatch.setattr(payment_service, "retrieve_payment_intent", retrieve_payment_intent)
     monkeypatch.setattr(payment_service, "cancel_payment_intent", cancel_payment_intent)
     monkeypatch.setattr(payment_service, "create_refund", create_refund)
+    monkeypatch.setattr(payment_service, "fetch_stripe_fee", lambda pi: Decimal("0.62"))
     return calls
 
 

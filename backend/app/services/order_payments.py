@@ -187,6 +187,7 @@ def receive_card_payment(
         row = Payment(order_id=order.id, kind="charge", method="card", stripe_id=payment_intent_id)
         db.add(row)
     row.amount, row.status, row.failure_reason = amount, "succeeded", None
+    row.stripe_fee = payment_service.fetch_stripe_fee(payment_intent_id)
     if application_fee is not None:
         row.application_fee = application_fee
     order.payment_ref = payment_intent_id

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -120,6 +122,9 @@ class Settings(BaseSettings):
     # override either via stores.commission_app_bps / commission_phone_bps.
     commission_app_bps: int = 1500
     commission_phone_bps: int = 1000
+    # Estimated Twilio cost per billed minute of an AI phone call: US local
+    # inbound voice plus the Media Stream. Used for the admin cost report.
+    phone_cost_per_minute: Decimal = Decimal("0.0125")
 
     @field_validator("jwt_secret", "refresh_token_pepper")
     @classmethod

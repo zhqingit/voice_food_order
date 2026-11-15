@@ -6,6 +6,8 @@ from app.models.menu_menu_item import MenuMenuItem
 from app.models.order import Order
 from app.models.order_event import OrderEvent
 from app.models.payment import Payment
+from app.models.phone_call import PhoneCall
+from app.models.platform_cost import PlatformCost
 from app.models.order_item import OrderItem
 from app.models.store import Store
 from app.models.voice_session import VoiceSession
@@ -24,6 +26,8 @@ __all__ = [
 	"Order",
 	"OrderEvent",
 	"Payment",
+	"PhoneCall",
+	"PlatformCost",
 	"OrderItem",
 	"VoiceSession",
 	"RefreshSession",
