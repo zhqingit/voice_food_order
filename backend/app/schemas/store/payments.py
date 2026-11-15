@@ -19,4 +19,6 @@ class PaymentStatusResponse(BaseModel):
     connected: bool  # a Stripe account has been created for this store
     charges_enabled: bool  # store can accept online payment
     details_submitted: bool  # store finished the onboarding form
-    fee_bps: int  # commission applied to this store's orders
+    # Commission on the pre-tax subtotal of this store's orders, by channel.
+    fee_app_bps: int
+    fee_phone_bps: int

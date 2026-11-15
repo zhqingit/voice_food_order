@@ -115,9 +115,11 @@ class Settings(BaseSettings):
     # Webhook signing secret(s) (whsec_...), comma-separated: one for the
     # platform endpoint and one for the Connect (connected accounts) endpoint.
     stripe_webhook_secret: str | None = None
-    # Platform commission in basis points (1000 = 10%). Default for all stores;
-    # a store may override via stores.platform_fee_bps.
-    platform_fee_bps: int = 1000
+    # Platform commission in basis points (1500 = 15%) on the pre-tax subtotal,
+    # by the channel the order came in on. Defaults for all stores; a store may
+    # override either via stores.commission_app_bps / commission_phone_bps.
+    commission_app_bps: int = 1500
+    commission_phone_bps: int = 1000
 
     @field_validator("jwt_secret", "refresh_token_pepper")
     @classmethod

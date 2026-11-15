@@ -50,7 +50,9 @@ export function StoresRoute(): React.JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<AdminStoreDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [feeInput, setFeeInput] = useState('')
+  const [appFeeInput, setAppFeeInput] = useState('')
+  const [phoneFeeInput, setPhoneFeeInput] = useState('')
+  const [monthlyFeeInput, setMonthlyFeeInput] = useState('')
   const [aiNumberInput, setAiNumberInput] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -85,7 +87,9 @@ export function StoresRoute(): React.JSX.Element {
       try {
         const d = await getStore(selectedId)
         setDetail(d)
-        setFeeInput(d.platform_fee_bps != null ? String(d.platform_fee_bps / 100) : '')
+        setAppFeeInput(d.commission_app_bps != null ? String(d.commission_app_bps / 100) : '')
+        setPhoneFeeInput(d.commission_phone_bps != null ? String(d.commission_phone_bps / 100) : '')
+        setMonthlyFeeInput(Number(d.monthly_fee) > 0 ? d.monthly_fee : '')
         setAiNumberInput(d.phone_ai_number ?? '')
       } catch {
         setError('Failed to load store detail.')
@@ -119,20 +123,30 @@ export function StoresRoute(): React.JSX.Element {
     }
   }
 
-  async function handleSaveFee(id: string): Promise<void> {
-    const raw = feeInput.trim()
-    let bps: number | null
-    if (!raw) {
-      bps = null // clear override → platform default
-    } else {
-      const pct = Number(raw)
-      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-        setError('Fee must be between 0 and 100%.')
-        return
-      }
-      bps = Math.round(pct * 100)
+  // A percentage box → basis points; blank clears the override (platform default).
+  function parsePct(raw: string): number | null | undefined {
+    if (!raw.trim()) return null
+    const pct = Number(raw)
+    return Number.isFinite(pct) && pct >= 0 && pct <= 100 ? Math.round(pct * 100) : undefined
+  }
+
+  async function handleSaveFees(id: string): Promise<void> {
+    const app = parsePct(appFeeInput)
+    const phone = parsePct(phoneFeeInput)
+    const monthly = monthlyFeeInput.trim() ? Number(monthlyFeeInput) : 0
+    if (app === undefined || phone === undefined) {
+      setError('Commission must be between 0 and 100%.')
+      return
     }
-    await patch(id, { platform_fee_bps: bps }, 'Commission updated.')
+    if (!Number.isFinite(monthly) || monthly < 0) {
+      setError('Monthly fee must be a positive amount.')
+      return
+    }
+    await patch(
+      id,
+      { commission_app_bps: app, commission_phone_bps: phone, monthly_fee: monthly.toFixed(2) },
+      'Fees updated.',
+    )
   }
 
   return (
@@ -160,7 +174,7 @@ export function StoresRoute(): React.JSX.Element {
                 <th style={thStyle}>Active</th>
                 <th style={thStyle}>Published</th>
                 <th style={thStyle}>Payments</th>
-                <th style={{ ...thStyle, textAlign: 'right' }}>Fee</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>Commission (app / phone)</th>
                 <th style={thStyle}>AI phone</th>
                 <th style={thStyle}>Created</th>
               </tr>
@@ -189,9 +203,12 @@ export function StoresRoute(): React.JSX.Element {
                         : pill('Incomplete', 'amber')}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
-                    {s.effective_fee_bps / 100}%
-                    {s.platform_fee_bps == null && (
+                    {s.effective_app_bps / 100}% / {s.effective_phone_bps / 100}%
+                    {s.commission_app_bps == null && s.commission_phone_bps == null && (
                       <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--color-text-secondary)' }}>(default)</span>
+                    )}
+                    {Number(s.monthly_fee) > 0 && (
+                      <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>+ ${s.monthly_fee}/mo</div>
                     )}
                   </td>
                   <td style={tdStyle}>
@@ -281,22 +298,48 @@ export function StoresRoute(): React.JSX.Element {
               </div>
 
               <div>
-                <span className="meta-label">Commission (%)</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <input
-                    className="form-input"
-                    value={feeInput}
-                    onChange={(e) => setFeeInput(e.target.value)}
-                    inputMode="decimal"
-                    placeholder="default"
-                    style={{ width: 100 }}
-                  />
-                  <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => void handleSaveFee(selected.id)}>
+                <span className="meta-label">Commission (% of pre-tax subtotal) and monthly fee</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: 12 }}>
+                    App{' '}
+                    <input
+                      className="form-input"
+                      value={appFeeInput}
+                      onChange={(e) => setAppFeeInput(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="default"
+                      style={{ width: 80 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: 12 }}>
+                    Phone{' '}
+                    <input
+                      className="form-input"
+                      value={phoneFeeInput}
+                      onChange={(e) => setPhoneFeeInput(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="default"
+                      style={{ width: 80 }}
+                    />
+                  </label>
+                  <label style={{ fontSize: 12 }}>
+                    Monthly ${' '}
+                    <input
+                      className="form-input"
+                      value={monthlyFeeInput}
+                      onChange={(e) => setMonthlyFeeInput(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="0"
+                      style={{ width: 80 }}
+                    />
+                  </label>
+                  <button className="btn btn-primary btn-sm" disabled={saving} onClick={() => void handleSaveFees(selected.id)}>
                     Save
                   </button>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>
-                  Leave blank to use the platform default. Effective: {selected.effective_fee_bps / 100}%
+                  Leave a rate blank to use the platform default. In effect: app {selected.effective_app_bps / 100}%,
+                  phone {selected.effective_phone_bps / 100}%. A rate change applies to new orders only.
                 </p>
               </div>
 

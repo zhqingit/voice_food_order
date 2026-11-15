@@ -18,12 +18,13 @@ from app.services import menu_service, payment_service
 @pytest.fixture()
 def stripe_calls(monkeypatch):
     """Fake Stripe: every call is recorded, nothing leaves the machine."""
-    calls = {"intents": [], "cancelled": [], "refunds": []}
+    calls = {"intents": [], "fees": [], "cancelled": [], "refunds": []}
     ids = itertools.count(1)
 
-    def create_payment_intent(order, store, *, amount_due):
+    def create_payment_intent(order, store, *, amount_due, application_fee):
         pi = f"pi_{next(ids)}"
         calls["intents"].append((pi, amount_due))
+        calls["fees"].append(application_fee)
         return payment_service.PaymentIntentResult(client_secret=f"{pi}_secret", payment_intent_id=pi)
 
     def retrieve_payment_intent(pi):
@@ -62,6 +63,7 @@ def world(store_client, session_factory, stripe_calls):
         order = Order(
             store_id=store_id, user_id=user.id, status="submitted", channel="voice", short_code="ABC12",
             code_day=date(2026, 11, 14), subtotal=Decimal("10.00"), tax=Decimal("1.00"), total=Decimal("11.00"),
+            commission_bps=1500, commission=Decimal("1.50"),  # 15% of the pre-tax subtotal
         )
         db.add(order)
         db.flush()

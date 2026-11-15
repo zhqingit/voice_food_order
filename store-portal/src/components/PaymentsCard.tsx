@@ -40,7 +40,6 @@ export function PaymentsCard(): React.JSX.Element {
     }
   }
 
-  const feePct = status ? status.fee_bps / 100 : null
 
   return (
     <div className="card" style={{ maxWidth: 900, marginTop: 24 }}>
@@ -123,9 +122,14 @@ export function PaymentsCard(): React.JSX.Element {
 
             {/* Commission (read-only) */}
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--color-border, #f0f0f0)' }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span className="meta-label" style={{ marginBottom: 0 }}>{t('payments.platformFee')}</span>
-                <span style={{ fontSize: 18, fontWeight: 700 }}>{feePct}%</span>
+              <span className="meta-label">{t('payments.platformFee')}</span>
+              <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                <span>
+                  {t('payments.appOrders')}: <strong style={{ fontSize: 18 }}>{status.fee_app_bps / 100}%</strong>
+                </span>
+                <span>
+                  {t('payments.phoneOrders')}: <strong style={{ fontSize: 18 }}>{status.fee_phone_bps / 100}%</strong>
+                </span>
               </div>
               <p style={{ fontSize: 12, color: 'var(--color-text-secondary)', margin: '6px 0 0' }}>
                 {t('payments.feeDesc')}

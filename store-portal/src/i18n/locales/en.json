@@ -372,7 +372,7 @@
   "payments": {
     "title": "Payments",
     "platformFee": "Platform fee",
-    "feeDesc": "This commission is deducted from each online order; you receive the rest, paid out to your Stripe account.",
+    "feeDesc": "Charged on each order's subtotal before tax. For orders paid online it is deducted automatically; for orders paid at the store it is billed once a month.",
     "notConnected": "Connect Stripe to accept online payments from customers. Until then, orders are collected as pay-at-store.",
     "connectBtn": "Connect Stripe",
     "incompleteTitle": "Finish payment setup",
@@ -384,7 +384,9 @@
     "paid": "Paid",
     "unpaid": "Unpaid",
     "loadError": "Couldn't load payment status.",
-    "connectError": "Couldn't start Stripe onboarding. Please try again."
+    "connectError": "Couldn't start Stripe onboarding. Please try again.",
+    "appOrders": "App orders",
+    "phoneOrders": "Phone orders"
   },
   "phone": {
     "title": "Phone ordering (AI)",

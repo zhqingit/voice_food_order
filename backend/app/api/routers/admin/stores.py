@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -15,7 +16,7 @@ from app.models.admin import Admin
 from app.models.store import Store
 from app.schemas.admin.store import AdminStoreDetailOut, AdminStoreOut, AdminStoreUpdate
 from app.schemas.common import Audience, PrincipalType
-from app.services import payment_service
+from app.services import commission, payment_service
 
 log = logging.getLogger(__name__)
 
@@ -37,8 +38,11 @@ def _store_out(s: Store) -> AdminStoreOut:
         is_active=s.is_active,
         stripe_account_id=s.stripe_account_id,
         stripe_charges_enabled=s.stripe_charges_enabled,
-        platform_fee_bps=s.platform_fee_bps,
-        effective_fee_bps=payment_service.resolve_fee_bps(s),
+        commission_app_bps=s.commission_app_bps,
+        commission_phone_bps=s.commission_phone_bps,
+        effective_app_bps=commission.resolve_bps(s, "app"),
+        effective_phone_bps=commission.resolve_bps(s, commission.PHONE_CHANNEL),
+        monthly_fee=s.monthly_fee,
         phone_ai_number=s.phone_ai_number,
         phone_ai_enabled=s.phone_ai_enabled,
         created_at=s.created_at,
@@ -98,6 +102,8 @@ def update_store(
     store = _get_store_or_404(db, store_id)
 
     updates = payload.model_dump(exclude_unset=True)
+    if "monthly_fee" in updates and updates["monthly_fee"] is None:
+        updates["monthly_fee"] = Decimal("0.00")
     if updates.get("phone_ai_number"):
         taken = db.execute(
             select(Store.id).where(Store.phone_ai_number == updates["phone_ai_number"], Store.id != store.id)

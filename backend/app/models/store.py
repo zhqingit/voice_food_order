@@ -50,9 +50,14 @@ class Store(Base):
     # Cached from Stripe (account.updated webhook): whether the store can accept
     # charges yet. Drives payment-ready badges; NOT a gate on orderability.
     stripe_charges_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    # Per-store commission override in basis points (e.g. 1000 = 10%). None
-    # falls back to the platform default (settings.platform_fee_bps).
-    platform_fee_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Per-store commission overrides in basis points (e.g. 1500 = 15%), by order
+    # channel. None falls back to the platform default (settings.commission_*_bps).
+    commission_app_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    commission_phone_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Flat monthly fee added to the store's monthly invoice. 0 = none (not used yet).
+    monthly_fee: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
+    )
 
     # Phone ordering. phone_ai_number (E.164) is the Twilio number whose calls
     # reach this store's voice bot; admin-assigned so a store can't claim

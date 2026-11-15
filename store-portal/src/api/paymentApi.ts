@@ -4,7 +4,9 @@ export type PaymentStatus = {
   connected: boolean // a Stripe account exists for this store
   charges_enabled: boolean // store can accept online payment
   details_submitted: boolean // store finished the onboarding form
-  fee_bps: number // commission applied to this store's orders
+  // Commission on the pre-tax subtotal, by the channel the order came in on.
+  fee_app_bps: number
+  fee_phone_bps: number
 }
 
 export type ConnectResponse = {

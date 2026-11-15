@@ -41,6 +41,8 @@ class Ledger:
     refunded: Decimal  # pending + succeeded refunds
     owed: Decimal  # the order total; nothing once cancelled
     card_refundable: Decimal  # card money that can still go back through Stripe
+    # Commission the platform kept through Stripe application fees (net of fees returned with refunds).
+    commission_collected: Decimal = ZERO
 
     @property
     def net(self) -> Decimal:
@@ -90,7 +92,30 @@ def ledger(db: Session, order: Order) -> Ledger:
     paid = sum((r.amount for r in rows if r.kind == "charge" and r.status == "succeeded"), ZERO)
     refunded = sum((r.amount for r in rows if r.kind == "refund" and r.status in REFUND_COUNTED), ZERO)
     card_refundable = sum((remaining for _, remaining in _card_charges_with_remaining(rows)), ZERO)
-    return Ledger(paid=paid, refunded=refunded, owed=owed(order), card_refundable=card_refundable)
+    fees_taken = sum((r.application_fee or ZERO for r in rows if r.kind == "charge" and r.status == "succeeded"), ZERO)
+    fees_returned = sum((r.application_fee or ZERO for r in rows if r.kind == "refund" and r.status in REFUND_COUNTED), ZERO)
+    return Ledger(
+        paid=paid,
+        refunded=refunded,
+        owed=owed(order),
+        card_refundable=card_refundable,
+        commission_collected=fees_taken - fees_returned,
+    )
+
+
+def application_fee_for(db: Session, order: Order, amount_due: Decimal) -> Decimal:
+    """The platform commission to take from a card charge: whatever of the
+    order's commission hasn't been collected through Stripe yet."""
+    remaining = order.commission - ledger(db, order).commission_collected
+    return min(max(remaining, ZERO), amount_due)
+
+
+def _returned_fee(charge: Payment, refund_amount: Decimal) -> Decimal | None:
+    """The share of a charge's application fee that Stripe returns with a refund
+    (refunds are made with refund_application_fee, which is proportional)."""
+    if not charge.application_fee or not charge.amount:
+        return None
+    return (charge.application_fee * refund_amount / charge.amount).quantize(Decimal("0.01"))
 
 
 def net_paid_by_order(db: Session, order_ids: list[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
@@ -134,12 +159,26 @@ def open_card_charge(db: Session, order: Order) -> Payment | None:
     return rows[-1] if rows else None
 
 
-def record_card_charge_started(db: Session, order: Order, *, payment_intent_id: str, amount: Decimal) -> None:
-    db.add(Payment(order_id=order.id, kind="charge", method="card", amount=amount, status="pending", stripe_id=payment_intent_id))
+def record_card_charge_started(
+    db: Session, order: Order, *, payment_intent_id: str, amount: Decimal, application_fee: Decimal
+) -> None:
+    db.add(
+        Payment(
+            order_id=order.id, kind="charge", method="card", amount=amount, status="pending",
+            stripe_id=payment_intent_id, application_fee=application_fee,
+        )
+    )
     order.payment_ref = payment_intent_id
 
 
-def receive_card_payment(db: Session, order: Order, *, payment_intent_id: str, amount: Decimal) -> None:
+def receive_card_payment(
+    db: Session,
+    order: Order,
+    *,
+    payment_intent_id: str,
+    amount: Decimal,
+    application_fee: Decimal | None = None,
+) -> None:
     """Stripe says a PaymentIntent succeeded (webhook). Idempotent."""
     row = _by_stripe_id(db, payment_intent_id)
     if row is not None and row.status == "succeeded":
@@ -148,6 +187,8 @@ def receive_card_payment(db: Session, order: Order, *, payment_intent_id: str, a
         row = Payment(order_id=order.id, kind="charge", method="card", stripe_id=payment_intent_id)
         db.add(row)
     row.amount, row.status, row.failure_reason = amount, "succeeded", None
+    if application_fee is not None:
+        row.application_fee = application_fee
     order.payment_ref = payment_intent_id
     log_event(db, order, actor=ACTOR_STRIPE, kind="payment_received", detail=f"{_money(amount)} paid by card")
     sync_payment_status(db, order)
@@ -216,6 +257,7 @@ def refund(db: Session, order: Order, *, amount: Decimal, method: str, actor: st
             Payment(
                 order_id=order.id, kind="refund", method="card", amount=part,
                 status=_refund_status(result.status), stripe_id=result.refund_id, parent_id=charge.id,
+                application_fee=_returned_fee(charge, part),
             )
         )
         done += part
@@ -238,6 +280,7 @@ def update_refund(db: Session, *, refund_id: str, payment_intent_id: str | None,
         row = Payment(
             order_id=charge.order_id, kind="refund", method="card", amount=amount,
             status=_refund_status(status), stripe_id=refund_id, parent_id=charge.id,
+            application_fee=_returned_fee(charge, amount),
         )
         db.add(row)
         if order is not None and row.status in REFUND_COUNTED:

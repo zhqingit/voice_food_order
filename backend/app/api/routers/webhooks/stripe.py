@@ -76,7 +76,15 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)) -> dic
         order = _order_from_metadata(db, obj)
         if order is not None and _field(obj, "id"):
             order_payments.receive_card_payment(
-                db, order, payment_intent_id=_field(obj, "id"), amount=_dollars(_field(obj, "amount_received"))
+                db,
+                order,
+                payment_intent_id=_field(obj, "id"),
+                amount=_dollars(_field(obj, "amount_received")),
+                application_fee=(
+                    _dollars(_field(obj, "application_fee_amount"))
+                    if _field(obj, "application_fee_amount") is not None
+                    else None
+                ),
             )
             db.commit()
 

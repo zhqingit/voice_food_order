@@ -14,6 +14,7 @@ from app.models.order import Order
 from app.models.order_item import OrderItem
 from app.models.store import Store
 from app.schemas.order.order import OrderCreate
+from app.services import commission
 
 
 # Placed and not yet finished or cancelled. Staff can edit these orders, and
@@ -98,6 +99,8 @@ def create_draft_order(db: Session, *, payload: OrderCreate) -> Order:
         subtotal=Decimal("0.00"),
         tax=Decimal("0.00"),
         total=Decimal("0.00"),
+        # The commission rate is locked when the order is created.
+        commission_bps=commission.resolve_bps(store, payload.channel),
     )
     _assign_short_code(db, order=order, store=store)
     db.add(order)
@@ -109,6 +112,7 @@ def create_draft_order(db: Session, *, payload: OrderCreate) -> Order:
             if menu_item is None:
                 continue
             create_order_item(db, order=order, menu_item=menu_item, quantity=item.quantity)
+        db.flush()  # recalc_totals reads the items back from the database
         recalc_totals(db, order=order)
 
     return order
@@ -139,10 +143,8 @@ def recalc_totals(db: Session, *, order: Order, tax_rate: Decimal | None = None)
     items = db.execute(select(OrderItem).where(OrderItem.order_id == order.id)).scalars().all()
     subtotal = sum((item.price_snapshot * item.quantity for item in items), Decimal("0.00"))
 
+    store = db.get(Store, order.store_id)
     if tax_rate is None:
-        # Look up the store's tax rate.
-        from app.models.store import Store
-        store = db.get(Store, order.store_id)
         tax_rate = store.tax_rate if store else Decimal("0.0000")
 
     tax = (subtotal * tax_rate).quantize(Decimal("0.01"))
@@ -151,4 +153,5 @@ def recalc_totals(db: Session, *, order: Order, tax_rate: Decimal | None = None)
     order.subtotal = subtotal
     order.tax = tax
     order.total = total
+    commission.apply(order, store)
     return order

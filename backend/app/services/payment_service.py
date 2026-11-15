@@ -75,12 +75,6 @@ def to_cents(amount: Decimal) -> int:
     return int((amount * 100).to_integral_value(rounding=ROUND_HALF_UP))
 
 
-def resolve_fee_bps(store: Store) -> int:
-    """Commission for this store: its override, else the platform default."""
-    bps = store.platform_fee_bps if store.platform_fee_bps is not None else settings.platform_fee_bps
-    return max(0, int(bps))
-
-
 # ── Connect onboarding ────────────────────────────────────────────────────
 
 
@@ -128,13 +122,15 @@ def fetch_account_status(account_id: str) -> AccountStatus:
 # ── Charging the customer ─────────────────────────────────────────────────
 
 
-def create_payment_intent(order: Order, store: Store, *, amount_due: Decimal) -> PaymentIntentResult:
+def create_payment_intent(
+    order: Order, store: Store, *, amount_due: Decimal, application_fee: Decimal
+) -> PaymentIntentResult:
     """Create a destination-charge PaymentIntent for an order.
 
     Charges the customer `amount_due` (the order total, or the balance still
-    owed after staff raised the total), keeps the platform commission as
-    `application_fee_amount`, and routes the rest to the store's connected
-    account. Callers must confirm the store is payment-ready first; this guards
+    owed after staff raised the total), keeps `application_fee` (the platform
+    commission not collected yet, see order_payments.application_fee_for) and
+    routes the rest to the store's connected account. Callers must confirm the store is payment-ready first; this guards
     defensively and refuses otherwise.
     """
     if not store.stripe_account_id or not store.stripe_charges_enabled:
@@ -144,7 +140,7 @@ def create_payment_intent(order: Order, store: Store, *, amount_due: Decimal) ->
     if amount <= 0:
         raise AppError(400, "invalid_amount", "Order total must be positive to charge.")
 
-    fee = amount * resolve_fee_bps(store) // 10000
+    fee = min(max(to_cents(application_fee), 0), amount)
     intent = _call(
         "create_payment_intent",
         stripe.PaymentIntent.create,

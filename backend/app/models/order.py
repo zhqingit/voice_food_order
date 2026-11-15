@@ -4,7 +4,7 @@ import uuid
 from decimal import Decimal
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -52,6 +52,12 @@ class Order(Base):
     # Payment tracking — orthogonal to `status`. An order can be submitted but
     # still "unpaid", then flip to "paid" once Stripe confirms the charge.
     payment_status: Mapped[str] = mapped_column(String(16), nullable=False, default="unpaid", server_default="unpaid")
+    # Platform commission: the rate (basis points) locked when the order was
+    # created, and the amount on the current pre-tax subtotal (see services/commission.py).
+    commission_bps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    commission: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=Decimal("0.00"), server_default="0"
+    )
     # Stripe PaymentIntent id (pi_...) for the charge against this order.
     payment_ref: Mapped[str | None] = mapped_column(String(255), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=False), nullable=True)

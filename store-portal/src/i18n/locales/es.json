@@ -340,7 +340,10 @@
   },
   "payments": {
     "paid": "Pagado",
-    "unpaid": "No pagado"
+    "unpaid": "No pagado",
+    "feeDesc": "Se cobra sobre el subtotal de cada pedido antes de impuestos. En los pedidos pagados en línea se descuenta automáticamente; en los pagados en tienda se factura una vez al mes.",
+    "appOrders": "Pedidos por app",
+    "phoneOrders": "Pedidos por teléfono"
   },
   "phone": {
     "title": "Pedidos por teléfono (IA)",

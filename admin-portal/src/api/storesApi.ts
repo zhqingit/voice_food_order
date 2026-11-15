@@ -10,8 +10,13 @@ export type AdminStore = {
   is_active: boolean
   stripe_account_id: string | null
   stripe_charges_enabled: boolean
-  platform_fee_bps: number | null // store override; null = platform default
-  effective_fee_bps: number // resolved commission actually applied
+  // Commission (basis points, on the pre-tax subtotal) by order channel:
+  // the store's override (null = platform default) and the rate in effect.
+  commission_app_bps: number | null
+  commission_phone_bps: number | null
+  effective_app_bps: number
+  effective_phone_bps: number
+  monthly_fee: string // flat fee on the monthly invoice; "0.00" = none
   phone_ai_number: string | null // Twilio number answered by the AI (E.164)
   phone_ai_enabled: boolean // store's own on/off switch for phone ordering
   created_at: string
@@ -26,9 +31,11 @@ export type AdminStoreDetail = AdminStore & {
 export type AdminStoreUpdate = {
   is_approved?: boolean
   is_active?: boolean
-  // Send null to clear the override (fall back to the platform default);
+  // Send null to clear an override (fall back to the platform default);
   // omit to leave unchanged.
-  platform_fee_bps?: number | null
+  commission_app_bps?: number | null
+  commission_phone_bps?: number | null
+  monthly_fee?: string
   // Send null to take the number away (also turns phone ordering off).
   phone_ai_number?: string | null
 }

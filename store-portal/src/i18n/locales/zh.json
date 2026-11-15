@@ -369,7 +369,10 @@
   },
   "payments": {
     "paid": "已付款",
-    "unpaid": "未付款"
+    "unpaid": "未付款",
+    "feeDesc": "按每单的税前小计收取。在线付款的订单自动扣除；到店付款的订单每月统一开账单。",
+    "appOrders": "App 订单",
+    "phoneOrders": "电话订单"
   },
   "phone": {
     "title": "电话点餐（AI）",

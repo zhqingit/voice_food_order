@@ -32,6 +32,9 @@ class Payment(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     # Stripe PaymentIntent (pi_), Refund (re_) or Dispute (du_/dp_) id.
     stripe_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    # Platform commission taken through Stripe: the application fee on a card
+    # charge, or the part of it returned with a card refund.
+    application_fee: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     # Card refunds: the charge they refund.
     parent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("payments.id"), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)

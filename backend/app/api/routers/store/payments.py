@@ -16,7 +16,7 @@ from app.schemas.store.payments import (
     PaymentConnectResponse,
     PaymentStatusResponse,
 )
-from app.services import payment_service
+from app.services import commission, payment_service
 
 log = logging.getLogger(__name__)
 
@@ -77,5 +77,6 @@ def status(
         connected=connected,
         charges_enabled=charges_enabled,
         details_submitted=details_submitted,
-        fee_bps=payment_service.resolve_fee_bps(current_store),
+        fee_app_bps=commission.resolve_bps(current_store, "app"),
+        fee_phone_bps=commission.resolve_bps(current_store, commission.PHONE_CHANNEL),
     )

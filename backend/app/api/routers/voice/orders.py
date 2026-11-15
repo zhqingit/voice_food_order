@@ -280,9 +280,12 @@ def create_payment_intent(
         if payment_service.cancel_payment_intent(previous.stripe_id):
             previous.status = "canceled"
 
-    result = payment_service.create_payment_intent(order, store, amount_due=amount_due)
+    application_fee = order_payments.application_fee_for(db, order, amount_due)
+    result = payment_service.create_payment_intent(
+        order, store, amount_due=amount_due, application_fee=application_fee
+    )
     order_payments.record_card_charge_started(
-        db, order, payment_intent_id=result.payment_intent_id, amount=amount_due
+        db, order, payment_intent_id=result.payment_intent_id, amount=amount_due, application_fee=application_fee
     )
     db.commit()
 
