@@ -120,11 +120,17 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final settings = ref.watch(settingsControllerProvider).valueOrNull;
-    // Remind about unpaid orders only until the customer has looked at them in My Orders.
-    final seen = ref.watch(seenUnpaidOrdersProvider).valueOrNull;
-    final unpaid = seen == null
+    // Point out unpaid orders and restaurant changes only until the customer
+    // has looked at them in My Orders.
+    final myOrders = ref.watch(myOrdersProvider).valueOrNull;
+    final seenUnpaid = ref.watch(seenUnpaidOrdersProvider).valueOrNull;
+    final seenChanges = ref.watch(seenStoreChangesProvider).valueOrNull;
+    final unpaid = seenUnpaid == null
         ? null
-        : ref.watch(myOrdersProvider).valueOrNull?.where((o) => o.canPayOnline && !seen.contains(o.paymentReminderKey)).firstOrNull;
+        : myOrders?.where((o) => ref.read(seenUnpaidOrdersProvider.notifier).isNew(o, seenUnpaid)).firstOrNull;
+    final changed = seenChanges == null
+        ? null
+        : myOrders?.where((o) => ref.read(seenStoreChangesProvider.notifier).isNew(o, seenChanges)).firstOrNull;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -205,36 +211,22 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                   ),
                 ),
 
+                // The restaurant changed or cancelled an order
+                if (changed != null)
+                  _OrderNotice(
+                    icon: changed.status == 'cancelled' ? Icons.cancel_outlined : Icons.edit_note_rounded,
+                    text: changed.status == 'cancelled'
+                        ? l10n.storeCancelledBanner(changed.shortCode, changed.storeName ?? '')
+                        : l10n.storeChangedBanner(changed.shortCode, changed.storeName ?? ''),
+                    onTap: _openMyOrders,
+                  ),
+
                 // Unpaid order reminder
                 if (unpaid != null)
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-                      child: Material(
-                        color: _chipBg,
-                        borderRadius: BorderRadius.circular(16),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: _openMyOrders,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.credit_card_rounded, color: _warmOrangeStart),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    l10n.unpaidOrderBanner(unpaid.shortCode, unpaid.storeName ?? ''),
-                                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _warmBrown),
-                                  ),
-                                ),
-                                const Icon(Icons.chevron_right_rounded, color: _warmBrown),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  _OrderNotice(
+                    icon: Icons.credit_card_rounded,
+                    text: l10n.unpaidOrderBanner(unpaid.shortCode, unpaid.storeName ?? ''),
+                    onTap: _openMyOrders,
                   ),
 
                 // Search
@@ -340,6 +332,48 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
                 ],
                 const SliverToBoxAdapter(child: SizedBox(height: 32)),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A tappable notice on the home screen that opens My Orders.
+class _OrderNotice extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final VoidCallback onTap;
+
+  const _OrderNotice({required this.icon, required this.text, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverToBoxAdapter(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+        child: Material(
+          color: _chipBg,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(icon, color: _warmOrangeStart),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      text,
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: _warmBrown),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, color: _warmBrown),
+                ],
+              ),
             ),
           ),
         ),

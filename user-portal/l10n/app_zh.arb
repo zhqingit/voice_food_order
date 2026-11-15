@@ -86,6 +86,8 @@
   "refundedChip": "已退款",
   "paymentFailed": "付款失败，请重试。",
   "unpaidOrderBanner": "{storeName} 的订单 #{code} 还没付款",
+  "storeChangedBanner": "{storeName} 修改了您的订单 #{code}，点击查看",
+  "storeCancelledBanner": "{storeName} 取消了您的订单 #{code}，点击查看",
   "statusSubmitted": "已下单",
   "statusConfirmed": "已确认",
   "statusPreparing": "制作中",

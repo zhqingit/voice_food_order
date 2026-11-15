@@ -17,6 +17,8 @@ class OrderOut {
   final String? storePhone;
   /// Staff changed the items after the order was placed (My Orders only).
   final bool modifiedByStore;
+  /// When staff last changed the items or cancelled the order (My Orders only).
+  final DateTime? storeChangedAt;
   final String? userId;
   final String status;
   /// unpaid | partially_paid | paid | refunded
@@ -41,6 +43,7 @@ class OrderOut {
     this.canPayOnline = false,
     this.storePhone,
     this.modifiedByStore = false,
+    this.storeChangedAt,
     required this.userId,
     required this.status,
     required this.paymentStatus,
@@ -60,6 +63,10 @@ class OrderOut {
   /// (staff raised the total) is reminded about again.
   String get paymentReminderKey => '$id:${balanceDue.toStringAsFixed(2)}';
 
+  /// Identifies the restaurant's latest change, for the home-screen notice:
+  /// each new change is pointed out again. Null when the restaurant changed nothing.
+  String? get storeChangeKey => storeChangedAt == null ? null : '$id:${storeChangedAt!.toIso8601String()}';
+
   factory OrderOut.fromJson(Map<String, dynamic> json) {
     return OrderOut(
       id: json['id'] as String,
@@ -69,6 +76,7 @@ class OrderOut {
       canPayOnline: json['can_pay_online'] as bool? ?? false,
       storePhone: json['store_phone'] as String?,
       modifiedByStore: json['modified_by_store'] as bool? ?? false,
+      storeChangedAt: json['store_changed_at'] == null ? null : DateTime.parse(json['store_changed_at'] as String),
       userId: json['user_id'] as String?,
       status: json['status'] as String,
       paymentStatus: json['payment_status'] as String? ?? 'unpaid',

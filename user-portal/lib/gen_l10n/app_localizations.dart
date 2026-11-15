@@ -562,6 +562,18 @@ abstract class AppLocalizations {
   /// **'Order #{code} at {storeName} isn\'t paid yet'**
   String unpaidOrderBanner(String code, String storeName);
 
+  /// No description provided for @storeChangedBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'{storeName} changed your order #{code}. Tap to see it.'**
+  String storeChangedBanner(String code, String storeName);
+
+  /// No description provided for @storeCancelledBanner.
+  ///
+  /// In en, this message translates to:
+  /// **'{storeName} cancelled your order #{code}. Tap to see it.'**
+  String storeCancelledBanner(String code, String storeName);
+
   /// No description provided for @statusSubmitted.
   ///
   /// In en, this message translates to:

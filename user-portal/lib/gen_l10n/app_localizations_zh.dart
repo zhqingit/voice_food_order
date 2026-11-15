@@ -252,6 +252,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String storeChangedBanner(String code, String storeName) {
+    return '$storeName 修改了您的订单 #$code，点击查看';
+  }
+
+  @override
+  String storeCancelledBanner(String code, String storeName) {
+    return '$storeName 取消了您的订单 #$code，点击查看';
+  }
+
+  @override
   String get statusSubmitted => '已下单';
 
   @override

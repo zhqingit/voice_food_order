@@ -111,7 +111,18 @@ def test_customer_sees_store_phone_and_that_the_store_changed_the_order(store_cl
 
     store_client.post(_url(world, "/items"), json={"menu_item_id": str(world["rice"])}, headers=world["headers"])
 
-    assert my_order()["modified_by_store"] is True
+    assert my_order()["modified_by_store"] is True and my_order()["store_changed_at"] is not None
+
+
+def test_customer_sees_when_the_store_cancelled_the_order(store_client, user_client, world):
+    def my_order():
+        return user_client.get("/user/orders", headers=world["user_headers"]).json()[0]
+
+    assert my_order()["store_changed_at"] is None
+
+    store_client.patch(_url(world), json={"status": "cancelled"}, headers=world["headers"])
+
+    assert my_order()["store_changed_at"] is not None and my_order()["modified_by_store"] is False
 
 
 def test_other_stores_orders_are_not_editable(store_client, world):

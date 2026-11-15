@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
@@ -20,7 +21,7 @@ from app.models.user import User
 from app.schemas.common import Audience, PrincipalType
 from app.schemas.order.order import OrderCreate, OrderItemOut, OrderOut
 from app.services import order_payments, order_service, store_order_edit_service
-from app.services.order_event_service import ACTOR_CUSTOMER
+from app.services.order_event_service import ACTOR_CUSTOMER, ACTOR_STORE
 
 # Customers can cancel only before the store accepts the order; after that they call the store.
 CUSTOMER_CANCELLABLE_STATUSES = frozenset({"submitted"})
@@ -37,6 +38,7 @@ def _order_out(
     store: Store | None = None,
     *,
     modified_by_store: bool = False,
+    store_changed_at: datetime | None = None,
     net_paid: Decimal = order_payments.ZERO,
 ) -> OrderOut:
     can_pay_online = (
@@ -55,6 +57,7 @@ def _order_out(
         can_pay_online=can_pay_online,
         store_phone=store.phone if store is not None else None,
         modified_by_store=modified_by_store,
+        store_changed_at=store_changed_at,
         user_id=order.user_id,
         status=order.status,
         payment_status=order.payment_status,
@@ -98,19 +101,27 @@ def list_orders(
         .where(Order.status != "draft")
         .order_by(Order.created_at.desc())
     ).all()
-    modified = set(
-        db.execute(
-            select(OrderEvent.order_id)
-            .where(OrderEvent.order_id.in_([order.id for order, _ in rows]))
-            .where(OrderEvent.kind.like("item_%"))
-        ).scalars()
-    )
+    # Staff changes the customer should hear about: item edits, and the store cancelling.
+    store_events = db.execute(
+        select(OrderEvent.order_id, OrderEvent.kind, OrderEvent.created_at)
+        .where(OrderEvent.order_id.in_([order.id for order, _ in rows]))
+        .where(OrderEvent.actor == ACTOR_STORE)
+        .where(
+            OrderEvent.kind.like("item_%")
+            | ((OrderEvent.kind == "status_changed") & OrderEvent.detail.like(f"%→ {order_payments.CANCELLED}"))
+        )
+    ).all()
+    modified = {order_id for order_id, kind, _ in store_events if kind.startswith("item_")}
+    store_changed_at: dict[uuid.UUID, datetime] = {}
+    for order_id, _, created_at in store_events:
+        store_changed_at[order_id] = max(created_at, store_changed_at.get(order_id, created_at))
     net_paid = order_payments.net_paid_by_order(db, [order.id for order, _ in rows])
     return [
         _order_out(
             order,
             store,
             modified_by_store=order.id in modified,
+            store_changed_at=store_changed_at.get(order.id),
             net_paid=net_paid.get(order.id, order_payments.ZERO),
         )
         for order, store in rows

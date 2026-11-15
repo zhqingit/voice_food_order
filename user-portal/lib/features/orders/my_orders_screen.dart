@@ -25,28 +25,44 @@ final myOrdersProvider = FutureProvider.autoDispose<List<OrderOut>>((ref) {
 });
 
 /// Unpaid orders the customer has already seen in My Orders. The home-screen
-/// reminder skips them, so it only nags once per order. Stored on the device.
-final seenUnpaidOrdersProvider = AsyncNotifierProvider<SeenUnpaidOrders, Set<String>>(SeenUnpaidOrders.new);
+/// reminder skips them, so it only nags once per amount owed. Stored on the device.
+final seenUnpaidOrdersProvider = AsyncNotifierProvider<SeenOrderKeys, Set<String>>(
+  () => SeenOrderKeys('seen_unpaid_order_ids', (o) => o.canPayOnline ? o.paymentReminderKey : null),
+);
 
-class SeenUnpaidOrders extends AsyncNotifier<Set<String>> {
-  static const _key = 'seen_unpaid_order_ids';
+/// Restaurant changes (items edited, order cancelled) the customer has already
+/// seen in My Orders, so the home-screen notice shows each change once.
+final seenStoreChangesProvider = AsyncNotifierProvider<SeenOrderKeys, Set<String>>(
+  () => SeenOrderKeys('seen_store_change_keys', (o) => o.storeChangeKey),
+);
+
+/// Which home-screen notices the customer has already seen, as keys from [keyOf]
+/// (null when an order needs no notice). Stored on the device.
+class SeenOrderKeys extends AsyncNotifier<Set<String>> {
+  SeenOrderKeys(this._prefsKey, this._keyOf);
+
+  final String _prefsKey;
+  final String? Function(OrderOut) _keyOf;
 
   @override
   Future<Set<String>> build() async {
     final prefs = await SharedPreferences.getInstance();
-    return (prefs.getStringList(_key) ?? const <String>[]).toSet();
+    return (prefs.getStringList(_prefsKey) ?? const <String>[]).toSet();
   }
 
-  /// Marks the orders on screen as seen; ids of orders no longer listed are dropped.
+  bool isNew(OrderOut order, Set<String> seen) {
+    final key = _keyOf(order);
+    return key != null && !seen.contains(key);
+  }
+
+  /// Marks the orders on screen as seen; keys of orders no longer needing a notice are dropped.
   Future<void> markSeen(List<OrderOut> orders) async {
     final current = await future;
-    final listed = orders.map((o) => o.paymentReminderKey).toSet();
-    final next = current.intersection(listed)
-      ..addAll(orders.where((o) => o.canPayOnline).map((o) => o.paymentReminderKey));
+    final next = orders.map(_keyOf).whereType<String>().toSet();
     if (next.length == current.length && next.containsAll(current)) return;
     state = AsyncData(next);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(_key, next.toList());
+    await prefs.setStringList(_prefsKey, next.toList());
   }
 }
 
@@ -75,7 +91,10 @@ class MyOrdersScreen extends ConsumerWidget {
     final orders = ref.watch(myOrdersProvider);
     final shown = orders.valueOrNull;
     if (shown != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(seenUnpaidOrdersProvider.notifier).markSeen(shown));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(seenUnpaidOrdersProvider.notifier).markSeen(shown);
+        ref.read(seenStoreChangesProvider.notifier).markSeen(shown);
+      });
     }
 
     return Scaffold(

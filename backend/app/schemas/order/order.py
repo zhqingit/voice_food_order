@@ -32,6 +32,9 @@ class OrderOut(BaseModel):
     store_phone: str | None = None
     # My Orders: staff changed the items after the order was placed.
     modified_by_store: bool = False
+    # My Orders: when staff last changed the items or cancelled the order, so the
+    # app can point it out until the customer has looked.
+    store_changed_at: datetime | None = None
     user_id: uuid.UUID | None
     status: str
     # unpaid | partially_paid | paid | refunded

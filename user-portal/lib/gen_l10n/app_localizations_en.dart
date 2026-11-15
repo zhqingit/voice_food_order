@@ -254,6 +254,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String storeChangedBanner(String code, String storeName) {
+    return '$storeName changed your order #$code. Tap to see it.';
+  }
+
+  @override
+  String storeCancelledBanner(String code, String storeName) {
+    return '$storeName cancelled your order #$code. Tap to see it.';
+  }
+
+  @override
   String get statusSubmitted => 'Placed';
 
   @override

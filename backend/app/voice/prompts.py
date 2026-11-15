@@ -54,7 +54,9 @@ def _phone_section(phone: PhoneCallInfo) -> str:
         )
     lines.append(
         "- **After checkout:** give the order number as usual, say when to come by (pickup) or that it's on the way "
-        "(delivery), mention payment, and say \"Thanks for calling!\""
+        "(delivery), mention payment, then tell them once: \"We'll text the number on this order if anything changes "
+        "with it. Message and data rates may apply, and you can reply STOP anytime to opt out.\" Then say "
+        "\"Thanks for calling!\""
     )
     return "\n".join(lines)
 

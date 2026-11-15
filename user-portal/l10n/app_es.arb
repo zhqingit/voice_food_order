@@ -86,6 +86,8 @@
   "refundedChip": "Reembolsado",
   "paymentFailed": "El pago falló. Inténtalo de nuevo.",
   "unpaidOrderBanner": "El pedido #{code} de {storeName} aún no está pagado",
+  "storeChangedBanner": "{storeName} modificó su pedido #{code}. Toque para verlo.",
+  "storeCancelledBanner": "{storeName} canceló su pedido #{code}. Toque para verlo.",
   "statusSubmitted": "Realizado",
   "statusConfirmed": "Confirmado",
   "statusPreparing": "En preparación",
