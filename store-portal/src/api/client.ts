@@ -21,24 +21,6 @@ function createClient(): AxiosInstance {
     return config
   })
 
-  let refreshInFlight: Promise<string> | null = null
-
-  async function refreshAccessToken(): Promise<string> {
-    if (!refreshInFlight) {
-      refreshInFlight = client
-        .post('/store/auth/refresh')
-        .then((res) => {
-          const token = (res.data as { access_token: string }).access_token
-          setAccessToken(token)
-          return token
-        })
-        .finally(() => {
-          refreshInFlight = null
-        })
-    }
-    return refreshInFlight
-  }
-
   client.interceptors.response.use(
     (res) => res,
     async (error: AxiosError) => {
@@ -75,6 +57,27 @@ function createClient(): AxiosInstance {
 }
 
 export const apiClient = createClient()
+
+let refreshInFlight: Promise<string> | null = null
+
+// Refresh tokens are single-use: the server treats a second use as theft and
+// ends the session. Every caller shares one request, so concurrent refreshes
+// (React StrictMode runs the startup effect twice in dev) can't trigger that.
+export function refreshAccessToken(): Promise<string> {
+  if (!refreshInFlight) {
+    refreshInFlight = apiClient
+      .post('/store/auth/refresh')
+      .then((res) => {
+        const token = (res.data as { access_token: string }).access_token
+        setAccessToken(token)
+        return token
+      })
+      .finally(() => {
+        refreshInFlight = null
+      })
+  }
+  return refreshInFlight
+}
 
 function _isAuthEndpoint(pathname: string): boolean {
   return (
