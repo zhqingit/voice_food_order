@@ -103,5 +103,8 @@
   "promoWithMinimum": "满 {min} {deal}",
 
   "onlineDiscount": "在线支付优惠",
-  "onlineOfferNote": "在线支付立省 {amount}（{name}）"
+  "onlineOfferNote": "在线支付立省 {amount}（{name}）",
+
+  "storeClosedNow": "{store} 现在不营业。今天的营业时间：{hours}。",
+  "storeClosedToday": "{store} 今天休息。"
 }

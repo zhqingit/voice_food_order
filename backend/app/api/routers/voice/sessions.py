@@ -31,10 +31,6 @@ def _session_out(session) -> VoiceSessionOut:
         status=session.status,
         rating=session.rating,
         review=session.review,
-        prompt_tokens=session.prompt_tokens,
-        completion_tokens=session.completion_tokens,
-        total_tokens=session.total_tokens,
-        llm_cost=session.llm_cost,
         started_at=session.started_at,
         ended_at=session.ended_at,
     )
@@ -49,7 +45,8 @@ def create_session(
     """Create a new voice session for the current user. 
     A session represents an active interaction with the voice assistant,
     and can be used to track context across multiple requests (e.g. multiple orders in the same session)."""
-    voice_session_service.get_orderable_store(db, store_id=payload.store_id)
+    store = voice_session_service.get_orderable_store(db, store_id=payload.store_id)
+    voice_session_service.ensure_open(db, store)
     session = voice_session_service.create_session(
         db,
         store_id=payload.store_id,

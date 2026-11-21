@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from decimal import Decimal
 
 from pydantic import BaseModel, Field
 
@@ -21,10 +20,7 @@ class VoiceSessionOut(BaseModel):
     status: str
     rating: int | None
     review: str | None = None
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    total_tokens: int = 0
-    llm_cost: Decimal = Decimal("0")
+    # Token usage and AI cost are platform-internal: not sent to the app.
     started_at: datetime
     ended_at: datetime | None
 

@@ -18,7 +18,7 @@ export type StoreMe = {
   longitude: number | null
   delivery_radius_km: number | null
   min_order_amount: Money | null
-  tax_rate: Money
+  tax_rate: Money | null // null until the store enters one (0 is allowed)
   voice_tone: string | null
   logo_url: string | null
   is_published: boolean

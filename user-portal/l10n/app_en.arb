@@ -116,5 +116,10 @@
   "onlineDiscount": "Online payment discount",
   "@onlineDiscount": {"description": "VoxEats promotion taken off an online payment"},
   "onlineOfferNote": "Pay online to save {amount} ({name})",
-  "@onlineOfferNote": {"description": "VoxEats promotion for paying online", "placeholders": {"amount": {"type": "String"}, "name": {"type": "String"}}}
+  "@onlineOfferNote": {"description": "VoxEats promotion for paying online", "placeholders": {"amount": {"type": "String"}, "name": {"type": "String"}}},
+
+  "storeClosedNow": "{store} is closed right now. Today's hours: {hours}.",
+  "@storeClosedNow": {"description": "Tapping a store that is closed", "placeholders": {"store": {"type": "String"}, "hours": {"type": "String"}}},
+  "storeClosedToday": "{store} is closed today.",
+  "@storeClosedToday": {"description": "Tapping a store that is closed all day", "placeholders": {"store": {"type": "String"}}}
 }

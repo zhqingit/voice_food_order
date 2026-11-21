@@ -162,14 +162,3 @@ export async function markCustomerNotified(orderId: UUID, method: 'call' | 'sms'
   return res.data as CustomerNoticeOut
 }
 
-export type OrderUsage = {
-  prompt_tokens: number
-  completion_tokens: number
-  total_tokens: number
-  llm_cost: string
-}
-
-export async function getOrderUsage(orderId: UUID): Promise<OrderUsage> {
-  const res = await apiClient.get(`/store/orders/${orderId}/usage`)
-  return res.data as OrderUsage
-}

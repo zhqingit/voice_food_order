@@ -310,4 +310,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String onlineOfferNote(String amount, String name) {
     return '在线支付立省 $amount（$name）';
   }
+
+  @override
+  String storeClosedNow(String store, String hours) {
+    return '$store 现在不营业。今天的营业时间：$hours。';
+  }
+
+  @override
+  String storeClosedToday(String store) {
+    return '$store 今天休息。';
+  }
 }

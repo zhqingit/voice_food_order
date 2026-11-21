@@ -58,6 +58,8 @@ class StorePublicOut {
   final String? logoUrl;
   final List<DayHours> hours;
   final List<StorePromotion> promotions;
+  /// Open right now per the server (store timezone, overnight hours); null = no hours set.
+  final bool? isOpenNow;
 
   const StorePublicOut({
     required this.id,
@@ -74,6 +76,7 @@ class StorePublicOut {
     this.logoUrl,
     this.hours = const [],
     this.promotions = const [],
+    this.isOpenNow,
   });
 
   factory StorePublicOut.fromJson(Map<String, dynamic> json) {
@@ -96,6 +99,7 @@ class StorePublicOut {
               ?.map((h) => DayHours.fromJson(h as Map<String, dynamic>))
               .toList() ??
           [],
+      isOpenNow: json['is_open_now'] as bool?,
       promotions: (json['promotions'] as List<dynamic>?)
               ?.map((p) => StorePromotion.fromJson(p as Map<String, dynamic>))
               .toList() ??
@@ -114,6 +118,8 @@ class StorePublicOut {
   /// Check if the store is currently open based on its hours.
   /// Returns null if no hours are set (unknown status).
   bool? get isCurrentlyOpen {
+    // The server knows the store's timezone and overnight hours; prefer it.
+    if (isOpenNow != null) return isOpenNow;
     if (hours.isEmpty) return null;
 
     final now = DateTime.now();

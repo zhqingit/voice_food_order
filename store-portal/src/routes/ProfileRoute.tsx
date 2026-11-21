@@ -24,6 +24,15 @@ function defaultHours(): DayHours[] {
   }))
 }
 
+// Stored as a fraction (0.081); shown as a percent (8.1). Empty until entered.
+function taxRateText(rate: string | number | null | undefined): string {
+  return rate == null ? '' : String(Number(rate) * 100)
+}
+
+function isIncomplete(err: unknown): boolean {
+  return (err as { response?: { data?: { code?: string } } }).response?.data?.code === 'profile_incomplete'
+}
+
 export function ProfileRoute(): React.JSX.Element {
   const { t } = useTranslation()
   const [loading, setLoading] = useState(true)
@@ -69,7 +78,7 @@ export function ProfileRoute(): React.JSX.Element {
       allowDelivery !== Boolean(me.allow_delivery ?? true) ||
       deliveryRadius !== radiusMilesText(me.delivery_radius_km) ||
       minOrder !== (me.min_order_amount != null ? String(me.min_order_amount) : '') ||
-      taxRate !== String(Number(me.tax_rate ?? 0) * 100)
+      taxRate !== taxRateText(me.tax_rate)
     )
   }, [me, name, phone, address1, address2, city, state, postal, country, timezone, allowPickup, allowDelivery, deliveryRadius, minOrder, taxRate])
 
@@ -93,7 +102,7 @@ export function ProfileRoute(): React.JSX.Element {
         setAllowDelivery(Boolean(data.allow_delivery ?? true))
         setDeliveryRadius(radiusMilesText(data.delivery_radius_km))
         setMinOrder(data.min_order_amount != null ? String(data.min_order_amount) : '')
-        setTaxRate(String(Number(data.tax_rate ?? 0) * 100))
+        setTaxRate(taxRateText(data.tax_rate))
         setHours(hoursData)
       } catch {
         setError(t('profile.failedLoad'))
@@ -102,6 +111,22 @@ export function ProfileRoute(): React.JSX.Element {
       }
     })()
   }, [])
+
+  // Required before publishing (the backend enforces the same list).
+  const missingForPublish = me
+    ? (
+        [
+          [me.address_line1, 'profile.addressLine1'],
+          [me.city, 'profile.city'],
+          [me.state, 'profile.state'],
+          [me.postal_code, 'profile.postalCode'],
+          [me.country, 'profile.country'],
+          [me.tax_rate, 'profile.taxRate'],
+        ] as const
+      )
+        .filter(([value]) => value == null || String(value).trim() === '')
+        .map(([, label]) => t(label))
+    : []
 
   async function handleSave(e: React.FormEvent): Promise<void> {
     e.preventDefault()
@@ -114,8 +139,8 @@ export function ProfileRoute(): React.JSX.Element {
       return
     }
 
-    const taxRateParsed = taxRate.trim() ? Number(taxRate) / 100 : 0
-    if (!Number.isFinite(taxRateParsed) || taxRateParsed < 0 || taxRateParsed > 1) {
+    const taxRateParsed = taxRate.trim() ? Number(taxRate) / 100 : null
+    if (taxRateParsed != null && (!Number.isFinite(taxRateParsed) || taxRateParsed < 0 || taxRateParsed > 1)) {
       setError(t('profile.invalidTaxRate'))
       return
     }
@@ -149,8 +174,8 @@ export function ProfileRoute(): React.JSX.Element {
       })
       setMe(updated)
       setMessage(t('profile.saved'))
-    } catch {
-      setError(t('profile.failedSave'))
+    } catch (err) {
+      setError(isIncomplete(err) ? t('profile.cannotClearWhilePublished') : t('profile.failedSave'))
     }
   }
 
@@ -158,12 +183,16 @@ export function ProfileRoute(): React.JSX.Element {
     if (!me) return
     setError(null)
     setMessage(null)
+    if (!me.is_published && missingForPublish.length > 0) {
+      setError(t('profile.publishMissing', { fields: missingForPublish.join(', ') }))
+      return
+    }
     try {
       const updated = await updateMe({ is_published: !me.is_published })
       setMe(updated)
       setMessage(updated.is_published ? t('profile.publishedOn') : t('profile.publishedOff'))
-    } catch {
-      setError(t('profile.failedSave'))
+    } catch (err) {
+      setError(isIncomplete(err) ? t('profile.publishMissing', { fields: missingForPublish.join(', ') }) : t('profile.failedSave'))
     }
   }
 
@@ -232,6 +261,11 @@ export function ProfileRoute(): React.JSX.Element {
               <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-secondary)' }}>
                 {t('profile.publishDesc')}
               </p>
+              {!me.is_published && missingForPublish.length > 0 && (
+                <p style={{ margin: '4px 0 0', fontSize: 12, color: '#b45309' }}>
+                  {t('profile.publishMissing', { fields: missingForPublish.join(', ') })}
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -277,7 +311,7 @@ export function ProfileRoute(): React.JSX.Element {
               </div>
 
               <div className="form-group grid-full">
-                <label className="form-label">{t('profile.addressLine1')}</label>
+                <label className="form-label">{t('profile.addressLine1')} *</label>
                 <input className="form-input" value={address1} onChange={(e) => setAddress1(e.target.value)} />
               </div>
               <div className="form-group grid-full">
@@ -286,20 +320,20 @@ export function ProfileRoute(): React.JSX.Element {
               </div>
 
               <div className="form-group">
-                <label className="form-label">{t('profile.city')}</label>
+                <label className="form-label">{t('profile.city')} *</label>
                 <input className="form-input" value={city} onChange={(e) => setCity(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-label">{t('profile.state')}</label>
+                <label className="form-label">{t('profile.state')} *</label>
                 <input className="form-input" value={state} onChange={(e) => setState(e.target.value)} />
               </div>
 
               <div className="form-group">
-                <label className="form-label">{t('profile.postalCode')}</label>
+                <label className="form-label">{t('profile.postalCode')} *</label>
                 <input className="form-input" value={postal} onChange={(e) => setPostal(e.target.value)} />
               </div>
               <div className="form-group">
-                <label className="form-label">{t('profile.country')}</label>
+                <label className="form-label">{t('profile.country')} *</label>
                 <input className="form-input" value={country} onChange={(e) => setCountry(e.target.value)} />
               </div>
 
@@ -312,9 +346,9 @@ export function ProfileRoute(): React.JSX.Element {
                 <input className="form-input" value={minOrder} onChange={(e) => setMinOrder(e.target.value)} inputMode="decimal" placeholder="0.00" />
               </div>
               <div className="form-group">
-                <label className="form-label">{t('profile.taxRate')}</label>
+                <label className="form-label">{t('profile.taxRate')} *</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input className="form-input" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} inputMode="decimal" placeholder="0" style={{ flex: 1 }} />
+                  <input className="form-input" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} inputMode="decimal" placeholder="8.25" style={{ flex: 1 }} />
                   <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-secondary)' }}>%</span>
                 </div>
                 <p style={{ fontSize: 11, color: 'var(--color-text-secondary)', margin: '4px 0 0' }}>{t('profile.taxRateDesc')}</p>

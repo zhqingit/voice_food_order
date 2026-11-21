@@ -76,6 +76,17 @@ _ADDRESS_FIELDS = (
 )
 
 
+# What a store must fill in before it can publish (tax_rate may be 0, not empty).
+PUBLISH_REQUIRED = ("address_line1", "city", "state", "postal_code", "country", "tax_rate")
+
+
+def _missing_for_publish(store: Store) -> list[str]:
+    def empty(value) -> bool:
+        return value is None or (isinstance(value, str) and not value.strip())
+
+    return [f for f in PUBLISH_REQUIRED if empty(getattr(store, f))]
+
+
 def _compose_address(store: Store) -> str:
     parts = [getattr(store, f) or "" for f in _ADDRESS_FIELDS]
     return ", ".join(p.strip() for p in parts if p and p.strip())
@@ -91,6 +102,15 @@ def update_me(
     address_changed = any(key in updates for key in _ADDRESS_FIELDS)
     for key, value in updates.items():
         setattr(current_store, key, value)
+
+    # Publishing needs a complete profile; a published store can't clear a
+    # required field. (Stores published before this rule stay published.)
+    if current_store.is_published and (
+        updates.get("is_published") is True or any(f in updates for f in PUBLISH_REQUIRED)
+    ):
+        missing = _missing_for_publish(current_store)
+        if missing and (updates.get("is_published") is True or any(f in missing for f in updates)):
+            raise AppError(status_code=422, code="profile_incomplete", detail="Missing: " + ", ".join(missing))
 
     if current_store.phone_ai_enabled and not current_store.phone_ai_number:
         raise AppError(

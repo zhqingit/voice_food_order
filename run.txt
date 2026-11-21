@@ -43,6 +43,10 @@ Then open http://localhost:5175 and log in with the admin credentials you create
 #cd ../backend
 #docker compose exec api python -m app.cli.create_admin admin@voxeats.com 'somepassword'
 
+admin in mac:
+ssh -N -L 5175:localhost:5175 qzhang@192.168.1.30
+
+
 
 # run gcp server
 1. 

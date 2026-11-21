@@ -1,7 +1,7 @@
 {
   "status": {
     "suspendedTitle": "Store suspended",
-    "suspendedDesc": "Your store has been suspended by the platform. Customers can't place orders. Please contact support.",
+    "suspendedDesc": "Your store has been suspended by the platform. Customers can't place orders. Please contact us at restoai@rest-oai.com.",
     "pendingTitle": "Pending approval",
     "pendingDesc": "Your store is under review. Customers can't order until the platform approves it.",
     "unpublishedTitle": "Not published",
@@ -16,8 +16,8 @@
     "refresh": "Refresh",
     "add": "Add",
     "edit": "Edit",
-    "available": "Available",
-    "unavailable": "Unavailable",
+    "available": "For sale",
+    "unavailable": "Paused",
     "inMenu": "In menu",
     "default": "Default",
     "inactive": "Inactive",
@@ -186,7 +186,8 @@
     "imageUploadFailed": "Image upload failed: {{detail}}",
     "imageUploadHint": "Make sure the image is a clear menu photo.",
     "sortByTitle": "Sort by {{field}}",
-    "dismiss": "dismiss"
+    "dismiss": "dismiss",
+    "availableHint": "For sale (uncheck to stop selling it for now; the AI will say it's unavailable)"
   },
   "orders": {
     "title": "Orders",
@@ -277,7 +278,27 @@
     "badgeBalanceDue": "Balance due",
     "badgeRefunded": "Refunded",
     "discount": "Discount",
-    "platformDiscount": "VoxEats promo {{amount}} (paid by VoxEats; your payout is unchanged)"
+    "platformDiscount": "VoxEats promo {{amount}} (paid by VoxEats; your payout is unchanged)",
+    "account": "Account",
+    "customer": "Customer",
+    "channelApp": "App",
+    "phone": "Phone",
+    "item": "Item",
+    "price": "Price",
+    "receiptTitle": "Order #{{code}}",
+    "fulfillmentNames": {
+      "pickup": "Pickup",
+      "delivery": "Delivery"
+    },
+    "statusNames": {
+      "draft": "Draft",
+      "submitted": "New",
+      "confirmed": "Confirmed",
+      "preparing": "Preparing",
+      "ready": "Ready",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    }
   },
   "profile": {
     "title": "Profile & Settings",
@@ -341,7 +362,9 @@
     "published": "Published",
     "unpublished": "Unpublished",
     "publishedOn": "Your store is now visible to customers.",
-    "publishedOff": "Your store is now hidden from customers."
+    "publishedOff": "Your store is now hidden from customers.",
+    "publishMissing": "Fill in before publishing: {{fields}}.",
+    "cannotClearWhilePublished": "A published store can't leave its address or tax rate empty. Unpublish first, or fill them in."
   },
   "ai": {
     "title": "AI Assistant",
@@ -397,7 +420,7 @@
   },
   "phone": {
     "title": "Phone ordering (AI)",
-    "notSetUp": "Let the AI answer your restaurant's phone when you're busy. Contact us to get your AI phone number.",
+    "notSetUp": "Let the AI answer your restaurant's phone when you're busy. Email us at restoai@rest-oai.com to get your AI phone number.",
     "aiNumber": "Your AI phone number",
     "on": "On",
     "off": "Off",

@@ -18,6 +18,7 @@ from app.schemas.store.hours import DayHours
 from app.schemas.store.promotions import PromotionPublic
 from app.schemas.store.store import StorePublicOut
 from app.services import delivery_service, menu_service, order_service, promotions
+from app.services.store_hours_service import store_open_status
 
 router = APIRouter(
     prefix="/user/stores",
@@ -56,7 +57,7 @@ def _promotions_today(db: Session, store: Store) -> list[PromotionPublic]:
     ]
 
 
-def _store_public_out(store: Store, hours: list[DayHours], promos: list[PromotionPublic]) -> StorePublicOut:
+def _store_public_out(db: Session, store: Store, hours: list[DayHours], promos: list[PromotionPublic]) -> StorePublicOut:
     return StorePublicOut(
         id=store.id,
         name=store.name,
@@ -72,6 +73,7 @@ def _store_public_out(store: Store, hours: list[DayHours], promos: list[Promotio
         logo_url=store.logo_url,
         hours=hours,
         promotions=promos,
+        is_open_now=store_open_status(db, store).is_open,
     )
 
 
@@ -83,7 +85,7 @@ def list_stores(db: Session = Depends(get_db)) -> list[StorePublicOut]:
         .scalars()
         .all()
     )
-    return [_store_public_out(store, _hours_for_store(db, store.id), _promotions_today(db, store)) for store in stores]
+    return [_store_public_out(db, store, _hours_for_store(db, store.id), _promotions_today(db, store)) for store in stores]
 
 
 @router.get("/{store_id}", response_model=StorePublicOut)
@@ -94,7 +96,7 @@ def get_store(store_id: uuid.UUID, db: Session = Depends(get_db)) -> StorePublic
         raise AppError(status_code=404, code="store_not_found", detail="Store not found")
     if not store.is_published:
         raise AppError(status_code=410, code="store_unpublished", detail="This store is no longer available")
-    return _store_public_out(store, _hours_for_store(db, store.id), _promotions_today(db, store))
+    return _store_public_out(db, store, _hours_for_store(db, store.id), _promotions_today(db, store))
 
 
 @router.get("/{store_id}/menu", response_model=list[MenuItemOut])

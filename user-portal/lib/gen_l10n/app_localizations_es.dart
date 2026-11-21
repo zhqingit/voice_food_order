@@ -312,4 +312,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String onlineOfferNote(String amount, String name) {
     return 'Pague en línea y ahorre $amount ($name)';
   }
+
+  @override
+  String storeClosedNow(String store, String hours) {
+    return '$store está cerrado ahora. Horario de hoy: $hours.';
+  }
+
+  @override
+  String storeClosedToday(String store) {
+    return '$store está cerrado hoy.';
+  }
 }

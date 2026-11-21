@@ -10,6 +10,7 @@ from app.core.time import utcnow_naive
 from app.models.order import Order
 from app.models.store import Store
 from app.models.voice_session import VoiceSession
+from app.services.store_hours_service import store_open_status
 
 
 def get_orderable_store(db: Session, *, store_id: uuid.UUID) -> Store:
@@ -20,6 +21,14 @@ def get_orderable_store(db: Session, *, store_id: uuid.UUID) -> Store:
     if not store.is_published:
         raise AppError(status_code=410, code="store_unpublished", detail="This store is no longer available")
     return store
+
+
+def ensure_open(db: Session, store: Store) -> None:
+    """Refuse a voice order while the store is closed (stores without hours are always open)."""
+    status = store_open_status(db, store)
+    if status.is_open is False:
+        hours = "closed today" if status.today_text in (None, "closed") else f"open {status.today_text} today"
+        raise AppError(status_code=409, code="store_closed", detail=f"The store is closed now ({hours}).")
 
 
 def get_owned_session(

@@ -1,7 +1,7 @@
 {
   "status": {
     "suspendedTitle": "Tienda suspendida",
-    "suspendedDesc": "La plataforma ha suspendido tu tienda. Los clientes no pueden hacer pedidos. Contacta con soporte.",
+    "suspendedDesc": "La plataforma ha suspendido tu tienda. Los clientes no pueden hacer pedidos. Escríbenos a restoai@rest-oai.com.",
     "pendingTitle": "Pendiente de aprobación",
     "pendingDesc": "Tu tienda está en revisión. Los clientes no podrán pedir hasta que la plataforma la apruebe.",
     "unpublishedTitle": "No publicada",
@@ -16,8 +16,8 @@
     "refresh": "Actualizar",
     "add": "Agregar",
     "edit": "Editar",
-    "available": "Disponible",
-    "unavailable": "No disponible",
+    "available": "A la venta",
+    "unavailable": "Pausado",
     "inMenu": "En menú",
     "default": "Predeterminado",
     "inactive": "Inactivo",
@@ -186,7 +186,8 @@
     "imageUploadFailed": "Error al subir imagen: {{detail}}",
     "imageUploadHint": "Asegúrate de que la imagen sea una foto clara del menú.",
     "sortByTitle": "Ordenar por {{field}}",
-    "dismiss": "cerrar"
+    "dismiss": "cerrar",
+    "availableHint": "A la venta (desmarque para dejar de venderlo por ahora; la IA dirá que no está disponible)"
   },
   "orders": {
     "title": "Pedidos",
@@ -276,7 +277,28 @@
     "badgeBalanceDue": "Saldo pendiente",
     "badgeRefunded": "Reembolsado",
     "discount": "Descuento",
-    "platformDiscount": "Promoción VoxEats {{amount}} (la paga VoxEats; su pago no cambia)"
+    "platformDiscount": "Promoción VoxEats {{amount}} (la paga VoxEats; su pago no cambia)",
+    "account": "Cuenta",
+    "customer": "Cliente",
+    "channelApp": "App",
+    "phone": "Teléfono",
+    "item": "Artículo",
+    "price": "Precio",
+    "receiptTitle": "Pedido #{{code}}",
+    "fulfillmentNames": {
+      "pickup": "Recoger",
+      "delivery": "Entrega a domicilio"
+    },
+    "payment": "Pago",
+    "statusNames": {
+      "draft": "Borrador",
+      "submitted": "Nuevo",
+      "confirmed": "Confirmado",
+      "preparing": "En preparación",
+      "ready": "Listo",
+      "completed": "Completado",
+      "cancelled": "Cancelado"
+    }
   },
   "profile": {
     "title": "Perfil y Configuración",
@@ -340,7 +362,9 @@
     "published": "Publicada",
     "unpublished": "No publicada",
     "publishedOn": "Tu tienda ahora es visible para los clientes.",
-    "publishedOff": "Tu tienda ahora está oculta para los clientes."
+    "publishedOff": "Tu tienda ahora está oculta para los clientes.",
+    "publishMissing": "Complete antes de publicar: {{fields}}.",
+    "cannotClearWhilePublished": "Una tienda publicada no puede dejar vacíos la dirección o la tasa de impuesto. Despublíquela primero o complételos."
   },
   "payments": {
     "paid": "Pagado",
@@ -350,11 +374,23 @@
     "phoneOrders": "Pedidos por teléfono",
     "monthlyFee": "Cuota mensual",
     "perMonth": "/mes",
-    "monthlyFeeDesc": "La cuota mensual se suma a su factura mensual."
+    "monthlyFeeDesc": "La cuota mensual se suma a su factura mensual.",
+    "title": "Pagos",
+    "platformFee": "Tarifa de la plataforma",
+    "notConnected": "Conecte Stripe para aceptar pagos en línea de los clientes. Hasta entonces, los pedidos se cobran en la tienda.",
+    "connectBtn": "Conectar Stripe",
+    "incompleteTitle": "Termine la configuración de pagos",
+    "incompleteDesc": "Su registro en Stripe aún no está completo. Hasta entonces, los pedidos se cobran en la tienda.",
+    "inReview": "Datos enviados: Stripe está revisando su cuenta. Suele tardar unos minutos.",
+    "continueBtn": "Continuar configuración",
+    "activeTitle": "Pagos activos",
+    "activeDesc": "Ya puede aceptar pagos en línea.",
+    "loadError": "No se pudo cargar el estado de pagos.",
+    "connectError": "No se pudo iniciar el registro en Stripe. Inténtelo de nuevo."
   },
   "phone": {
     "title": "Pedidos por teléfono (IA)",
-    "notSetUp": "Deja que la IA conteste el teléfono de tu restaurante cuando estés ocupado. Contáctanos para obtener tu número de IA.",
+    "notSetUp": "Deja que la IA conteste el teléfono de tu restaurante cuando estés ocupado. Escríbenos a restoai@rest-oai.com para obtener tu número de IA.",
     "aiNumber": "Tu número de teléfono de IA",
     "on": "Activado",
     "off": "Desactivado",
@@ -442,5 +478,35 @@
       "promotion_in_use": "Hay pedidos que usaron esta promoción; no se puede eliminar. Desactívela.",
       "generic": "Algo salió mal. Inténtelo de nuevo."
     }
+  },
+  "ai": {
+    "title": "Asistente de IA",
+    "subtitle": "Personalice cómo se comporta el asistente de voz en su tienda.",
+    "voiceTone": "Tono de voz",
+    "voiceToneDesc": "Voz que usa el asistente cuando los clientes hacen pedidos.",
+    "voiceDefault": "Predeterminada",
+    "voiceFemale": "Femenina",
+    "voiceMale": "Masculina",
+    "customRules": "Reglas personalizadas",
+    "customRulesDesc": "Agregue una regla por fila. Escriba lo que quiere que haga la IA, haga clic en Generar para convertirlo en instrucciones y luego en Guardar todo. Cada regla guardada se añade a las instrucciones de la IA en cada llamada.",
+    "columnRaw": "Su requisito",
+    "columnGenerated": "Regla generada",
+    "columnActions": "Acciones",
+    "rawPlaceholder": "p. ej. Recomiende el especial del día si el cliente no ha elegido un plato principal.",
+    "generatedPlaceholder": "Aquí aparecerán las instrucciones generadas. Puede editarlas antes de guardar.",
+    "emptyRules": "Aún no hay reglas. Haga clic en + Agregar regla para crear una.",
+    "addRule": "Agregar regla",
+    "generate": "Generar",
+    "regenerate": "Regenerar",
+    "generating": "Generando…",
+    "delete": "Eliminar",
+    "save": "Guardar",
+    "saveAll": "Guardar todo",
+    "saved": "Guardado.",
+    "savedAndActive": "Guardado: la IA usará estas reglas en la próxima llamada.",
+    "failedLoad": "No se pudo cargar la configuración de IA.",
+    "failedSave": "No se pudo guardar la configuración de IA.",
+    "failedGenerate": "No se pudo generar la regla.",
+    "rawRequired": "Escriba primero su requisito."
   }
 }

@@ -7,9 +7,7 @@ import {
   type OrderEventOut,
   type OrderItemOut,
   type OrderOut,
-  type OrderUsage,
   addOrderItem,
-  getOrderUsage,
   listOrderEvents,
   listOrderItems,
   listOrders,
@@ -141,7 +139,16 @@ function sortIndicator(col: SortKey, active: SortKey, dir: SortDir): string {
 }
 
 function channelLabel(channel: string, t: TFunction): React.JSX.Element | string {
-  return channel === 'phone' ? <span className="badge badge-phone">📞 {t('orders.channelPhone')}</span> : channel
+  return channel === 'phone' ? <span className="badge badge-phone">📞 {t('orders.channelPhone')}</span> : t('orders.channelApp')
+}
+
+// The stored values stay English (draft, confirmed, ...); only the label is translated.
+function statusLabel(status: string, t: TFunction): string {
+  return t(`orders.statusNames.${status}`, { defaultValue: status })
+}
+
+function fulfillmentLabel(type: string, t: TFunction): string {
+  return t(`orders.fulfillmentNames.${type}`, { defaultValue: type })
 }
 
 // Who placed the order: app account email, or the caller's number for phone orders.
@@ -251,7 +258,6 @@ export function OrdersRoute(): React.JSX.Element {
   }, [selectedOrderId, closeDetails])
 
   const [items, setItems] = useState<OrderItemOut[]>([])
-  const [usage, setUsage] = useState<OrderUsage | null>(null)
   const [events, setEvents] = useState<OrderEventOut[]>([])
   const [menuItems, setMenuItems] = useState<MenuItemOut[] | null>(null)
   const [busy, setBusy] = useState(false)
@@ -361,20 +367,17 @@ export function OrdersRoute(): React.JSX.Element {
     setAddForm({ itemId: '', variantId: '', quantity: 1, note: '' })
     if (!selectedOrderId) {
       setItems([])
-      setUsage(null)
       setEvents([])
       return
     }
     void (async () => {
       setError(null)
       try {
-        const [data, usageData, eventData] = await Promise.all([
+        const [data, eventData] = await Promise.all([
           listOrderItems(selectedOrderId),
-          getOrderUsage(selectedOrderId).catch(() => null),
           listOrderEvents(selectedOrderId).catch(() => []),
         ])
         setItems(data)
-        setUsage(usageData)
         setEvents(eventData)
       } catch {
         setError(t('orders.failedLoadItems'))
@@ -466,9 +469,10 @@ export function OrdersRoute(): React.JSX.Element {
         <td style="padding:4px 8px;text-align:right">$${(Number(it.price_snapshot) * it.quantity).toFixed(2)}</td>
       </tr>`
     ).join('')
-    const orderNote = selectedOrder.notes ? `<div style="margin-top:12px;font-style:italic;font-size:12px;color:#666">Note: ${escapeHtml(selectedOrder.notes)}</div>` : ''
+    const tr = (key: string, opts?: Record<string, unknown>): string => escapeHtml(t(key, opts))
+    const orderNote = selectedOrder.notes ? `<div style="margin-top:12px;font-style:italic;font-size:12px;color:#666">${tr('orders.note')}: ${escapeHtml(selectedOrder.notes)}</div>` : ''
 
-    const html = `<!DOCTYPE html><html><head><title>Order ${escapeHtml(selectedOrder.short_code)}</title>
+    const html = `<!DOCTYPE html><html><head><title>${tr('orders.receiptTitle', { code: selectedOrder.short_code })}</title>
       <style>
         body { font-family: sans-serif; padding: 24px; max-width: 400px; margin: 0 auto; }
         h2 { margin: 0 0 4px; font-size: 18px; }
@@ -481,27 +485,28 @@ export function OrdersRoute(): React.JSX.Element {
         .totals .total { font-weight: 700; font-size: 15px; border-top: 2px solid #333; margin-top: 4px; padding-top: 4px; }
         @media print { body { padding: 0; } }
       </style></head><body>
-      <h2>Order #${escapeHtml(selectedOrder.short_code)}</h2>
+      <h2>${tr('orders.receiptTitle', { code: selectedOrder.short_code })}</h2>
       <div class="meta">
         ${escapeHtml(localTime(selectedOrder.created_at))}<br/>
-        Status: ${escapeHtml(selectedOrder.status)} &nbsp; Channel: ${escapeHtml(selectedOrder.channel)}
-        ${selectedOrder.customer_name ? `<br/>Customer: <strong>${escapeHtml(selectedOrder.customer_name)}</strong>` : ''}
-        ${selectedOrder.user_email ? `<br/>Account: ${escapeHtml(selectedOrder.user_email)}` : ''}
-        ${selectedOrder.customer_phone ? `<br/>Phone: <strong>${escapeHtml(formatPhone(selectedOrder.customer_phone))}</strong>` : ''}
+        ${tr('orders.status')}: ${escapeHtml(statusLabel(selectedOrder.status, t))} &nbsp; ${tr('orders.channel')}: ${selectedOrder.channel === 'phone' ? tr('orders.channelPhone') : tr('orders.channelApp')}
+        ${selectedOrder.fulfillment_type ? `<br/>${tr('orders.fulfillment')}: ${escapeHtml(fulfillmentLabel(selectedOrder.fulfillment_type, t))}` : ''}
+        ${selectedOrder.customer_name ? `<br/>${tr('orders.customer')}: <strong>${escapeHtml(selectedOrder.customer_name)}</strong>` : ''}
+        ${selectedOrder.user_email ? `<br/>${tr('orders.account')}: ${escapeHtml(selectedOrder.user_email)}` : ''}
+        ${selectedOrder.customer_phone ? `<br/>${tr('orders.phone')}: <strong>${escapeHtml(formatPhone(selectedOrder.customer_phone))}</strong>` : ''}
       </div>
       <table>
         <thead><tr>
-          <th>Item</th><th style="text-align:center">Qty</th>
-          <th style="text-align:right">Price</th><th style="text-align:right">Total</th>
+          <th>${tr('orders.item')}</th><th style="text-align:center">${tr('orders.qty')}</th>
+          <th style="text-align:right">${tr('orders.price')}</th><th style="text-align:right">${tr('orders.total')}</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
       ${orderNote}
       <div class="totals">
-        <div class="row"><span>Subtotal</span><span>$${escapeHtml(selectedOrder.subtotal)}</span></div>
-        ${Number(selectedOrder.discount) > 0 ? `<div class="row"><span>Discount</span><span>-$${escapeHtml(selectedOrder.discount)}</span></div>` : ''}
-        <div class="row"><span>Tax</span><span>$${escapeHtml(selectedOrder.tax)}</span></div>
-        <div class="row total"><span>Total</span><span>$${escapeHtml(selectedOrder.total)}</span></div>
+        <div class="row"><span>${tr('orders.subtotal')}</span><span>$${escapeHtml(selectedOrder.subtotal)}</span></div>
+        ${Number(selectedOrder.discount) > 0 ? `<div class="row"><span>${tr('orders.discount')}</span><span>-$${escapeHtml(selectedOrder.discount)}</span></div>` : ''}
+        <div class="row"><span>${tr('orders.tax')}</span><span>$${escapeHtml(selectedOrder.tax)}</span></div>
+        <div class="row total"><span>${tr('orders.total')}</span><span>$${escapeHtml(selectedOrder.total)}</span></div>
       </div>
       <script>window.onload=function(){window.print()}<\/script>
     </body></html>`
@@ -530,7 +535,7 @@ export function OrdersRoute(): React.JSX.Element {
                   <div className="mono" style={{ fontSize: 20, fontWeight: 700, letterSpacing: 1 }}>#{o.short_code}</div>
                   <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
                     {localTime(o.created_at)}
-                    {o.fulfillment_type && <span style={{ textTransform: 'capitalize' }}> · {o.fulfillment_type}</span>}
+                    {o.fulfillment_type && <span> · {fulfillmentLabel(o.fulfillment_type, t)}</span>}
                     {o.customer_name && <> · {o.customer_name}</>}
                     {o.customer_phone && <> · 📞 {formatPhone(o.customer_phone)}</>}
                   </div>
@@ -575,7 +580,7 @@ export function OrdersRoute(): React.JSX.Element {
                 <th style={thSortStyle} onClick={() => toggleSort('status')}>{t('orders.status')}{sortIndicator('status', sortKey, sortDir)}</th>
                 <th style={thSortStyle} onClick={() => toggleSort('created_at')}>{t('orders.created')}{sortIndicator('created_at', sortKey, sortDir)}</th>
                 <th style={thSortStyle} onClick={() => toggleSort('channel')}>{t('orders.channel')}{sortIndicator('channel', sortKey, sortDir)}</th>
-                <th style={thStyle}>Account</th>
+                <th style={thStyle}>{t('orders.account')}</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('subtotal')}>{t('orders.subtotal')}{sortIndicator('subtotal', sortKey, sortDir)}</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('tax')}>{t('orders.tax')}{sortIndicator('tax', sortKey, sortDir)}</th>
                 <th style={{ ...thSortStyle, textAlign: 'right' }} onClick={() => toggleSort('total')}>{t('orders.total')}{sortIndicator('total', sortKey, sortDir)}</th>
@@ -622,7 +627,7 @@ export function OrdersRoute(): React.JSX.Element {
                   onMouseEnter={(e) => { if (o.id !== selectedOrderId) e.currentTarget.style.background = 'var(--color-bg-hover, #fafafa)' }}
                   onMouseLeave={(e) => { if (o.id !== selectedOrderId) e.currentTarget.style.background = '' }}
                 >
-                  <td style={tdStyle}><span className={`badge badge-${o.status}`}>{o.status}</span></td>
+                  <td style={tdStyle}><span className={`badge badge-${o.status}`}>{statusLabel(o.status, t)}</span></td>
                   <td style={tdStyle}>{localTime(o.created_at)}</td>
                   <td style={tdStyle}>{channelLabel(o.channel, t)}</td>
                   <td style={{ ...tdStyle, fontSize: 12, color: 'var(--color-text-secondary)' }}>{accountCell(o)}</td>
@@ -668,7 +673,7 @@ export function OrdersRoute(): React.JSX.Element {
                 <span className="mono">{selectedOrder.id}</span>
               </div>
               <div className="form-group">
-                <span className="meta-label">Account</span>
+                <span className="meta-label">{t('orders.account')}</span>
                 <span>{selectedOrder.channel === 'phone' ? channelLabel('phone', t) : (selectedOrder.user_email ?? '—')}</span>
               </div>
               <div className="form-group">
@@ -699,7 +704,7 @@ export function OrdersRoute(): React.JSX.Element {
 
             {selectedOrder.customer_name && (
               <div className="form-group" style={{ marginTop: 12 }}>
-                <span className="meta-label">Customer</span>
+                <span className="meta-label">{t('orders.customer')}</span>
                 <span style={{ fontWeight: 600 }}>{selectedOrder.customer_name}</span>
               </div>
             )}
@@ -716,7 +721,7 @@ export function OrdersRoute(): React.JSX.Element {
             {selectedOrder.fulfillment_type && (
               <div className="form-group" style={{ marginTop: 12 }}>
                 <span className="meta-label">{t('orders.fulfillment')}</span>
-                <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>{selectedOrder.fulfillment_type}</span>
+                <span style={{ fontWeight: 600 }}>{fulfillmentLabel(selectedOrder.fulfillment_type, t)}</span>
               </div>
             )}
 
@@ -736,17 +741,6 @@ export function OrdersRoute(): React.JSX.Element {
               </div>
             )}
 
-            {usage && usage.total_tokens > 0 && (
-              <div className="form-group" style={{ marginTop: 12 }}>
-                <span className="meta-label">{t('orders.aiUsage')}</span>
-                <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13 }}>
-                  <span>{t('orders.promptTokens')}: {usage.prompt_tokens.toLocaleString()}</span>
-                  <span>{t('orders.completionTokens')}: {usage.completion_tokens.toLocaleString()}</span>
-                  <span>{t('orders.totalTokens')}: {usage.total_tokens.toLocaleString()}</span>
-                  <span style={{ fontWeight: 600 }}>{t('orders.llmCost')}: ${usage.llm_cost}</span>
-                </div>
-              </div>
-            )}
 
             <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
               <span className="meta-label" style={{ marginBottom: 0 }}>{t('orders.status')}</span>
@@ -756,7 +750,7 @@ export function OrdersRoute(): React.JSX.Element {
                 onChange={(e) => void handleUpdateStatus(e.target.value)}
               >
                 {Array.from(new Set([selectedOrder.status, ...COMMON_STATUSES])).map((s) => (
-                  <option key={s} value={s}>{s}</option>
+                  <option key={s} value={s}>{statusLabel(s, t)}</option>
                 ))}
               </select>
               {editable && (

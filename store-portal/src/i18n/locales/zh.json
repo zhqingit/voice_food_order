@@ -1,7 +1,7 @@
 {
   "status": {
     "suspendedTitle": "门店已暂停",
-    "suspendedDesc": "您的门店已被平台暂停，顾客无法下单。请联系客服。",
+    "suspendedDesc": "您的门店已被平台暂停，顾客无法下单。请发邮件到 restoai@rest-oai.com 联系我们。",
     "pendingTitle": "待审核",
     "pendingDesc": "您的门店正在审核中。平台批准前顾客无法下单。",
     "unpublishedTitle": "未发布",
@@ -16,8 +16,8 @@
     "refresh": "刷新",
     "add": "添加",
     "edit": "编辑",
-    "available": "可用",
-    "unavailable": "不可用",
+    "available": "可售",
+    "unavailable": "暂停供应",
     "inMenu": "已添加",
     "default": "默认",
     "inactive": "未激活",
@@ -186,7 +186,8 @@
     "imageUploadFailed": "图片上传失败：{{detail}}",
     "imageUploadHint": "请确保图片是清晰的菜单照片。",
     "sortByTitle": "按 {{field}} 排序",
-    "dismiss": "关闭"
+    "dismiss": "关闭",
+    "availableHint": "可售（取消勾选 = 暂停供应，AI 会告诉顾客暂时没有）"
   },
   "orders": {
     "title": "订单",
@@ -275,7 +276,29 @@
     "badgeBalanceDue": "待补差价",
     "badgeRefunded": "已退款",
     "discount": "折扣",
-    "platformDiscount": "VoxEats 优惠 {{amount}}（由 VoxEats 承担，不影响您的收入）"
+    "platformDiscount": "VoxEats 优惠 {{amount}}（由 VoxEats 承担，不影响您的收入）",
+    "account": "账号",
+    "customer": "顾客",
+    "channelApp": "App",
+    "phone": "电话",
+    "item": "菜品",
+    "price": "单价",
+    "receiptTitle": "订单 #{{code}}",
+    "fulfillmentNames": {
+      "pickup": "自取",
+      "delivery": "外送"
+    },
+    "payment": "付款",
+    "orderCount_one": "{{count}} 单",
+    "statusNames": {
+      "draft": "草稿",
+      "submitted": "新订单",
+      "confirmed": "已确认",
+      "preparing": "制作中",
+      "ready": "可取餐",
+      "completed": "已完成",
+      "cancelled": "已取消"
+    }
   },
   "profile": {
     "title": "店铺资料与设置",
@@ -339,7 +362,9 @@
     "published": "已发布",
     "unpublished": "未发布",
     "publishedOn": "您的店铺现已对顾客可见。",
-    "publishedOff": "您的店铺现已对顾客隐藏。"
+    "publishedOff": "您的店铺现已对顾客隐藏。",
+    "publishMissing": "上架前请填写：{{fields}}。",
+    "cannotClearWhilePublished": "已上架的店铺不能清空地址或税率。请先下架，或者把它们填上。"
   },
   "ai": {
     "title": "AI 助手",
@@ -379,11 +404,23 @@
     "phoneOrders": "电话订单",
     "monthlyFee": "月费",
     "perMonth": "/月",
-    "monthlyFeeDesc": "月费加在每月账单上。"
+    "monthlyFeeDesc": "月费加在每月账单上。",
+    "title": "付款",
+    "platformFee": "平台服务费",
+    "notConnected": "连接 Stripe 后即可接受顾客在线付款。在此之前，订单都按到店付款处理。",
+    "connectBtn": "连接 Stripe",
+    "incompleteTitle": "完成付款设置",
+    "incompleteDesc": "你的 Stripe 注册还没完成。完成之前，订单都按到店付款处理。",
+    "inReview": "资料已提交，Stripe 正在审核你的账户，通常几分钟内完成。",
+    "continueBtn": "继续设置",
+    "activeTitle": "已开通在线付款",
+    "activeDesc": "你已经可以接受顾客在线付款。",
+    "loadError": "无法加载付款状态。",
+    "connectError": "无法开始 Stripe 注册，请重试。"
   },
   "phone": {
     "title": "电话点餐（AI）",
-    "notSetUp": "忙不过来时让 AI 接听餐厅电话。请联系我们获取专属 AI 电话号码。",
+    "notSetUp": "忙不过来时让 AI 接听餐厅电话。请发邮件到 restoai@rest-oai.com 获取专属 AI 电话号码。",
     "aiNumber": "您的 AI 电话号码",
     "on": "已开启",
     "off": "已关闭",

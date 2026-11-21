@@ -31,6 +31,8 @@ class StorePublicOut(BaseModel):
     hours: list[DayHours] = []
     # Promotions running today (applied automatically to qualifying orders).
     promotions: list[PromotionPublic] = []
+    # Open right now, in the store's timezone (None: no hours set = always open).
+    is_open_now: bool | None = None
 
 
 class StoreOut(BaseModel):
@@ -50,7 +52,7 @@ class StoreOut(BaseModel):
     longitude: float | None = None
     delivery_radius_km: float | None = None
     min_order_amount: Decimal | None = None
-    tax_rate: Decimal = Decimal("0.0000")
+    tax_rate: Decimal | None = None  # not entered yet
     voice_tone: str | None = None
     custom_prompts: list[dict] = []
     logo_url: str | None = None

@@ -108,6 +108,7 @@ async def voice_ws(
             current_user_id = current_user.id
 
             store = voice_session_service.get_orderable_store(db, store_id=store_id)
+            voice_session_service.ensure_open(db, store)
             # Client-supplied ids must belong to this user and this store, or the
             # tools would read/modify someone else's order and session.
             if session_id is not None:

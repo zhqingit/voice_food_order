@@ -657,6 +657,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pay online to save {amount} ({name})'**
   String onlineOfferNote(String amount, String name);
+
+  /// Tapping a store that is closed
+  ///
+  /// In en, this message translates to:
+  /// **'{store} is closed right now. Today\'s hours: {hours}.'**
+  String storeClosedNow(String store, String hours);
+
+  /// Tapping a store that is closed all day
+  ///
+  /// In en, this message translates to:
+  /// **'{store} is closed today.'**
+  String storeClosedToday(String store);
 }
 
 class _AppLocalizationsDelegate

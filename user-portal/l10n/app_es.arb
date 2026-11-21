@@ -103,5 +103,8 @@
   "promoWithMinimum": "{deal} desde {min}",
 
   "onlineDiscount": "Descuento por pago en línea",
-  "onlineOfferNote": "Pague en línea y ahorre {amount} ({name})"
+  "onlineOfferNote": "Pague en línea y ahorre {amount} ({name})",
+
+  "storeClosedNow": "{store} está cerrado ahora. Horario de hoy: {hours}.",
+  "storeClosedToday": "{store} está cerrado hoy."
 }

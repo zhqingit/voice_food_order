@@ -163,14 +163,10 @@ function ItemModal({
               <label className="form-label">{t('menu.note')}</label>
               <input className="form-input" value={form.note} onChange={(e) => set('note', e.target.value)} />
             </div>
-            <div className="form-group grid-full">
-              <label className="form-label">{t('menu.modifiersJson')}</label>
-              <textarea className="form-input" value={form.modifiers_json} onChange={(e) => set('modifiers_json', e.target.value)} />
-            </div>
             <div className="form-group">
               <label className="form-check">
                 <input type="checkbox" checked={form.availability} onChange={(e) => set('availability', e.target.checked)} />
-                {t('common.available')}
+                {t('menu.availableHint')}
               </label>
             </div>
             {item && (
@@ -420,7 +416,7 @@ export function MenuRoute(): React.JSX.Element {
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
   const [uploadMsg, setUploadMsg] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'pool' | 'menus'>('pool')
+  const [activeTab, setActiveTab] = useState<'pool' | 'menus'>('menus')
 
   const csvInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
@@ -455,6 +451,15 @@ export function MenuRoute(): React.JSX.Element {
   const defaultMenuId = useMemo(
     () => menus.find((m) => m.active)?.id ?? null,
     [menus],
+  )
+
+  // The default (live) menu first, then the inactive ones by name.
+  const sortedMenus = useMemo(
+    () =>
+      [...menus].sort(
+        (a, b) => Number(b.id === defaultMenuId) - Number(a.id === defaultMenuId) || a.name.localeCompare(b.name),
+      ),
+    [menus, defaultMenuId],
   )
 
   // ── Menu items (linked)
@@ -540,7 +545,7 @@ export function MenuRoute(): React.JSX.Element {
   async function reloadMenus(selectId?: string): Promise<void> {
     const data = await listMenus()
     setMenus(data)
-    const nextId = selectId ?? selectedMenuId ?? (data[0]?.id ?? null)
+    const nextId = selectId ?? selectedMenuId ?? (data.find((m) => m.active)?.id ?? data[0]?.id ?? null)
     setSelectedMenuId(nextId)
   }
 
@@ -880,6 +885,13 @@ export function MenuRoute(): React.JSX.Element {
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--color-border)', marginBottom: 20 }}>
         <button
+          className={activeTab === 'menus' ? 'auth-tab active' : 'auth-tab'}
+          onClick={() => setActiveTab('menus')}
+          style={{ maxWidth: 160 }}
+        >
+          {t('menu.tabMenusCount', { count: menus.length })}
+        </button>
+        <button
           className={activeTab === 'pool' ? 'auth-tab active' : 'auth-tab'}
           onClick={() => setActiveTab('pool')}
           style={{ maxWidth: 160 }}
@@ -887,13 +899,6 @@ export function MenuRoute(): React.JSX.Element {
           {filteredPool.length === poolItems.length
             ? t('menu.itemsPoolCount', { count: poolItems.length })
             : t('menu.tabPoolFiltered', { shown: filteredPool.length, total: poolItems.length })}
-        </button>
-        <button
-          className={activeTab === 'menus' ? 'auth-tab active' : 'auth-tab'}
-          onClick={() => setActiveTab('menus')}
-          style={{ maxWidth: 160 }}
-        >
-          {t('menu.tabMenusCount', { count: menus.length })}
         </button>
       </div>
 
@@ -1106,7 +1111,7 @@ export function MenuRoute(): React.JSX.Element {
               </div>
             </div>
             <div>
-              {menus.map((m) => (
+              {sortedMenus.map((m) => (
                 <div
                   key={m.id}
                   className={`list-item ${m.id === selectedMenuId ? 'selected' : ''}`}

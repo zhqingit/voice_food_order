@@ -151,7 +151,7 @@ def recalc_totals(
 
     store = db.get(Store, order.store_id)
     if tax_rate is None:
-        tax_rate = store.tax_rate if store else Decimal("0.0000")
+        tax_rate = (store.tax_rate if store else None) or Decimal("0.0000")
 
     order.subtotal = subtotal
     promotions.apply(db, order, running=store_promotions)  # sets order.discount

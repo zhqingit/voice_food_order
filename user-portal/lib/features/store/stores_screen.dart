@@ -73,8 +73,9 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
 
   Future<void> _openVoiceOrder(String storeName, String storeId) async {
     final l10n = AppLocalizations.of(context)!;
+    final StorePublicOut fresh;
     try {
-      await ref.read(storeRepositoryProvider).getStore(storeId);
+      fresh = await ref.read(storeRepositoryProvider).getStore(storeId);
     } on DioException catch (e) {
       final statusCode = e.response?.statusCode;
       if (statusCode == 410 || statusCode == 404) {
@@ -90,6 +91,16 @@ class _StoresScreenState extends ConsumerState<StoresScreen> {
       rethrow;
     }
     if (!mounted) return;
+    // Closed now: no voice order (the server refuses one too).
+    if (fresh.isOpenNow == false) {
+      final hours = fresh.todayHoursLabel;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(hours == null || hours == 'Closed'
+            ? l10n.storeClosedToday(storeName)
+            : l10n.storeClosedNow(storeName, hours)),
+      ));
+      return;
+    }
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => VoiceOrderScreen(storeName: storeName, storeId: storeId),
     ));

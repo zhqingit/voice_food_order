@@ -37,7 +37,8 @@ class Store(Base):
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     delivery_radius_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     min_order_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
-    tax_rate: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False, default=Decimal("0.0000"))
+    # None until the store enters one (0 is a valid rate); required to publish.
+    tax_rate: Mapped[Decimal | None] = mapped_column(Numeric(5, 4), nullable=True)
     voice_tone: Mapped[str | None] = mapped_column(String(32), nullable=True)
     # List of {"raw": str, "generated": str} entries — one per store-defined rule.
     custom_prompts: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
